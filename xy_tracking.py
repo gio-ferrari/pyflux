@@ -912,7 +912,7 @@ class Backend(QtCore.QObject):
             dy = -new_y / 1000  # conversion to µm
 
         if dx > security_thr or dy > security_thr:
-            print(datetime.now(), '[xy_tracking] Correction movement larger than 200 nm, active correction turned OFF')
+            print(datetime.now(), f'[xy_tracking] Correction movement larger than {int(security_thr*1000)} nm, active correction turned OFF')
             self.toggle_feedback(False)
         else:
             # compensate for the mismatch between camera/piezo system of reference
