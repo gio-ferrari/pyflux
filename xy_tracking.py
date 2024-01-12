@@ -911,7 +911,7 @@ class Backend(QtCore.QObject):
                 new_y *= correct_factor
             dy = -new_y / 1000  # conversion to µm
 
-        if dx > security_thr or dy > security_thr:
+        if abs(dx) > security_thr or abs(dy) > security_thr:
             print(datetime.now(), f'[xy_tracking] Correction movement larger than {int(security_thr*1000)} nm, active correction turned OFF')
             self.toggle_feedback(False)
         else:
