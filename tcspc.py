@@ -179,7 +179,7 @@ class Frontend(QtGui.QFrame):
         self.acqtimeLabel = QtGui.QLabel('Acquisition time [s]')
         self.acqtimeEdit = QtGui.QLineEdit('1')
         self.resolutionLabel = QtGui.QLabel('Resolution [ps]')
-        self.resolutionEdit = QtGui.QLineEdit('8')
+        self.resolutionEdit = QtGui.QLineEdit('16')
         self.offsetLabel = QtGui.QLabel('Offset [ns]')
         self.offsetEdit = QtGui.QLineEdit('3')
         
@@ -310,13 +310,13 @@ class Backend(QtCore.QObject):
         self.ph.open()
         self.ph.initialize()
         self.ph.setup_ph300()
-        self.ph.setup_phr800()
+        #self.ph.setup_phr800() #This line should be included when working with PH800 Router, this is not the case in new microscope
         
-        self.ph.syncDivider = 4 # this parameter must be set such that the count rate at channel 0 (sync) is equal or lower than 10MHz
+        self.ph.syncDivider = 2 # this parameter must be set such that the count rate at channel 0 (sync) is equal or lower than 10MHz
         self.ph.resolution = self.resolution # desired resolution in ps
         
         self.ph.lib.PH_SetBinning(ctypes.c_int(0), 
-                                  ctypes.c_int(1)) # TO DO: fix this in a clean way (1 = 8 ps resolution)
+                                  ctypes.c_int(2)) # TO DO: fix this in a clean way (Check Library driver, 0= 4ps, 1 = 8ps, 2 = 16ps resolution)
              
         self.ph.offset = int(self.offset * 1000) # time in ps
         self.ph.lib.PH_SetSyncOffset(ctypes.c_int(0), ctypes.c_int(3000))
@@ -372,7 +372,7 @@ class Backend(QtCore.QObject):
         self.ph.tacq = acqtime * n * 1000 # TO DO: correspond to GUI !!!
                 
         self.ph.lib.PH_SetBinning(ctypes.c_int(0), 
-                                  ctypes.c_int(1)) # TO DO: fix this in a clean way (1 = 8 ps resolution)
+                                  ctypes.c_int(2)) # TO DO: fix this in a clean way (1 = 8 ps, 2 = 16 ps resolution)
         self.ph.lib.PH_SetSyncOffset(ctypes.c_int(0), ctypes.c_int(3000))
 
         t1 = time.time()
@@ -406,7 +406,7 @@ class Backend(QtCore.QObject):
         print(datetime.now(), '[tcspc] opened {} file'.format(self.currentfname))
         
         numRecords = self.ph.numRecords # number of records
-        globRes = 2.5e-8  # in ns, corresponds to sync @40 MHz
+        globRes = 5e-8  # in ns, corresponds to sync @20 MHz, New NKT white laser
         timeRes = self.ph.resolution * 1e-12 # time resolution in s
 
         relTime, absTime = Read_PTU.readPT3(inputfile, numRecords)
