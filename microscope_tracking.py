@@ -31,7 +31,7 @@ import drivers.ADwin as ADwin
 import drivers.ids_cam as ids_cam
 
 import xyz_focus_lock as focus
-import new_scan as scan
+import scan #scan works with minilasEvo 632, new_scan to work with another wavelength
 import tcspc
 import measurements.minflux as minflux
 import measurements.psf as psf
@@ -160,11 +160,11 @@ class Backend(QtCore.QObject):
     xyzEndSignal = pyqtSignal(str)
     xyMoveAndLockSignal = pyqtSignal(np.ndarray)
     
-    def __init__(self, adw, ph, scmos, *args, **kwargs):
+    def __init__(self, adw, ph, scmos, diodelaser, *args, **kwargs):
         
         super().__init__(*args, **kwargs)
         
-        self.scanWorker = scan.Backend(adw)
+        self.scanWorker = scan.Backend(adw, diodelaser)
         self.xyzWorker = focus.Backend(scmos, adw)
         self.tcspcWorker = tcspc.Backend(ph)
         
@@ -258,9 +258,9 @@ if __name__ == '__main__':
     
     #initialize devices
     
-    # port = tools.get_MiniLasEvoPort()
-    # print('MiniLasEvo diode laser port:', port)
-    # diodelaser = MiniLasEvo(port)
+    port = tools.get_MiniLasEvoPort()
+    print('MiniLasEvo diode laser port:', port)
+    diodelaser = MiniLasEvo(port)
     
     #if camera wasnt closed properly just keep using it without opening new one
     try:
@@ -274,7 +274,7 @@ if __name__ == '__main__':
     adw = ADwin.ADwin(DEVICENUMBER, 1)
     scan.setupDevice(adw)
     
-    worker = Backend(adw, ph, cam) #Here I can include de diodelaser if I want
+    worker = Backend(adw, ph, cam, diodelaser)
     
     gui.make_connection(worker)
     worker.make_connection(gui)
