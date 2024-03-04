@@ -740,7 +740,7 @@ class Backend(QtCore.QObject):
         ''' set up on/off feedback loop'''
         #Creo que podría anular la siguiente linea si va en toggle_feedback
         
-        self.center_of_mass() #Esto se ejecuta para sacar self.focusSignal y configurar por primera vez el setpoint
+        #self.center_of_mass() #Esto se ejecuta para sacar self.focusSignal y configurar por primera vez el setpoint
         #Esto es imagen
         self.setPoint = self.focusSignal * self.pxSize # define setpoint 
         # [self.focusSignal]= px que se mueve el reflejo en z
@@ -768,10 +768,10 @@ class Backend(QtCore.QObject):
         
         dz = self.focusSignal * self.pxSize - self.setPoint #Este valor da positivo a veces y a veces negativo
         #[dz] = px*(nm/px) - nm =nm
-        print ("Image setpoint: ", self.setPoint, "nm")
-        print("New value in image", self.focusSignal*self.pxSize, "nm")
-        print("dz: ", dz, "nm")
-        print("self.initial_z in piezo: ", self.initial_z, "um")
+        # print ("Image setpoint: ", self.setPoint, "nm")
+        # print("New value in image", self.focusSignal*self.pxSize, "nm")
+        # print("dz: ", dz, "nm")
+        # print("self.initial_z in piezo: ", self.initial_z, "um")
         
         threshold = 7 # in nm
         far_threshold = 20 # in nm
@@ -791,9 +791,9 @@ class Backend(QtCore.QObject):
             
         else:
             #Esto es cuanto es el movimiento real de la platina
-            self.target_z = self.initial_z - dz/1000  # conversion to µm #Creo que aquí está corrigiendo bien, le puse el signo menos 
+            self.target_z = self.initial_z + dz/1000  # conversion to µm #Creo que aquí está corrigiendo bien, le puse el signo menos 
             # [self.target_z] = µm + nm/1000 = µm
-            print("self.target_z in piezo: ", self.target_z, "µm.")
+            #print("self.target_z in piezo: ", self.target_z, "µm.")
                         
             if mode == 'continous':
                 
@@ -886,7 +886,7 @@ class Backend(QtCore.QObject):
         # WARNING: check if it is necessary to fix to match camera orientation with piezo orientation
         #find command for IDS, maybe in user manual
         # WARNING: fix to match camera orientation with piezo orientation
-        #self.image = np.rot90(self.image, k=3) #Added by FC
+        self.image = np.rot90(self.image, k=3) #Added by FC
         # Send image to gui
         self.changedImage.emit(self.image) # This signal goes to get_image
         #image sent to get_image. Type:  <class 'numpy.ndarray'>
