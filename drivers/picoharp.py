@@ -12,6 +12,9 @@ from lantz import Feat, Action
 import time
 from datetime import datetime
 import numpy as np
+from queue import Queue as _Queue
+from threading import Thread as _Thread
+from collections import deque as _deque
 
 LIB_VERSION = "3.0"
 MAXDEVNUM = 8
@@ -302,7 +305,13 @@ class PicoHarp300(LibraryDriver):
         f = open(outputfilename + "_ref_time_tcspc", "w+")
         f.write(str(datetime.now()) + "\n")
         f.write(str(time.time()) + "\n")
-
+        buffers = [np.ndarray((TTREADMAX,), np.dtype(ctypes.c_uint)) for _
+                   in range(20)]
+        buffer_q = _deque((b.ctypes.data_as(ctypes.POINTER(ctypes.c_uint))
+                          for b in buffers))
+        data_q = _Queue()
+        wt = WriterThread(f, data_q, buffer_q)
+        wt.start()
         meas = True
         self.measure_state = "measuring"
 
@@ -312,7 +321,14 @@ class PicoHarp300(LibraryDriver):
             if self.flags.value & FLAG_FIFOFULL > 0:
                 print(datetime.now(), "[picoharp 300] FiFo Overrun!")
                 self.stopTTTR()
-
+            # hacer cola de buffers acá, no escribir en este momento.
+            # try:
+            #     buf = buffer_q.pop()
+            # except IndexError:
+            #     print("Not enough buffers, tardo un rato")
+            #     buffers.append(np.ndarray((TTREADMAX,), np.dtype(ctypes.c_uint)))
+            #     buf = buffers[-1].ctypes.data_as(ctypes.POINTER(ctypes.c_uint))
+            buf = self.buffer
             self.lib.PH_ReadFiFo(
                 ctypes.c_int(DEV_NUM),
                 byref(self.buffer),
@@ -326,8 +342,7 @@ class PicoHarp300(LibraryDriver):
                     "[picoharp 300] current photon count:",
                     self.nactual.value,
                 )
-                # hacer cola de buffers acá, no escribir en este momento.
-                outputfile.write(ctypes.string_at(self.buffer, self.nactual.value))
+                outputfile.write(ctypes.string_at(buf, self.nactual.value))
                 progress += self.nactual.value
             else:
                 self.lib.PH_CTCStatus(ctypes.c_int(DEV_NUM), byref(self.ctcDone))
@@ -348,6 +363,8 @@ class PicoHarp300(LibraryDriver):
                     )
                     meas = False
                     self.measure_state = "done"
+        data_q.put(None)
+        wt.join()
 
     def stopTTTR(self):
         self.lib.PH_StopMeas(ctypes.c_int(DEV_NUM))
@@ -357,3 +374,26 @@ class PicoHarp300(LibraryDriver):
 
     def finalize(self):
         self.lib.PH_CloseDevice(ctypes.c_int(DEV_NUM))
+
+
+class WriterThread(_Thread):
+    """Thread que guarda a archivo en background y recicla los buffers."""
+
+    data_queue: _Queue = None
+    buffer_queue: _deque = None
+    fd = None
+
+    def __init__(self, fd, data_q, buffer_q, *args, **kwargs):
+        """Guarda los queues y el file descriptor."""
+        super().__init__(*args, **kwargs)
+        self.data_queue = data_q
+        self.buffer_queue = buffer_q
+        self.fd = fd
+
+    def run(self):
+        print("Iniciando thread de escritura...")
+        while (nv := self.data_queue.get()) is not None:
+            print("grabando", len(nv), "datos...")
+            self.f.write(nv)
+            self.buffer_queue.appendleft(nv)
+        print("Fin thread de escritura.")
