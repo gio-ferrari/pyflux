@@ -27,7 +27,6 @@ DEV_NUM = 0  # device number, works for only 1 PH device
 
 
 class PicoHarp300(LibraryDriver):
-
     LIBRARY_NAME = "phlib64.dll"
 
     def __init__(self, *args, **kwargs):
@@ -73,14 +72,12 @@ class PicoHarp300(LibraryDriver):
     #
 
     def getLibraryVersion(self):
-
         self.lib.PH_GetLibraryVersion(self.libVersion)
 
         return self.libVersion.value.decode("utf-8")
 
     @Action()
     def open(self):
-
         retcode = self.lib.PH_OpenDevice(ctypes.c_int(DEV_NUM), self.hwSerial)
         if retcode == 0:
             print(
@@ -102,7 +99,6 @@ class PicoHarp300(LibraryDriver):
                 )
 
     def getHardwareInfo(self):
-
         self.lib.PH_GetHardwareInfo(
             DEV_NUM, self.hwModel, self.hwPartno, self.hwVersion
         )
@@ -294,26 +290,27 @@ class PicoHarp300(LibraryDriver):
                     self.measure_state = "done"
 
     def startTTTR2(self, outputfilename):
+        """Medida TTR # con thread de grabacion aparte.
 
+        Estaría bien guardar los parámetros de medida con la medida, para poder
+        procesar después.
+        """
         outputfile = open(outputfilename, "wb+")
         progress = 0
-
-        self.lib.PH_StartMeas(ctypes.c_int(DEV_NUM), ctypes.c_int(self.tacq))
-        print(datetime.now(), "[picoharp 300] TCSPC measurement started")
 
         # save real time for correlating with confocal images for FLIM
         f = open(outputfilename + "_ref_time_tcspc", "w+")
         f.write(str(datetime.now()) + "\n")
         f.write(str(time.time()) + "\n")
-        buffers = [np.ndarray((TTREADMAX,), np.dtype(ctypes.c_uint)) for _
-                   in range(20)]
-        buffer_q = _deque((b.ctypes.data_as(ctypes.POINTER(ctypes.c_uint))
-                          for b in buffers))
+        buffers = [np.ndarray((TTREADMAX,), np.dtype(ctypes.c_uint)) for _ in range(20)]
+        buffer_q = _deque(buffers)
         data_q = _Queue()
-        wt = WriterThread(f, data_q, buffer_q)
+        wt = WriterThread(outputfile, data_q, buffer_q)
         wt.start()
         meas = True
         self.measure_state = "measuring"
+        self.lib.PH_StartMeas(ctypes.c_int(DEV_NUM), ctypes.c_int(self.tacq))
+        print(datetime.now(), "[picoharp 300] TCSPC measurement started")
 
         while meas is True:
             self.lib.PH_GetFlags(ctypes.c_int(DEV_NUM), byref(self.flags))
@@ -321,17 +318,20 @@ class PicoHarp300(LibraryDriver):
             if self.flags.value & FLAG_FIFOFULL > 0:
                 print(datetime.now(), "[picoharp 300] FiFo Overrun!")
                 self.stopTTTR()
-            # hacer cola de buffers acá, no escribir en este momento.
+            # Descomentar lo siguiente para probar buffers
             # try:
             #     buf = buffer_q.pop()
             # except IndexError:
-            #     print("Not enough buffers, tardo un rato")
-            #     buffers.append(np.ndarray((TTREADMAX,), np.dtype(ctypes.c_uint)))
-            #     buf = buffers[-1].ctypes.data_as(ctypes.POINTER(ctypes.c_uint))
+            #     print("Not enough buffers, voy a retrasarme un poco...")
+            #     buf = np.ndarray((TTREADMAX,), np.dtype(ctypes.c_uint))
+            #     buffers.append(buf)
+
+            # Comentar esto para probar buffers
             buf = self.buffer
+
             self.lib.PH_ReadFiFo(
                 ctypes.c_int(DEV_NUM),
-                byref(self.buffer),
+                byref(buf),
                 TTREADMAX,
                 byref(self.nactual),
             )
@@ -342,7 +342,12 @@ class PicoHarp300(LibraryDriver):
                     "[picoharp 300] current photon count:",
                     self.nactual.value,
                 )
+                # Descomentar esto para probar buffers
+                # data_q.put_nowait((self.nactual.value, buf, ))
+
+                # Comentar esto para probar buffers
                 outputfile.write(ctypes.string_at(buf, self.nactual.value))
+
                 progress += self.nactual.value
             else:
                 self.lib.PH_CTCStatus(ctypes.c_int(DEV_NUM), byref(self.ctcDone))
@@ -391,9 +396,12 @@ class WriterThread(_Thread):
         self.fd = fd
 
     def run(self):
+        """Graba lo recibido y recicla los buffers."""
+        total = 0
         print("Iniciando thread de escritura...")
         while (nv := self.data_queue.get()) is not None:
-            print("grabando", len(nv), "datos...")
-            self.f.write(nv)
-            self.buffer_queue.appendleft(nv)
-        print("Fin thread de escritura.")
+            n_rec, buffer = nv
+            self.fd.write(buffer.data[:n_rec])
+            self.buffer_queue.appendleft(buffer)
+            total += n_rec
+        print("Fin thread de escritura.", total, "registros escritos.")
