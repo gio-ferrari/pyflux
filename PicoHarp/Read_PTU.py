@@ -223,40 +223,30 @@ def inner(data):
             truensync_array[recnum] = truensync
             recnum += 1
     return dtime_array[:recnum], truensync_array[:recnum]
-# def inner(bdata):
-#     oflcorrection = 0
-#     dlen = 0
-#     T3WRAPAROUND = 65536
 
-#     numRecords = len(bdata)
-#     dtime_array = np.zeros(numRecords)
-#     truensync_array = np.zeros(numRecords)
 
-#     for recNum, data in enumerate(bdata):
-#         nsync = data & 0b1111111111111111
-#         data = data >> 16
-#         dtime = data & 0b111111111111
-#         data = data >> 12
-#         channel = data  # & 0b1111 No necesario
-#         if channel == 0xF:  # Special record
-#             if dtime == 0:  # Not a marker, so overflow
-#                 oflcorrection += T3WRAPAROUND
-#             else:  # got marker
-#                 truensync = oflcorrection + nsync
-#         else:  # standard record, photon count
-#             truensync = oflcorrection + nsync
-#             dtime_array[recNum] = dtime
-#             truensync_array[recNum] = truensync
-#             dlen += 1
-#     # return dtime_array, truensync_array
-#     return dtime_array[:dlen], truensync_array[:dlen]
+@numba.njit((numba.uint64[:])(numba.typeof(memoryview(bytes([0]*4)).cast("I"))),
+            parallel=True)
+def all_in_one(data):
+    binwitdh = 400
+    nbins = 4
+    out = np.zeros((nbins,), dtype=np.uint64)
+    for d in data:
+        d = d >> 16
+        dtime = d & 0b111111111111
+        d = d >> 12
+        channel = d  # & 0b1111 No necesario
+        if channel != 0xF:  # Special record o mejor == buscado
+            out[dtime//binwitdh] += 1
+    return out
 
-@numba.njit
+
+@numba.njit  # ((numba.uint64[:])(numba.int64[:]), parallel=True)
 def bintest(timerel: np.ndarray):
     """binnea por índice, no por tiempo."""
     binwidth = 400  # a sacar de la configuración
     nbins = 4
-    max_v = binwidth * nbins
+    # max_v = binwidth * nbins
     # esperamos valores desde 0 .. max_v-1
     result = np.zeros((nbins,), dtype=np.uint64)
     # print(result)

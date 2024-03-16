@@ -62,10 +62,17 @@ absTime = absTime * globRes * 1e9  # true time in (ns), 4 comes from syncDivider
 absTime = absTime / 1e6 # in ms
 
 plt.figure()
-timetrace, time = np.histogram(absTime, bins=50) # timetrace with 10 ms bins
+timetrace, times = np.histogram(absTime, bins=50) # timetrace with 10 ms bins
 
-plt.plot(time[0:-1], timetrace)
+plt.plot(times[0:-1], timetrace)
 plt.xlabel('time (ms)')
 plt.ylabel('counts')
 
 ddd = Read_PTU.bintest(ff)
+
+with open(filename, "rb") as inputfile :
+    bdata = memoryview(inputfile.read()).cast("I")
+    t0 = time.time()
+    ppp = Read_PTU.all_in_one(bdata)
+    tf = time.time()
+    print("tardo bis: ", tf-t0)
