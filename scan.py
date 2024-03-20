@@ -1439,8 +1439,11 @@ class Backend(QtCore.QObject):
         self.adw.Set_Par(21, n_pixels_x)
         self.adw.Set_Par(22, n_pixels_y)
         self.adw.Set_Par(23, n_pixels_z)
-
+        t = time.perf_counter_ns()
         self.adw.Set_FPar(23, x_f)
+        elapsed_time = time.perf_counter_ns() - t
+        print("Moving x took: ", t, time.perf_counter_ns(), elapsed_time)
+        
         self.adw.Set_FPar(24, y_f)
         self.adw.Set_FPar(25, z_f)
 

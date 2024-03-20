@@ -42,7 +42,7 @@ examples.run()
 import os
 import copy
 
-os.chdir(r'C:\Users\Lars\Documents\Studium\Argentina\research\minflux\code\pyflux')
+os.chdir(r'C:\Users\Minflux\Documents\GithubPRO\pyflux')
 
 import sys
 import time
@@ -1277,4 +1277,4 @@ if __name__ == '__main__':
     gui.show() #Maximized()
     #gui.showFullScreen()
         
-    #app.exec_()
+    app.exec_()
