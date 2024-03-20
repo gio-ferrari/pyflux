@@ -6,51 +6,51 @@ Created on Thu Nov 22 11:42:43 2018
 """
 
 import numpy as np
-import picoharp
+# import picoharp
 import Read_PTU
 import os
 import matplotlib.pyplot as plt
+import time
+# ph = picoharp.PicoHarp300()
 
-ph = picoharp.PicoHarp300()
+# ph.getLibraryVersion()
 
-ph.getLibraryVersion()
+# ph.open()
+# ph.initialize()
+# ph.setup()
 
-ph.open()
-ph.initialize()
-ph.setup()
+# hwinfo = self.getHardwareInfo()
+# print('Device: {}, Part No: {}, Hardware Version: {}'.format(*hwinfo))
 
-hwinfo = self.getHardwareInfo()
-print('Device: {}, Part No: {}, Hardware Version: {}'.format(*hwinfo))
+# ph.syncDivider = 4 # this parameter must be set such that the count rate at channel 0 (sync) is equal or lower than 10MHz
+# ph.resolution = 16 # desired resolution in ps
+# ph.offset = 0
 
-ph.syncDivider = 4 # this parameter must be set such that the count rate at channel 0 (sync) is equal or lower than 10MHz
-ph.resolution = 16 # desired resolution in ps
-ph.offset = 0
-
-print('Acquisition mode is T{}'.format(ph.mode))
-print('Resolution set to {} ps'.format(ph.resolution))
-print('Countrate at channel 0 is {} c/s'.format(ph.countrate(0)))
-print('Countrate at channel 1 is {} c/s'.format(ph.countrate(1)))
-print('Acquisition time is set to {} ms'.format(ph.tacq))
+# print('Acquisition mode is T{}'.format(ph.mode))
+# print('Resolution set to {} ps'.format(ph.resolution))
+# print('Countrate at channel 0 is {} c/s'.format(ph.countrate(0)))
+# print('Countrate at channel 1 is {} c/s'.format(ph.countrate(1)))
+# print('Acquisition time is set to {} ms'.format(ph.tacq))
 
 outputfilename = 'tttr_data.out'
-ph.startTTTR(outputfilename)
+# ph.startTTTR(outputfilename)
 
 ########### This part of the code reads the data ###########
 
 directory = os.getcwd()
 os.chdir(directory)
 
+numRecords = 80696 # number of records
+globRes = 2.5e-8  # in ns, corresponds to sync @40 MHz
+timeRes = 1 * 1e-12 # time resolution in s
 filename = 'tttr_data.out'
 inputfile = open(filename, "rb")
-
-numRecords = ph.numRecords # number of records
-globRes = 2.5e-8  # in ns, corresponds to sync @40 MHz
-timeRes = ph.resolution * 1e-12 # time resolution in s
-
-relTime, absTime = Read_PTU.readPT3(inputfile, numRecords)
-
+t0 = time.time()
+relTime, absTime = Read_PTU.readPT3bis(inputfile, numRecords)
+tf = time.time()
+print("tardo: ", tf-t0)
 inputfile.close()
-
+ff = relTime
 relTime = relTime * timeRes # in real time units (s)
 relTime = relTime * 1e9  # in (ns)
 
@@ -62,8 +62,17 @@ absTime = absTime * globRes * 1e9  # true time in (ns), 4 comes from syncDivider
 absTime = absTime / 1e6 # in ms
 
 plt.figure()
-timetrace, time = np.histogram(absTime, bins=50) # timetrace with 10 ms bins
+timetrace, times = np.histogram(absTime, bins=50) # timetrace with 10 ms bins
 
-plt.plot(time[0:-1], timetrace)
+plt.plot(times[0:-1], timetrace)
 plt.xlabel('time (ms)')
 plt.ylabel('counts')
+
+ddd = Read_PTU.bintest(ff)
+
+with open(filename, "rb") as inputfile :
+    bdata = memoryview(inputfile.read()).cast("I")
+    t0 = time.time()
+    ppp = Read_PTU.all_in_one(bdata)
+    tf = time.time()
+    print("tardo bis: ", tf-t0)

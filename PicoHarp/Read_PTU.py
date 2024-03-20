@@ -9,6 +9,7 @@ import time
 import sys
 import struct
 import numpy as np
+import numba
 
 # Tag Types
 tyEmpty8      = struct.unpack(">i", bytes.fromhex("FFFF0008"))[0]
@@ -137,7 +138,7 @@ def readPT3(inputfile, numRecords):
     
     dtime_array = np.zeros(numRecords)
     truensync_array = np.zeros(numRecords)
-    
+    t0 = time.time()
     for recNum in range(0, numRecords):
 
         try:
@@ -154,7 +155,7 @@ def readPT3(inputfile, numRecords):
         if channel == 0xF: # Special record
         
             if dtime == 0: # Not a marker, so overflow
-#                print("%u OFL * %2x\n" % (recNum, 1))
+                # print("%u OFL * %2x\n" % (recNum, 1))
                 oflcorrection += T3WRAPAROUND
                 
             else: # got marker
@@ -173,8 +174,82 @@ def readPT3(inputfile, numRecords):
             
             dlen += 1
             
-        if recNum % 100000 == 0:
-            sys.stdout.write("\rProgress: %.1f%%" % (float(recNum)*100/float(numRecords)))
-            sys.stdout.flush()
-            
+        # if recNum % 100000 == 0:
+        #     sys.stdout.write("\rProgress: %.1f%%" % (float(recNum)*100/float(numRecords)))
+        #     sys.stdout.flush()
+    tf = time.time()
+    print(tf-t0, channel)
+
     return dtime_array, truensync_array
+
+# import numba
+# @numba.njit
+def readPT3bis(inputfile, numRecords):
+
+    bdata = memoryview(inputfile.read()).cast("I")
+
+    t0 = time.time()
+    rv = inner(bdata)
+    tf = time.time()
+    print(tf-t0)
+    return rv
+
+
+@numba.njit(numba.types.UniTuple(numba.int64[:], 2)
+            (numba.typeof(memoryview(bytes([0]*4)).cast("I"))),
+            parallel=True)
+def inner(data):
+    oflcorrection = 0
+    T3WRAPAROUND = 65536
+
+    numRecords = len(data)
+    dtime_array = np.zeros(numRecords, dtype=np.int64)
+    truensync_array = np.zeros(numRecords, dtype=np.int64)
+    recnum = 0
+    for d in data:
+        nsync = d & 0b1111111111111111
+        d = d >> 16
+        dtime = d & 0b111111111111
+        d = d >> 12
+        channel = d  # & 0b1111 No necesario
+        if channel == 0xF:  # Special record
+            if dtime == 0:  # Not a marker, so overflow
+                oflcorrection += T3WRAPAROUND
+            else:  # got marker
+                truensync = oflcorrection + nsync
+        else:  # standard record, photon count
+            truensync = oflcorrection + nsync
+            dtime_array[recnum] = dtime
+            truensync_array[recnum] = truensync
+            recnum += 1
+    return dtime_array[:recnum], truensync_array[:recnum]
+
+
+@numba.njit((numba.uint64[:])(numba.typeof(memoryview(bytes([0]*4)).cast("I"))),
+            parallel=True)
+def all_in_one(data):
+    binwitdh = 400
+    nbins = 4
+    out = np.zeros((nbins,), dtype=np.uint64)
+    for d in data:
+        d = d >> 16
+        dtime = d & 0b111111111111
+        d = d >> 12
+        channel = d  # & 0b1111 No necesario
+        if channel != 0xF:  # Special record o mejor == buscado
+            out[dtime//binwitdh] += 1
+    return out
+
+
+@numba.njit  # ((numba.uint64[:])(numba.int64[:]), parallel=True)
+def bintest(timerel: np.ndarray):
+    """binnea por índice, no por tiempo."""
+    binwidth = 400  # a sacar de la configuración
+    nbins = 4
+    # max_v = binwidth * nbins
+    # esperamos valores desde 0 .. max_v-1
+    result = np.zeros((nbins,), dtype=np.uint64)
+    # print(result)
+    for x in timerel:
+        result[x // binwidth] += 1
+    return result
