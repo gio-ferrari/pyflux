@@ -38,6 +38,7 @@ class Frontend(QtGui.QFrame):
     paramSignal = pyqtSignal(list)
     measureSignal = pyqtSignal()
     measureSignal2 = pyqtSignal()
+    measureSignal3 = pyqtSignal()
  
     def __init__(self, *args, **kwargs):
 
@@ -50,13 +51,21 @@ class Frontend(QtGui.QFrame):
     def start_measurement(self):
         self.measureButton.setEnabled(False)
         self.measureButton2.setEnabled(False)
+        self.measureButton3.setEnabled(False)
         self.measureSignal.emit()
 #        self.measureButton.setChecked(True) TO DO: signal from backend that toggles button
 
     def start_measurement2(self):
         self.measureButton.setEnabled(False)
         self.measureButton2.setEnabled(False)
+        self.measureButton3.setEnabled(False)
         self.measureSignal2.emit()
+
+    def start_measurement3(self):
+        self.measureButton.setEnabled(False)
+        self.measureButton2.setEnabled(False)
+        self.measureButton3.setEnabled(False)
+        self.measureSignal3.emit()
 
     def load_folder(self):
 
@@ -124,6 +133,7 @@ class Frontend(QtGui.QFrame):
         
         self.measureButton.setEnabled(True)
         self.measureButton2.setEnabled(True)  # ¿Porqué esto acá?
+        self.measureButton3.setEnabled(True)  # ¿Porqué esto acá?
 
     def clear_data(self):
         
@@ -164,7 +174,8 @@ class Frontend(QtGui.QFrame):
         # Measure button
 
         self.measureButton = QtGui.QPushButton('Measure TTTR')
-        self.measureButton = QtGui.QPushButton('Measure TTTR V2')
+        self.measureButton2 = QtGui.QPushButton('Measure TTTR V2')
+        self.measureButton3 = QtGui.QPushButton('Measure TTTR V3')
         #self.measureButton.setCheckable(True)
         
         # forced stop measurement
@@ -234,6 +245,7 @@ class Frontend(QtGui.QFrame):
         
         self.measureButton.clicked.connect(self.start_measurement)
         self.measureButton2.clicked.connect(self.start_measurement2)
+        self.measureButton3.clicked.connect(self.start_measurement3)
         self.browseFolderButton.clicked.connect(self.load_folder)
         self.clearButton.clicked.connect(self.clear_data)
         
@@ -271,6 +283,7 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.stopButton, 17, 1)
         subgrid.addWidget(self.clearButton, 18, 1)
         subgrid.addWidget(self.measureButton2, 19, 0)
+        subgrid.addWidget(self.measureButton3, 19, 1)
         
         file_subgrid = QtGui.QGridLayout()
         self.fileWidget.setLayout(file_subgrid)
@@ -380,6 +393,19 @@ class Backend(QtCore.QObject):
             pass
         self.export_data()
 
+    @pyqtSlot()
+    def measure3(self):
+        t0 = time.time()
+        self.prepare_ph()
+        self.currentfname = tools.getUniqueName(self.fname)
+        t1 = time.time()
+        print(datetime.now(), '[tcspc] starting the PH measurement took {} s'.format(t1-t0))
+        self.ph.startTTTR3(self.currentfname)
+        np.savetxt(self.currentfname + '.txt', [])
+        while self.ph.measure_state != 'done':
+            pass
+        self.export_data()
+
     @pyqtSlot(str, int, int)
     def prepare_minflux(self, fname, acqtime, n):
         
@@ -474,6 +500,7 @@ class Backend(QtCore.QObject):
         frontend.paramSignal.connect(self.get_frontend_parameters)
         frontend.measureSignal.connect(self.measure)
         frontend.measureSignal2.connect(self.measure2)
+        frontend.measureSignal3.connect(self.measure3)
         frontend.prepareButton.clicked.connect(self.prepare_ph)
         frontend.stopButton.clicked.connect(self.stop_measure)
 
