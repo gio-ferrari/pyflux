@@ -184,72 +184,72 @@ def readPT3(inputfile, numRecords):
 
 # import numba
 # @numba.njit
-def readPT3bis(inputfile, numRecords):
+# def readPT3bis(inputfile, numRecords):
 
-    bdata = memoryview(inputfile.read()).cast("I")
+#     bdata = memoryview(inputfile.read()).cast("I")
 
-    t0 = time.time()
-    rv = inner(bdata)
-    tf = time.time()
-    print(tf-t0)
-    return rv
-
-
-@numba.njit(numba.types.UniTuple(numba.int64[:], 2)
-            (numba.typeof(memoryview(bytes([0]*4)).cast("I"))),
-            parallel=True)
-def inner(data):
-    oflcorrection = 0
-    T3WRAPAROUND = 65536
-
-    numRecords = len(data)
-    dtime_array = np.zeros(numRecords, dtype=np.int64)
-    truensync_array = np.zeros(numRecords, dtype=np.int64)
-    recnum = 0
-    for d in data:
-        nsync = d & 0b1111111111111111
-        d = d >> 16
-        dtime = d & 0b111111111111
-        d = d >> 12
-        channel = d  # & 0b1111 No necesario
-        if channel == 0xF:  # Special record
-            if dtime == 0:  # Not a marker, so overflow
-                oflcorrection += T3WRAPAROUND
-            else:  # got marker
-                truensync = oflcorrection + nsync
-        else:  # standard record, photon count
-            truensync = oflcorrection + nsync
-            dtime_array[recnum] = dtime
-            truensync_array[recnum] = truensync
-            recnum += 1
-    return dtime_array[:recnum], truensync_array[:recnum]
+#     t0 = time.time()
+#     rv = inner(bdata)
+#     tf = time.time()
+#     print(tf-t0)
+#     return rv
 
 
-@numba.njit((numba.uint64[:])(numba.typeof(memoryview(bytes([0]*4)).cast("I"))),
-            parallel=True)
-def all_in_one(data):
-    binwitdh = 400
-    nbins = 4
-    out = np.zeros((nbins,), dtype=np.uint64)
-    for d in data:
-        d = d >> 16
-        dtime = d & 0b111111111111
-        d = d >> 12
-        channel = d  # & 0b1111 No necesario
-        if channel != 0xF:  # Special record o mejor == buscado
-            out[dtime//binwitdh] += 1
-    return out
+# @numba.njit(numba.types.UniTuple(numba.int64[:], 2)
+#             (numba.typeof(memoryview(bytes([0]*4)).cast("I"))),
+#             parallel=True)
+# def inner(data):
+#     oflcorrection = 0
+#     T3WRAPAROUND = 65536
+
+#     numRecords = len(data)
+#     dtime_array = np.zeros(numRecords, dtype=np.int64)
+#     truensync_array = np.zeros(numRecords, dtype=np.int64)
+#     recnum = 0
+#     for d in data:
+#         nsync = d & 0b1111111111111111
+#         d = d >> 16
+#         dtime = d & 0b111111111111
+#         d = d >> 12
+#         channel = d  # & 0b1111 No necesario
+#         if channel == 0xF:  # Special record
+#             if dtime == 0:  # Not a marker, so overflow
+#                 oflcorrection += T3WRAPAROUND
+#             else:  # got marker
+#                 truensync = oflcorrection + nsync
+#         else:  # standard record, photon count
+#             truensync = oflcorrection + nsync
+#             dtime_array[recnum] = dtime
+#             truensync_array[recnum] = truensync
+#             recnum += 1
+#     return dtime_array[:recnum], truensync_array[:recnum]
 
 
-@numba.njit  # ((numba.uint64[:])(numba.int64[:]), parallel=True)
-def bintest(timerel: np.ndarray):
-    """binnea por índice, no por tiempo."""
-    binwidth = 400  # a sacar de la configuración
-    nbins = 4
-    # max_v = binwidth * nbins
-    # esperamos valores desde 0 .. max_v-1
-    result = np.zeros((nbins,), dtype=np.uint64)
-    # print(result)
-    for x in timerel:
-        result[x // binwidth] += 1
-    return result
+# @numba.njit((numba.uint64[:])(numba.typeof(memoryview(bytes([0]*4)).cast("I"))),
+#             parallel=True)
+# def all_in_one(data):
+#     binwitdh = 400
+#     nbins = 4
+#     out = np.zeros((nbins,), dtype=np.uint64)
+#     for d in data:
+#         d = d >> 16
+#         dtime = d & 0b111111111111
+#         d = d >> 12
+#         channel = d  # & 0b1111 No necesario
+#         if channel != 0xF:  # Special record o mejor == buscado
+#             out[dtime//binwitdh] += 1
+#     return out
+
+
+# @numba.njit  # ((numba.uint64[:])(numba.int64[:]), parallel=True)
+# def bintest(timerel: np.ndarray):
+#     """binnea por índice, no por tiempo."""
+#     binwidth = 400  # a sacar de la configuración
+#     nbins = 4
+#     # max_v = binwidth * nbins
+#     # esperamos valores desde 0 .. max_v-1
+#     result = np.zeros((nbins,), dtype=np.uint64)
+#     # print(result)
+#     for x in timerel:
+#         result[x // binwidth] += 1
+#     return result
