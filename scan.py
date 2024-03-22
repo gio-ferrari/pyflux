@@ -705,8 +705,9 @@ class Frontend(QtGui.QFrame):
         # set up histogram for the liveview image
 
         self.hist = pg.HistogramLUTItem(image=self.img)
-        lut = viewbox_tools.generatePgColormap(cmaps.parula)
-        self.hist.gradient.setColorMap(lut)
+        # lut = viewbox_tools.generatePgColormap(cmaps.parula)
+        # self.hist.gradient.setColorMap(lut)
+        self.hist.gradient.loadPreset('viridis')
         self.hist.vb.setLimits(yMin=0, yMax=10000)
 
         for tick in self.hist.gradient.ticks:
