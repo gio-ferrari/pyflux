@@ -69,6 +69,7 @@ import tools.tools as tools
 import gui.AnalysisDesign
 import qdarkstyle
 from tools.lineprofile import linePlotWidget
+from PyQt5.QtWidgets import QMainWindow, QAbstractButton, QApplication
 
 π = np.pi
 donutmarker = [[29, 112, 183], [128, 128, 128], [255, 237, 0], [243, 170, 80]]
@@ -79,7 +80,7 @@ donutmarker = [[29, 112, 183], [128, 128, 128], [255, 237, 0], [243, 170, 80]]
 myappid = 'mycompany.myproduct.subproduct.version' # arbitrary string
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
-class Frontend(QtGui.QMainWindow):
+class Frontend(QMainWindow):
     
     paramSignal = pyqtSignal(dict)
     fitPSFSignal = pyqtSignal(np.ndarray, np.ndarray, np.ndarray)
@@ -95,7 +96,7 @@ class Frontend(QtGui.QMainWindow):
         self.ui.setupUi(self)
         
         self.initialDir = r'Desktop'
-        self.img_array = np.zeros((4, 100, 100))
+        self.img_array = np.zeros((4, 50, 50))
         self.k = int(self.ui.spinBox_donuts.text())
         self.regionNum = 0
         self.region = []
@@ -141,8 +142,7 @@ class Frontend(QtGui.QMainWindow):
             root = Tk()
             root.withdraw()
             root.filenamePSF = filedialog.askopenfilename(initialdir=self.initialDir,
-                                                      title = 'Select PSF file',
-                                                      filetypes = [('tiff files','.tiff')])
+                                                      title = 'Select PSF file',)
             if root.filenamePSF != '':
                 self.ui.psfFileEditBox.setText(root.filenamePSF)
                 
@@ -159,7 +159,8 @@ class Frontend(QtGui.QMainWindow):
             im[i] = im[i].T[:,::-1] 
         
         self.img_array = im
-       
+        
+
         self.emit_param()
         
         self.ui.psfScrollbar.setEnabled(True)
@@ -193,12 +194,12 @@ class Frontend(QtGui.QMainWindow):
         self.vb.setAspectLocked(True)
 
         hist = pg.HistogramLUTItem(image=img)   #set up histogram for the liveview image
-        # lut = viewbox_tools.generatePgColormap(cmaps.inferno)
+        # lut = viewbox_tools.generatePgColormap(cmaps.viridis)
         # hist.gradient.setColorMap(lut)
-#        hist.vb.setLimits(yMin=0, yMax=10000) #TODO: check maximum value
-#        for tick in hist.gradient.ticks:
-#            tick.hide()
-#        imageWidget.addItem(hist, row=0, col=1)
+        hist.vb.setLimits(yMin=0, yMax=10000) #TODO: check maximum value
+        for tick in hist.gradient.ticks:
+            tick.hide()
+        imageWidget.addItem(hist, row=0, col=1)
         
         if self.x0[0] != 0:
             i = image_number
@@ -246,6 +247,7 @@ class Frontend(QtGui.QMainWindow):
         self.emit_param()
         print(datetime.now(), '[analysis] PSF fitting started')
         self.fitPSFSignal.emit(self.img_array, self.x0, self.y0)
+        
 
     @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
     def plot_psffit(self, fittedpsf, x0, y0):
@@ -308,7 +310,7 @@ class Frontend(QtGui.QMainWindow):
         print(datetime.now(), '[analysis] TCSPC data received and plotted')
     
     @pyqtSlot(bool)
-    @pyqtSlot(QtGui.QAbstractButton)    
+    @pyqtSlot(QAbstractButton)    
     def check_tcspcmode(self, id_or_state):
         
         if isinstance(id_or_state, QtGui.QAbstractButton):
@@ -563,23 +565,20 @@ class Backend(QtCore.QObject):
         """
         
         self.psfexp = psfexp.astype(float)
-    
         #create strings pointing to psf, drift and config files
         root = os.path.splitext(self.psffilename)[0]
-        drift_file = root + '_xydata.txt'
+        # drift_file = root + '_xydata.txt'
         config_file = root + '.txt'
-        
         # open any file with metadata from PSF images 
         config = configparser.ConfigParser()
         config.sections()
         config.read(config_file, encoding='ISO-8859-1')
-        
         pxex = config['Scanning parameters']['pixel size (µm)']
         self.pxexp = float(pxex) * 1000.0 # convert to nm
         print('[analysis] psf image pixel size [nm]:', self.pxexp)
     
         # open txt file with xy drift data
-        coord = np.loadtxt(drift_file, unpack=True)
+        # coord = np.loadtxt(drift_file, unpack=True)
         
         # total number of frames
         frames = np.min(self.psfexp.shape)
@@ -595,26 +594,29 @@ class Backend(QtCore.QObject):
     
         # initial frame of each PSF
         fi = fxpsf*np.arange((self.k+1))  
-        
+        print('fi=',fi)
         # interpolation to have 1 nm px and realignment with drift data
         psf = np.zeros((frames, sizepsf, sizepsf))        
         for i in np.arange(frames):
-            psfz = ndi.interpolation.zoom(self.psfexp[i,:,:], self.pxexp)
-            deltax = coord[1, i] - coord[1, 0]
-            deltay = coord[2, i] - coord[2, 0]
-            psf[i, :, :] = ndi.interpolation.shift(psfz, [deltax, deltay])
-        
+            psf[i,:,:] = ndi.interpolation.zoom(self.psfexp[i,:,:], self.pxexp)
+            # deltax = coord[1, i] - coord[1, 0]
+            # deltay = coord[2, i] - coord[2, 0]
+            # psf[i, :, :] = ndi.interpolation.shift(psfz, [deltax, deltay])
+
         # sum all interpolated and re-centered images for each PSF
         psfT = np.zeros((frames//fxpsf, sizepsf, sizepsf))
+
+       
         for i in np.arange(self.k):
+
             psfT[i, :, :] = np.sum(psf[fi[i]:fi[i+1], :, :], axis = 0)
-            
+   
         # crop borders to avoid artifacts
         #selected ROI windwow from GUI has pixel size pxexp compared to 
         #interpolated PSF with 1 nm px size
         for i in range(4):
             self.crop_window[i] = int(self.crop_window[i] * self.pxexp)  
-            
+   
         #remember that there will be a slight shift between cropped PSF and ROI
         #as we correct for the drift when interpolating
         print('[analysis] Interpolated PSF size, crop boundaries: ', psfT[0].shape, self.crop_window)
@@ -718,6 +720,7 @@ class Backend(QtCore.QObject):
                 
         ind = ind.astype(int)
         self.τ = x[ind]
+        print('tau=', self.τ)
 
         self.emit_param()
         self.plotTCSPCSignal.emit(self.abs_time, self.rel_time)
@@ -1252,10 +1255,10 @@ class Backend(QtCore.QObject):
 
 if __name__ == '__main__':
     
-    if not QtGui.QApplication.instance():
-        app = QtGui.QApplication([])
+    if not QApplication.instance():
+        app = QApplication([])
     else:
-        app = QtGui.QApplication.instance()
+        app = QApplication.instance()
 
     app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
     
@@ -1277,4 +1280,4 @@ if __name__ == '__main__':
     gui.show() #Maximized()
     #gui.showFullScreen()
         
-    app.exec_()
+    #app.exec_()
