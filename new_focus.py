@@ -4,7 +4,7 @@ Created on Wed Oct  1 13:41:48 2018
 
 @authors: Luciano Masullo modified by Flor C. to use another ROI and IDS cam
 """
-
+from PIL import Image
 import numpy as np
 import time
 from time import process_time_ns
@@ -346,6 +346,9 @@ class Frontend(QtGui.QFrame):
         # Delete ROI
         self.deleteROIbutton = QtGui.QPushButton('Delete ROI')
         
+        # Save current frame button
+        self.currentFrameButton = QtGui.QPushButton('Save current frame')
+        
         self.calibrationButton = QtGui.QPushButton('Calibrate')
         
         self.exportDataButton = QtGui.QPushButton('Export data')
@@ -448,6 +451,7 @@ class Frontend(QtGui.QFrame):
         
         subgrid.addWidget(self.feedbackLoopBox, 9, 0)
         subgrid.addWidget(self.saveDataBox, 10, 0)
+        subgrid.addWidget(self.currentFrameButton, 13, 0)
         
         #Create button        
         #self.ROIButton = QtGui.QPushButton('ROI')
@@ -881,6 +885,7 @@ class Backend(QtCore.QObject):
         # acquire image
     
         self.image = self.camera.on_acquisition_timer() #This is a 2D array, (only R channel, to have other channel, or the sum, go to ids_cam driver)
+        self.image_to_save = self.image
         #This following lines are executed inside ids_cam driver, to change  this I should modify these lines there (depending on which one I prefer: R or R+G+B+A)
         #self.image = np.sum(raw_image, axis=2)  # sum the R, G, B images 
         #self.image = raw_image[:, :, 0] # take only R channel
@@ -1016,6 +1021,27 @@ class Backend(QtCore.QObject):
         
         self.time_array = []
         self.z_array = []
+        
+    def save_current_frame(self):
+        self.save_FB = False
+        
+        # experiment parameters
+
+        # get z-position of focus lock
+        # in standalone mode it justs saves -0.0 as focus lock position 
+        # sleeps 0.5s to catch return signal from focus.py 
+        #TODO: find better solution than sleeping
+        # self.focuslockpos = -0.0
+        # self.focuslockpositionSignal.emit(0)
+        # time.sleep(0.5)
+        
+        # name = tools.getUniqueName(self.filename)
+        # now = time.strftime("%c")
+        # tools.saveConfig(self, now, name)
+        #save image
+        image_to_show = self.image_to_save
+        plt.imshow(image_to_show)
+
         
     def export_data(self):
         if DEBUG:
@@ -1386,7 +1412,7 @@ class Backend(QtCore.QObject):
         frontend.shutterCheckbox.stateChanged.connect(lambda: self.toggle_ir_shutter(8, frontend.shutterCheckbox.isChecked()))
         frontend.paramSignal.connect(self.get_frontend_param)
         frontend.liveviewButton.clicked.connect(self.liveview)
-
+        frontend.currentFrameButton.clicked.connect(self.save_current_frame)
 
 if __name__ == '__main__':
     if DEBUG:
