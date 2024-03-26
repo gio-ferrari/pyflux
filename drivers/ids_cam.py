@@ -100,7 +100,7 @@ class IDS_U3:
             
             min_exposure_time = 0
             max_exposure_time = 0
-            exposure_time_value = 200.0 #us
+            exposure_time_value = 50000.0 #us
  
             # Get exposure range. All values in microseconds
             min_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Minimum()
