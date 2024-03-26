@@ -570,20 +570,19 @@ class Backend(QtCore.QObject):
     
         #create strings pointing to psf, drift and config files
         root = os.path.splitext(self.psffilename)[0]
-        drift_file = root + '_xydata.txt'
+        #drift_file = root + '_xydata.txt'
         config_file = root + '.txt'
         
         # open any file with metadata from PSF images 
         config = configparser.ConfigParser()
         config.sections()
         config.read(config_file, encoding='ISO-8859-1')
-        
         pxex = config['Scanning parameters']['pixel size (µm)']
         self.pxexp = float(pxex) * 1000.0 # convert to nm
         print('[analysis] psf image pixel size [nm]:', self.pxexp)
     
         # open txt file with xy drift data
-        coord = np.loadtxt(drift_file, unpack=True)
+        #coord = np.loadtxt(drift_file, unpack=True)
         
         # total number of frames
         frames = np.min(self.psfexp.shape)
@@ -603,10 +602,10 @@ class Backend(QtCore.QObject):
         # interpolation to have 1 nm px and realignment with drift data
         psf = np.zeros((frames, sizepsf, sizepsf))        
         for i in np.arange(frames):
-            psfz = ndi.interpolation.zoom(self.psfexp[i,:,:], self.pxexp)
-            deltax = coord[1, i] - coord[1, 0]
-            deltay = coord[2, i] - coord[2, 0]
-            psf[i, :, :] = ndi.interpolation.shift(psfz, [deltax, deltay])
+            psf[i,:,:] = ndi.interpolation.zoom(self.psfexp[i,:,:], self.pxexp)
+            #deltax = coord[1, i] - coord[1, 0]
+            #deltay = coord[2, i] - coord[2, 0]
+            #psf[i, :, :] = ndi.interpolation.shift(psfz, [deltax, deltay])
         
         # sum all interpolated and re-centered images for each PSF
         psfT = np.zeros((frames//fxpsf, sizepsf, sizepsf))
