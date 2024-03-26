@@ -1685,6 +1685,11 @@ class Backend(QtCore.QObject):
     def liveview_stop(self):
 
         self.viewtimer.stop()
+        time.sleep(.5)  # Not sure if neccesary, but let's wait
+        self.moveTo(self.x_i + self.scanRange/2,
+                    self.y_i + self.scanRange/2,
+                    self.z_i
+                    )
 
     def update_view(self):
              
