@@ -101,19 +101,16 @@ class Frontend(QtGui.QFrame):
         self.EBPshown = True
         self.fitting = False
         self.image = np.zeros((128, 128))
-        
-        self.initialDir = r'C:\Data'
-        
-        # Define status icons dir
-        self.ICON_RED_LED = 'icons\led-red-on.png'
-        self.ICON_GREEN_LED = 'icons\green-led-on.png'
-        
-        # set up GUI
 
+        self.initialDir = r'C:\Data'
+        # Define status icons dir
+        self.ICON_RED_LED = 'icons\\led-red-on.png'
+        self.ICON_GREEN_LED = 'icons\\green-led-on.png'
+
+        # set up GUI
         self.setup_gui()
-                
+
         # connections between changes in parameters and emit_param function
-        
         self.NofPixelsEdit.textChanged.connect(self.emit_param)
         self.scanRangeEdit.textChanged.connect(self.emit_param)
         self.pxTimeEdit.textChanged.connect(self.emit_param)
@@ -128,11 +125,10 @@ class Frontend(QtGui.QFrame):
         self.zStepEdit.textChanged.connect(self.emit_param)
         self.moveToEdit.textChanged.connect(self.emit_param)
         self.powerEdit.textChanged.connect(self.emit_param)
-                
+
     def emit_param(self):
-        
+
         params = dict()
-        
         params['detectorType'] = self.detectorType.currentText()
         params['scanType'] = self.scanMode.currentText()
         params['scanRange'] = float(self.scanRangeEdit.text())
@@ -142,35 +138,35 @@ class Frontend(QtGui.QFrame):
                                         dtype=np.float64)
         params['a_aux_coeff'] = np.array(self.auxAccEdit.text().split(' '),
                                               dtype=np.float32)/100
-        
+
         params['waitingTime'] = int(self.waitingTimeEdit.text())  # in µs
         params['fileName'] = os.path.join(self.folderEdit.text(),
                                           self.filenameEdit.text())
         params['moveToPos'] = np.array(self.moveToEdit.text().split(' '),
                                        dtype=np.float16)
-        
+
         params['xStep'] = float(self.xStepEdit.text())
         params['yStep'] = float(self.yStepEdit.text())
         params['zStep'] = float(self.zStepEdit.text())
         params['power'] = float(self.powerEdit.text())
-        
+
         self.paramSignal.emit(params)
-        
+
     @pyqtSlot(dict)
     def get_backend_param(self, params):
-        
+
         frameTime = params['frameTime']
         pxSize = params['pxSize']
         maxCounts = params['maxCounts']
 #        initialPos = np.round(params['initialPos'], 2)
         
 #        print(datetime.now(), '[scan-frontend] got initialPos', initialPos)
-        
+
         self.frameTimeValue.setText('{}'.format(np.around(frameTime, 2)))
         self.pxSizeValue.setText('{}'.format(np.around(1000 * pxSize, 3))) # in nm
         self.maxCountsValue.setText('{}'.format(maxCounts)) 
 #        self.initialPosEdit.setText('{} {} {}'.format(*initialPos))
-        
+
         self.pxSize = pxSize
      
     @pyqtSlot(np.ndarray)
@@ -179,25 +175,24 @@ class Frontend(QtGui.QFrame):
 #        self.img.setImage(image, autoLevels=False)
         self.image = image.T[:,::-1]
         self.img.setImage(self.image, autoLevels=False)
-        
-        self.xaxis.setScale(scale=self.pxSize) #scale to µm
-        self.yaxis.setScale(scale=self.pxSize) #scale to µm
+
+        self.xaxis.setScale(scale=self.pxSize)  # scale to µm
+        self.yaxis.setScale(scale=self.pxSize)  # scale to µm
         
     @pyqtSlot(np.ndarray)
     def get_real_position(self, val): 
-      
-      val = np.around(val, 3)
-      self.moveToEdit.setText('{} {} {}'.format(*val))
-        
+
+        val = np.around(val, 3)
+        self.moveToEdit.setText('{} {} {}'.format(*val))
+
     def main_roi(self):
-        
+
         # TO DO: move this function to backend and implement "typedfeat" variables
-        
         self.scanRangeEdit.setText('8')
         self.NofPixelsEdit.setText('80')
         self.pxTimeEdit.setText('500')
         self.initialPosEdit.setText('{} {} {}'.format(*[3, 3, 10]))
-    
+
     def moveto_crosshair(self):
 
         xcenter = int(np.round(self.ch.vLine.value(), 0))
@@ -207,31 +202,27 @@ class Frontend(QtGui.QFrame):
         halfsizey = int(self.roi.size()[1]/2)        
         xmin = xcenter - halfsizex
         ymin = ycenter - halfsizey
-        
+
         if self.roi != None:
             self.roi.setPos(xmin, ymin)
-                    
-            
+
     def toggle_advanced(self):
-        
+
         if self.advanced:
-            
             self.auxAccelerationLabel.show()
             self.auxAccEdit.show()
             self.waitingTimeLabel.show()
-            self.waitingTimeEdit.show() 
+            self.waitingTimeEdit.show()
             self.preview_scanButton.show()
-            
+
             self.advanced = False
-            
         else:
-            
             self.auxAccelerationLabel.hide()
             self.auxAccEdit.hide()
             self.waitingTimeLabel.hide()
-            self.waitingTimeEdit.hide() 
+            self.waitingTimeEdit.hide()
             self.preview_scanButton.hide()
-            
+
             self.advanced = True
 
     def load_folder(self):
@@ -246,7 +237,7 @@ class Frontend(QtGui.QFrame):
                 self.folderEdit.setText(folder)
         except OSError:
             pass
-    
+
     def preview_scan(self):
 
         plt.figure('Preview scan plot x vs t')
@@ -255,7 +246,6 @@ class Frontend(QtGui.QFrame):
         plt.ylabel('V (DAC units)')
 
         if np.max(self.data_x_adwin) > 2**16:
-
             plt.plot(self.data_t_adwin[0:-1],
                      2**16 * np.ones(np.size(self.data_t_adwin[0:-1])), 'r-')
 
@@ -263,131 +253,105 @@ class Frontend(QtGui.QFrame):
 
         if self.liveviewButton.isChecked():
             self.liveviewSignal.emit(True, 'liveview')
-            
             if self.roi is not None:
-
                 self.vb.removeItem(self.roi)
                 self.roi.hide()
-    
                 self.ROIButton.setChecked(False)
-            
             if self.lineROI is not None:
-
                 self.vb.removeItem(self.lineROI)
                 self.lplotWidget.hide()
                 self.lineProfButton.setChecked(False)
                 self.lineROI = None
-
             else:
-    
                 pass
-
         else:
             self.liveviewSignal.emit(False, 'liveview')
             self.emit_param()
-            
+
     def toggle_frame_acq(self):
 
         if self.acquireFrameButton.isChecked():
             self.frameacqSignal.emit(True)
-            
             if self.roi is not None:
-
                 self.vb.removeItem(self.roi)
                 self.roi.hide()
-    
                 self.ROIButton.setChecked(False)
                 self.liveviewButton.setChecked(False)
-            
             if self.lineROI is not None:
-
                 self.vb.removeItem(self.lineROI)
                 self.lplotWidget.hide()
                 self.lineProfButton.setChecked(False)
                 self.lineROI = None
-
             else:
-    
                 pass
-
         else:
-            self.frameacqSignal.emit(False)   
+            self.frameacqSignal.emit(False)
 
     def line_profile(self):
-        
+
         if self.lineROI is None:
-            
             if self.roi is None:
-                self.lineROI = pg.LineSegmentROI([[10, 64], [70,64]], pen='r')
+                self.lineROI = pg.LineSegmentROI([[10, 64], [70, 64]], pen='r')
             else:
                 xmin, ymin = self.roi.pos()
                 xmax, ymax = self.roi.pos() + self.roi.size()
                 y = int((ymax - ymin)/2) + ymin
                 self.lineROI = pg.LineSegmentROI([[xmin, y], [xmax, y]], pen='r')
-                
             self.vb.addItem(self.lineROI)
-            
             self.lplotWidget.show()
-            
         else:
-
             self.vb.removeItem(self.lineROI)
-            
             if self.roi is None:
-                self.lineROI = pg.LineSegmentROI([[10, 64], [70,64]], pen='r')
+                self.lineROI = pg.LineSegmentROI([[10, 64], [70, 64]], pen='r')
             else:
                 xmin, ymin = self.roi.pos()
                 xmax, ymax = self.roi.pos() + self.roi.size()
                 y = int((ymax - ymin)/2) + ymin
                 self.lineROI = pg.LineSegmentROI([[xmin, y], [xmax, y]], pen='r')
-
             self.vb.addItem(self.lineROI)
-            
         self.lineROI.sigRegionChanged.connect(self.update_line_profile)
-        
-        
+
     def update_line_profile(self):
-        
+
         data = self.lineROI.getArrayRegion(self.image, self.img)
         self.lplotWidget.linePlot.clear()
-        #TODO: check how to make legend work that it is always deleted 
-        #when plot is updated, otherwise the labels do overlap...
-        #self.lplotWidget.linePlot.addLegend()
+        # TODO: check how to make legend work that it is always deleted
+        # when plot is updated, otherwise the labels do overlap...
+        # self.lplotWidget.linePlot.addLegend()
 
         px_to_nm = self.pxSize * 1000.0
         x = np.arange(np.size(data)) * px_to_nm
         self.lplotWidget.linePlot.plot(x, data, name='Data')
-        
-        #make 1D Gauss fit
+
+        # make 1D Gauss fit
         if self.lplotWidget.gauss:
-            popt, pcov = self.fitGauss1D(data)    
-            
+            popt, pcov = self.fitGauss1D(data)
             conv_fact = 2*np.sqrt(2*np.log(2))
             fwhm = conv_fact * popt[2]
             fwhm_uncert = conv_fact * pcov[2, 2]
             text = 'FWHM = ' + str(np.round(fwhm, 2)) + ' +/- ' + str(np.round(fwhm_uncert, 2)) + ' nm'      
-           
             FWHMlabel = pg.TextItem()
             FWHMlabel.setPos(10, int(np.max(data)/2))
             FWHMlabel.setText(text)
             self.lplotWidget.linePlot.addItem(FWHMlabel)
-            self.lplotWidget.linePlot.plot(x, PSF.gaussian1D(x, *popt), pen = pg.mkPen('b'), name='Gauss')
-            
-        #make 1D doughnut fit
+            self.lplotWidget.linePlot.plot(x, PSF.gaussian1D(x, *popt),
+                                           pen=pg.mkPen('b'), name='Gauss')
+
+        # make 1D doughnut fit
         if self.lplotWidget.doughnut:
             popt, pcov = self.fitDoughnut1D(data)
-            
             conv_fact =  1/np.sqrt(np.log(2))
             ptp = conv_fact * popt[2]
             ptp_uncert = conv_fact * pcov[2, 2]
             text = 'Peak-to-peak = ' + str(np.round(ptp, 2)) + ' +/- ' + str(np.round(ptp_uncert, 2)) + ' nm'      
-           
+
             FWHMlabel = pg.TextItem()
             FWHMlabel.setPos(10, int(np.max(data)/2)+30)
             FWHMlabel.setText(text)
             self.lplotWidget.linePlot.addItem(FWHMlabel)
-            self.lplotWidget.linePlot.plot(x, PSF.doughnut1D(x, *popt), pen = pg.mkPen('y'), name='Doughnut')
-            
+            self.lplotWidget.linePlot.plot(x, PSF.doughnut1D(x, *popt),
+                                           pen=pg.mkPen('y'), name='Doughnut')
+
     def fitDoughnut1D(self, data):
         px_to_nm = self.pxSize * 1000.0
         x = np.arange(np.size(data)) * px_to_nm
@@ -401,28 +365,26 @@ class Frontend(QtGui.QFrame):
         popt, pcov = opt.curve_fit(PSF.doughnut1D, x, data, p0=guess)
 
         return popt, pcov
-    
-    
+
     def fitGauss1D(self, data):
         px_to_nm = self.pxSize * 1000.0
         x = np.arange(np.size(data)) * px_to_nm
         x0 = np.argmax(data) * px_to_nm
-        sigma0 = 400.0 / (2*np.sqrt(2*np.log(2))) #TODO soft-code this estimation
+        sigma0 = 400.0 / (2*np.sqrt(2*np.log(2))) # TODO: soft-code this estimation
         ofs0 = np.min(data)
         c0 = np.max(data) - ofs0
         guess = (c0, x0, sigma0, ofs0)
         popt, pcov = opt.curve_fit(PSF.gaussian1D, x, data, p0=guess)
 
         return popt, pcov
-        
+
     def toggle_ROI(self):
-        
+
         self.select_ROIButton.setEnabled(True)
         ROIpen = pg.mkPen(color='y')
         npixels = int(self.NofPixelsEdit.text())
 
         if self.roi is None:
-
             ROIpos = (0.5 * npixels - 64, 0.5 * npixels - 64)
             self.roi = viewbox_tools.ROI(npixels/2, self.vb, ROIpos,
                                          handlePos=(1, 0),
@@ -430,26 +392,22 @@ class Frontend(QtGui.QFrame):
                                          scaleSnap=True,
                                          translateSnap=True,
                                          pen=ROIpen)
-
         else:
-
             xmin, ymin = self.roi.pos()
-            
             self.vb.removeItem(self.roi)
             self.roi.hide()
 
             ROIpos = (xmin, ymin)
-            #ROIpos = (0.5 * npixels - 64, 0.5 * npixels - 64)
+            # ROIpos = (0.5 * npixels - 64, 0.5 * npixels - 64)
             self.roi = viewbox_tools.ROI(npixels/2, self.vb, ROIpos,
                                          handlePos=(1, 0),
                                          handleCenter=(0, 1),
                                          scaleSnap=True,
                                          translateSnap=True,
                                          pen=ROIpen)
-            
         if self.EBProiButton.isChecked:
             self.EBProiButton.setChecked(False)
-            
+
     def select_ROI(self):
 
         self.liveviewButton.setChecked(False)
@@ -457,19 +415,16 @@ class Frontend(QtGui.QFrame):
         self.crosshairCheckbox.setChecked(False)
         self.select_ROIButton.setEnabled(False)
 
-        
         ROIsize = np.array(self.roi.size())
         ROIpos = np.array(self.roi.pos())
-        
+
         npixels = int(self.NofPixelsEdit.text())
         pxSize = self.pxSize
         initialPos = np.array(self.initialPosEdit.text().split(' '),
                               dtype=np.float64)
 
         newPos_px = tools.ROIscanRelativePOS(ROIpos, npixels, ROIsize[1])
-
         newPos_µm = newPos_px * pxSize + initialPos[0:2]
-
         newPos_µm = np.around(newPos_µm, 2)
 
         self.initialPosEdit.setText('{} {} {}'.format(newPos_µm[0],
@@ -480,134 +435,101 @@ class Frontend(QtGui.QFrame):
         newRange_µm = pxSize * newRange_px
         newRange_µm = np.around(newRange_µm, 2)
         self.scanRangeEdit.setText('{}'.format(newRange_µm))
-        
+
         self.emit_param()
-        
+
     def emit_fit_ROI(self, actionType): # TO DO: change name from "fit" to a more general name including fit/move to center
-      
-      if self.roi is not None:
-        
+
+        if self.roi is not None:
             xmin, ymin = self.roi.pos()
             xmax, ymax = self.roi.pos() + self.roi.size()
-                        
-            ymin, ymax = [int(self.NofPixelsEdit.text()) - ymax, 
+            ymin, ymax = [int(self.NofPixelsEdit.text()) - ymax,
                           int(self.NofPixelsEdit.text()) - ymin]
-            
-            coordinates = np.array([xmin, xmax, ymin, ymax])  
-            
-
+            coordinates = np.array([xmin, xmax, ymin, ymax])
             print('FRONTEND roi ', coordinates)
-
-          
             if actionType == 'fit':
-          
                 self.fitPSFSignal.emit(coordinates, 'fit')
-                
             elif actionType == 'move':
-                
                 self.fitPSFSignal.emit(coordinates, 'move')
-            
-      else:
-            
+        else:
             print('[scan] no ROI for the fit was selected')
-        
+
     def set_EBP(self):
-        
+
         pxSize = self.pxSize
         ROIsize = np.array(self.roi.size())
-        
+
         for i in range(4):
-        
             if self.EBPscatter[i] is not None:
-                
                 self.vb.removeItem(self.EBPscatter[i])
-        
+
 #        array = self.roi.getArrayRegion(self.scworker.image, self.img)
         ROIsize = np.array(self.roi.size())
         ROIpos_µm = np.array(self.roi.pos()) * pxSize
-            
+
         xmin = ROIpos_µm[0]
         xmax = ROIpos_µm[0] + ROIsize[0] * pxSize
-        
+
         ymin = ROIpos_µm[1]
         ymax = ROIpos_µm[1] + ROIsize[1] * pxSize
-        
-        x0 = (xmax+xmin)/2
-        y0 = (ymax+ymin)/2
-        
+
+        x0 = (xmax + xmin)/2
+        y0 = (ymax + ymin)/2
+
         if self.EBPtype.currentText() == 'triangle':
-        
-            L = int(self.LEdit.text())/1000 # in µm
+            L = int(self.LEdit.text())/1000  # in µm
             θ = π * np.array([1/6, 5/6, 3/2])
-            ebp = (L/2)*np.array([[0, 0], [np.cos(θ[0]), np.sin(θ[0])], 
-                                 [np.cos(θ[1]), np.sin(θ[1])], 
-                                 [np.cos(θ[2]), np.sin(θ[2])]])
-            
+            ebp = (L/2) * np.array([[0, 0], [np.cos(θ[0]), np.sin(θ[0])],
+                                    [np.cos(θ[1]), np.sin(θ[1])],
+                                    [np.cos(θ[2]), np.sin(θ[2])]])
             self.EBP = (ebp + np.array([x0, y0]))/pxSize
-                                       
         print('[scan] EBP px', self.EBP)
-            
+
         for i in range(4):
-        
             if i == 0:
                 mybrush = pg.mkBrush(255, 127, 80, 255)
-                
             if i == 1:
                 mybrush = pg.mkBrush(255, 255, 0, 255)
-                
             if i == 2:
                 mybrush = pg.mkBrush(135, 206, 235, 255)
-                
             if i == 3:
-                mybrush = pg.mkBrush(0, 0 ,0 , 255)
-                
-            self.EBPscatter[i] = pg.ScatterPlotItem([self.EBP[i][0]], 
-                                                    [self.EBP[i][1]], 
-                                                    size=10,
-                                                    pen=pg.mkPen(None), 
-                                                    brush=mybrush)            
+                mybrush = pg.mkBrush(0, 0, 0, 255)
 
+            self.EBPscatter[i] = pg.ScatterPlotItem([self.EBP[i][0]],
+                                                    [self.EBP[i][1]],
+                                                    size=10,
+                                                    pen=pg.mkPen(None),
+                                                    brush=mybrush)
             self.vb.addItem(self.EBPscatter[i])
-        
         self.set_EBPButton.setChecked(False)
-        
+
     def toggle_EBP(self):
-        
+
         if self.EBPshown:
-        
             for i in range(len(self.EBPscatter)):
-                
                 if self.EBPscatter[i] is not None:
                     self.vb.removeItem(self.EBPscatter[i])
                 else:
                     pass
-            
             self.EBPshown = False
-            
         else:
-            
             for i in range(len(self.EBPscatter)):
-                
                 if self.EBPscatter[i] is not None:
                     self.vb.addItem(self.EBPscatter[i])
                 else:
                     pass
-            
             self.EBPshown = True
-    
         self.showEBPButton.setChecked(False)
-    
-    @pyqtSlot(int, bool)    
+
+    @pyqtSlot(int, bool)
     def update_shutters(self, num, on):
-        
-        '''
+        """
         setting of num-value:
             0 - signal send by scan-gui-button --> change state of all minflux shutters
             1...6 - shutter 1-6 will be set according to on-variable, i.e. either true or false; only 1-4 controlled from here
             7 - set all minflux shutters according to on-variable
             8 - set all shutters according to on-variable
-        '''
-        
+        """
         if num == 0:
             if self.shutterButton.isChecked():
                 if self.shutter1Checkbox.isChecked() == False:
@@ -617,7 +539,7 @@ class Frontend(QtGui.QFrame):
                 if self.shutter3Checkbox.isChecked() == False:
                     self.shutter3Checkbox.setChecked(True)
                 if self.shutter4Checkbox.isChecked() == False:
-                    self.shutter4Checkbox.setChecked(True)    
+                    self.shutter4Checkbox.setChecked(True)
             else:
                 if self.shutter1Checkbox.isChecked():
                     self.shutter1Checkbox.setChecked(False)
@@ -627,19 +549,15 @@ class Frontend(QtGui.QFrame):
                     self.shutter3Checkbox.setChecked(False)
                 if self.shutter4Checkbox.isChecked():
                     self.shutter4Checkbox.setChecked(False)
-        
+
         if num == 1:
             self.shutter1Checkbox.setChecked(on)
-        
         if num == 2:
             self.shutter2Checkbox.setChecked(on)
-                
         if num == 3:
             self.shutter3Checkbox.setChecked(on)
-                
         if num == 4:
             self.shutter4Checkbox.setChecked(on)
-                
         if (num == 7) or (num == 8):
             if self.shutterButton.isChecked():
                 self.shutterButton.setChecked(False)
@@ -647,63 +565,60 @@ class Frontend(QtGui.QFrame):
             self.shutter2Checkbox.setChecked(on)
             self.shutter3Checkbox.setChecked(on)
             self.shutter4Checkbox.setChecked(on)
-            
         if num == 11:
             self.diodeShutter.setChecked(on)
-            
-    @pyqtSlot(bool)    
+
+    @pyqtSlot(bool)
     def update_led(self, emission):
         if emission:
             led = self.ICON_GREEN_LED
         else:
             led = self.ICON_RED_LED
-            
+
         self.diodeemissionStatus.setPixmap(QtGui.QPixmap(led))
         self.diodeemissionStatus.setScaledContents(True)
         self.diodeemissionStatus.setFixedSize(20, 20)
-        
-        #whenever diodelaser status is changed,
-        #the output power will be set to 0 mW for security reasons
+
+        # whenever diodelaser status is changed,
+        # the output power will be set to 0 mW for security reasons
         self.diodepowerSpinBox.setValue(0)
-            
+
     def setup_gui(self):
-                
+
         # set up axis items, scaling is performed in get_image()
         self.xaxis = pg.AxisItem(orientation='bottom', maxTickLength=5)
         self.xaxis.showLabel(show=True)
         self.xaxis.setLabel('x', units='µm')
-        
+
         self.yaxis = pg.AxisItem(orientation='left', maxTickLength=5)
         self.yaxis.showLabel(show=True)
         self.yaxis.setLabel('y', units='µm')
 
         # image widget set-up and layout
         imageWidget = pg.GraphicsLayoutWidget()
-        self.vb = imageWidget.addPlot(axisItems={'bottom': self.xaxis, 
+        self.vb = imageWidget.addPlot(axisItems={'bottom': self.xaxis,
                                                  'left': self.yaxis})
         self.lplotWidget = linePlotWidget()
         self.lplotWidget.get_scanConnection(self)
         self.lplotWidget.gauss = False
         self.lplotWidget.doughnut = False
-        
+
         imageWidget.setFixedHeight(500)
         imageWidget.setFixedWidth(500)
-        
-        # Viewbox and image item where the liveview will be displayed
 
+        # Viewbox and image item where the liveview will be displayed
         self.img = pg.ImageItem()
         self.img.translate(-0.5, -0.5)
         self.vb.addItem(self.img)
         self.vb.setAspectLocked(True)
-        
-        #create crosshair
-        #double .vb in order to get actual viewbox and not just the thingy 
-        #we called viewbox ;)
+
+        # create crosshair
+        # double .vb in order to get actual viewbox and not just the thingy
+        # we called viewbox ;)
         vbox = self.vb.vb
         self.ch = viewbox_tools.Crosshair(vbox)
 
         # set up histogram for the liveview image
-
         self.hist = pg.HistogramLUTItem(image=self.img)
         lut = viewbox_tools.generatePgColormap(cmaps.parula)
         self.hist.gradient.setColorMap(lut)
@@ -712,20 +627,18 @@ class Frontend(QtGui.QFrame):
         for tick in self.hist.gradient.ticks:
             tick.hide()
         imageWidget.addItem(self.hist, row=0, col=1)
-        
+
         # widget with scanning parameters
         self.paramWidget = QGroupBox('Scan Settings')
-    
-        # LiveView Button
 
+        # LiveView Button
         self.liveviewButton = QtGui.QPushButton('Confocal Liveview')
         self.liveviewButton.setFont(QtGui.QFont('Helvetica', weight=QtGui.QFont.Bold))
         self.liveviewButton.setCheckable(True)
         self.liveviewButton.setStyleSheet("font-size: 12px; background-color:rgb(180, 180, 180)")
         self.liveviewButton.clicked.connect(self.toggle_liveview)
-        
-        # ROI buttons
 
+        # ROI buttons
         self.ROIButton = QtGui.QPushButton('ROI')
         self.ROIButton.setCheckable(True)
         self.ROIButton.clicked.connect(self.toggle_ROI)
@@ -734,79 +647,63 @@ class Frontend(QtGui.QFrame):
         self.select_ROIButton.clicked.connect(self.select_ROI)
         self.select_ROIButton.setEnabled(False)
 
-        
-        #Shutters
+        # Shutters
         self.shutterLabel = QtGui.QLabel('Minflux shutter open?')
         self.shutter1Checkbox = QtGui.QCheckBox('1')
         self.shutter2Checkbox = QtGui.QCheckBox('2')
         self.shutter3Checkbox = QtGui.QCheckBox('3')
         self.shutter4Checkbox = QtGui.QCheckBox('4')
-      
+
         # Shutter button
-        
         self.shutterButton = QtGui.QPushButton('Open/ close all')
         self.shutterButton.setCheckable(True)
         self.shutterButton.clicked.connect(lambda: self.update_shutters(0, True))
-        
+
         # Flipper button
-        
         self.flipperButton = QtGui.QPushButton('Flipper 100x up/down')
         self.flipperButton.setCheckable(True)
-        
-        # Save current frame button
 
+        # Save current frame button
         self.currentFrameButton = QtGui.QPushButton('Save current frame')
 
         # preview scan button
-
         self.preview_scanButton = QtGui.QPushButton('Scan preview')
         self.preview_scanButton.setCheckable(True)
         self.preview_scanButton.clicked.connect(self.preview_scan)
-        
+
         # toggle crosshair
-        
         self.crosshairCheckbox = QtGui.QCheckBox('Crosshair')
         self.crosshairCheckbox.stateChanged.connect(self.ch.toggle)
-        
-        
+
         # move to center button
-        
         self.moveToROIcenterButton = QtGui.QPushButton('Move to ROI center') 
         self.moveToROIcenterButton.clicked.connect(lambda: self.emit_fit_ROI('move'))
-        
+
         # dougnhut fit
-        
         self.psfFitButton = QtGui.QPushButton('PSF fit and move')
         self.psfFitButton.clicked.connect(lambda: self.emit_fit_ROI('fit'))
-        
+
         # measure trace
-        
         self.traceButton = QtGui.QPushButton('Measure trace')
-        
+
         # main ROI button
-        
-        self.mainROIButton = QtGui.QPushButton('Go to main ROI') 
+        self.mainROIButton = QtGui.QPushButton('Go to main ROI')
         self.mainROIButton.clicked.connect(self.main_roi)
 
         # line profile button
-        
         self.lineProfButton = QtGui.QPushButton('Line profile')
         self.lineProfButton.setCheckable(True)
         self.lineProfButton.clicked.connect(self.line_profile)
-        
+
         # edited scan button
-        
         self.FBavScanButton = QtGui.QPushButton('F and B average scan')
         self.FBavScanButton.setCheckable(True)
-        
+
         # move to crosshair button
-        
         self.crosshairButton = QtGui.QPushButton('Move to Crosshair')
         self.crosshairButton.clicked.connect(self.moveto_crosshair)
 
-
         # Scanning parameters
-
         self.initialPosLabel = QtGui.QLabel('Initial Pos'
                                             ' [x0, y0, z0] (µm)')
         self.initialPosEdit = QtGui.QLineEdit('3 3 10')
@@ -816,7 +713,7 @@ class Frontend(QtGui.QFrame):
         self.pxTimeEdit = QtGui.QLineEdit('500')
         self.NofPixelsLabel = QtGui.QLabel('Number of pixels')
         self.NofPixelsEdit = QtGui.QLineEdit('80')
-        
+
         self.pxSizeLabel = QtGui.QLabel('Pixel size (nm)')
         self.pxSizeValue = QtGui.QLineEdit('')
         self.pxSizeValue.setReadOnly(True)
@@ -826,25 +723,24 @@ class Frontend(QtGui.QFrame):
         self.maxCountsLabel = QtGui.QLabel('Max counts per pixel')
         self.maxCountsValue = QtGui.QLineEdit('')
         self.frameTimeValue.setReadOnly(True)
-        
+
         self.powerLabel = QtGui.QLabel('Power at BFP (µW)')
         self.powerEdit = QtGui.QLineEdit('0')
-        
+
         self.advancedButton = QtGui.QPushButton('Advanced options')
         self.advancedButton.setCheckable(True)
         self.advancedButton.clicked.connect(self.toggle_advanced)
-        
+
         self.auxAccelerationLabel = QtGui.QLabel('Aux acc'
                                                  ' (% of a_max)')
         self.auxAccEdit = QtGui.QLineEdit('1 1 1 1')
         self.waitingTimeLabel = QtGui.QLabel('Scan waiting time (µs)')
         self.waitingTimeEdit = QtGui.QLineEdit('0')
-        
+
         self.toggle_advanced()
-    
 
         # file/folder widget
-        self.fileWidget = QGroupBox('Save options')        
+        self.fileWidget = QGroupBox('Save options')
         self.fileWidget.setMinimumWidth(180)
         self.fileWidget.setFixedHeight(110)
 
@@ -852,14 +748,14 @@ class Frontend(QtGui.QFrame):
         today = str(date.today()).replace('-', '')
         root = r'C:\\Data\\'
         folder = root + today
-        
-        try:  
+
+        try:
             os.mkdir(folder)
-        except OSError:  
+        except OSError:
             print(datetime.now(), '[scan] Directory {} already exists'.format(folder))
-        else:  
+        else:
             print(datetime.now(), '[scan] Successfully created the directory {}'.format(folder))
-        
+
         self.filenameEdit = QtGui.QLineEdit('filename')
         self.folderLabel = QtGui.QLabel('Folder')
         self.folderEdit = QtGui.QLineEdit(folder)
@@ -873,98 +769,89 @@ class Frontend(QtGui.QFrame):
         self.scanMode = QtGui.QComboBox()
         self.scanModes = ['xy', 'xz', 'yz']
         self.scanMode.addItems(self.scanModes)
-        
+
         self.detectorType = QtGui.QComboBox()
-        self.dettypes = ['APD','photodiode']
+        self.dettypes = ['APD', 'photodiode']
         self.detectorType.addItems(self.dettypes)
-        
+
         # diodelaser widget
         diodelaserWidget = QGroupBox('Diodelaser control')
-        diodelaserWidget.setFixedHeight(108)   
-        
+        diodelaserWidget.setFixedHeight(108)
+
         self.diodelaserButton = QtGui.QPushButton('Laser On')
         self.diodelaserButton.setCheckable(True)
         self.diodeemissionLabel = QtGui.QLabel('Emission')
-        
+
         self.diodeemissionStatus = QtGui.QLabel()
         self.diodeemissionStatus.setPixmap(QtGui.QPixmap(self.ICON_RED_LED))
         self.diodeemissionStatus.setScaledContents(True)
         self.diodeemissionStatus.setFixedSize(20, 20)
-        
+
         self.diodepowerLabel = QtGui.QLabel('Power [mW]')
         self.diodepowerSpinBox = QtGui.QSpinBox()
-        self.diodepowerSpinBox.setRange(0, 78) #max value given by manual  
-        
+        self.diodepowerSpinBox.setRange(0, 78)  # max value given by manual
+
         self.diodeShutter = QtGui.QCheckBox('Open')
-        
+
         diode_subgrid = QtGui.QGridLayout()
         diodelaserWidget.setLayout(diode_subgrid)
-        
+
         diode_subgrid.addWidget(self.diodelaserButton, 0, 0)
         diode_subgrid.addWidget(self.diodeShutter, 0, 1)
         diode_subgrid.addWidget(self.diodeemissionLabel, 1, 0)
         diode_subgrid.addWidget(self.diodeemissionStatus, 1, 1)
         diode_subgrid.addWidget(self.diodepowerLabel, 2, 0)
         diode_subgrid.addWidget(self.diodepowerSpinBox, 2, 1)
-      
-        
+
         # widget with EBP parameters and buttons
         self.EBPWidget = QtGui.QFrame()
-        
         EBPparamTitle = QtGui.QLabel('<h2><strong>Excitation Beam Pattern</strong></h2>')
         EBPparamTitle.setTextFormat(QtCore.Qt.RichText)
-        
+
         self.EBProiButton = QtGui.QPushButton('EBP ROI')
         self.EBProiButton.setCheckable(True)
         self.EBProiButton.clicked.connect(self.toggle_ROI)
-        
+
         self.showEBPButton = QtGui.QPushButton('show/hide EBP')
         self.showEBPButton.setCheckable(True)
         self.showEBPButton.clicked.connect(self.toggle_EBP)
 
         self.set_EBPButton = QtGui.QPushButton('set EBP')
         self.set_EBPButton.clicked.connect(self.set_EBP)
-        
+
         # EBP selection
         self.EBPtypeLabel = QtGui.QLabel('EBP type')
-
         self.EBPtype = QtGui.QComboBox()
         self.EBPoptions = ['triangle', 'square']
         self.EBPtype.addItems(self.EBPoptions)
-        
+
         self.Llabel = QtGui.QLabel('L (nm)')
         self.LEdit = QtGui.QLineEdit('100')
-        
+
         # piezo navigation widget
-        
         self.positioner = QtGui.QFrame()
         self.positioner.setFrameStyle(QtGui.QFrame.Panel |
                                       QtGui.QFrame.Raised)
-        
+
         self.xUpButton = QtGui.QPushButton("(+x) ►")  # →
         self.xDownButton = QtGui.QPushButton("◄ (-x)")  # ←
-
         self.yUpButton = QtGui.QPushButton("(+y) ▲")  # ↑
         self.yDownButton = QtGui.QPushButton("(-y) ▼")  # ↓
-        
         self.zUpButton = QtGui.QPushButton("(+z) ▲")  # ↑
         self.zDownButton = QtGui.QPushButton("(-z) ▼")  # ↓
-        
+
         self.xStepLabel = QtGui.QLabel('x step (µm)')
         self.xStepEdit = QtGui.QLineEdit('0.050')
-        
         self.yStepLabel = QtGui.QLabel('y step (µm)')
         self.yStepEdit = QtGui.QLineEdit('0.050')
-        
         self.zStepLabel = QtGui.QLabel('z step (µm)')
         self.zStepEdit = QtGui.QLineEdit('0.050')
         
         # move to button
-
         self.moveToButton = QtGui.QPushButton('Move to')
         self.moveToLabel = QtGui.QLabel('Move to [x0, y0, z0] (µm)')
         self.moveToEdit = QtGui.QLineEdit('0 0 10')
-        
+
         # lower widget displaying file and diodelaser widgets
         lowerWidget = QtGui.QFrame()
         lower_subgrid = QtGui.QGridLayout()
@@ -972,11 +859,11 @@ class Frontend(QtGui.QFrame):
         lowerWidget.setMinimumWidth(450)
         lower_subgrid.addWidget(self.fileWidget, 0, 0)
         lower_subgrid.addWidget(diodelaserWidget, 0, 1)
-        
+
         # scan GUI layout
         grid = QtGui.QGridLayout()
         self.setLayout(grid)
-        
+
         tabArea = QTabWidget()
         grid.addWidget(tabArea, 0, 0)
         
@@ -1360,32 +1247,23 @@ class Backend(QtCore.QObject):
         self.paramSignal.emit(params)
         
     def update_device_param(self):
-        
+
         if self.detector == 'APD':
             self.adw.Set_Par(3, 0)  # Digital input (APD)
-
         if self.detector == 'photodiode':
             self.adw.Set_Par(3, 1)  # Analog input (photodiode)
-
         # select scan type
-
         if self.scantype == 'xy':
-
             self.adw.Set_FPar(10, 1)
             self.adw.Set_FPar(11, 2)
-
         if self.scantype == 'xz':
-
             self.adw.Set_FPar(10, 1)
             self.adw.Set_FPar(11, 6)
-
         if self.scantype == 'yz':
-
             self.adw.Set_FPar(10, 2)
             self.adw.Set_FPar(11, 6)
 
         #  initial positions x and y
-        
         self.x_i = self.initialPos[0]
         self.y_i = self.initialPos[1]
         self.z_i = self.initialPos[2]
@@ -1395,7 +1273,6 @@ class Backend(QtCore.QObject):
         self.z_offset = 0
 
         #  load ADwin parameters
-
         self.adw.Set_Par(1, self.tot_pixels)
 
         self.data_t_adwin = tools.timeToADwin(self.data_t)
@@ -1404,14 +1281,12 @@ class Backend(QtCore.QObject):
 
         # repeat last element because time array has to have one more
         # element than position array
-
         dt = self.data_t_adwin[-1] - self.data_t_adwin[-2]
 
         self.data_t_adwin = np.append(self.data_t_adwin,
                                       (self.data_t_adwin[-1] + dt))
 
         # prepare arrays for conversion into ADwin-readable data
-
         self.time_range = np.size(self.data_t_adwin)
         self.space_range = np.size(self.data_x_adwin)
 
@@ -1429,7 +1304,11 @@ class Backend(QtCore.QObject):
 
     def set_moveTo_param(self, x_f, y_f, z_f, n_pixels_x=128, n_pixels_y=128,
                          n_pixels_z=128, pixeltime=2000):
+        """Send move parameters to ADwin to use with proc 2.
 
+        n_pixels is the number of steps to use in each direction: the stage
+        will be moved to destination in n_pixels_? steps
+        """
         x_f = tools.convert(x_f, 'XtoU')
         y_f = tools.convert(y_f, 'XtoU')
         z_f = tools.convert(z_f, 'XtoU')
@@ -1447,14 +1326,22 @@ class Backend(QtCore.QObject):
         self.adw.Set_FPar(26, tools.timeToADwin(pixeltime))
 
     def moveTo(self, x_f, y_f, z_f):
+        """Move the stage.
 
+        Sends the requested position to ADwin and executes the movement
+
+        Parameters
+        ----------
+            x_f, y_f, z_f: float
+                destination coordinates ¿in µm?
+        """
         self.set_moveTo_param(x_f, y_f, z_f)
         self.adw.Start_Process(2)
 
     def moveTo_action(self):
-
+        """Move the stage to the saved position."""
         self.moveTo(*self.moveToPos)
-        
+
     def moveTo_roi_center(self):
                 
         xi, xf, yi, yf = self.selectedCoord
@@ -1462,11 +1349,11 @@ class Backend(QtCore.QObject):
         
 #        print('[scan] self.initialPos[0:2]', self.initialPos[0:2])
         print('[scan] moved to center of ROI:', self.ROIcenter, 'µm')
-        
+
         self.moveTo(*self.ROIcenter)
         time.sleep(.3)
         self.ROIcenterSignal.emit(self.ROIcenter)
-        
+
         self.trace_measurement()
         
     def psf_fit_FandB_and_move(self):
@@ -1646,63 +1533,51 @@ class Backend(QtCore.QObject):
           print('SCAN GAUSSIAN CENTER', x0_fit, y0_fit)
           print('SCAN INITIAL', self.initialPos)
 
-          
           gaussian_center = np.array([x0_fit, y0_fit, 0], dtype=np.float64)/1000 # in µm
           target = self.initialPos + gaussian_center 
-        
+
         return target
 
     @pyqtSlot()
     def get_moveTo_initial_signal(self):
-        
+
         self.moveTo(*self.initialPos)
-    
+
     def relative_move(self, axis, direction):
-        
+
         if axis == 'x' and direction == 'up':
-            
             newPos_µm = self.initialPos[0] - self.xStep
             newPos_µm = round(newPos_µm, 3)
             self.initialPos = np.array([newPos_µm, self.initialPos[1],
                                         self.initialPos[2]])
-            
         if axis == 'x' and direction == 'down':
-            
             newPos_µm = self.initialPos[0] + self.xStep
             newPos_µm = np.around(newPos_µm, 3)
             self.initialPos = np.array([newPos_µm, self.initialPos[1],
                                         self.initialPos[2]])
-            
         if axis == 'y' and direction == 'up':
-            
             newPos_µm = self.initialPos[1] + self.yStep
             newPos_µm = np.around(newPos_µm, 3)       
             self.initialPos = np.array([self.initialPos[0], newPos_µm,
                                         self.initialPos[2]])
-            
         if axis == 'y' and direction == 'down':
-            
             newPos_µm = self.initialPos[1] - self.yStep
             newPos_µm = np.around(newPos_µm, 3)
             self.initialPos = np.array([self.initialPos[0], newPos_µm,
                                         self.initialPos[2]])
-            
         if axis == 'z' and direction == 'up':
             
             newPos_µm = self.initialPos[2] + self.zStep
             newPos_µm = np.around(newPos_µm, 3)
             self.initialPos = np.array([self.initialPos[0], self.initialPos[1], 
                                         newPos_µm])
-        
         if axis == 'z' and direction == 'down':
-            
             newPos_µm = self.initialPos[2] - self.zStep
             newPos_µm = np.around(newPos_µm, 3)
             self.initialPos = np.array([self.initialPos[0], self.initialPos[1], 
                                         newPos_µm])
-    
         self.update_device_param()
-        self.emit_param()    
+        self.emit_param()
 
     @pyqtSlot(float)
     def get_focuslockposition(self, position):
@@ -1710,7 +1585,7 @@ class Backend(QtCore.QObject):
         
     @pyqtSlot(str)
     def saveConfigfile(self, fname):
-        
+
         self.focuslockpositionSignal.emit(-9999)
         self.focuslockpos = -0.0
         time.sleep(0.5)
@@ -1718,7 +1593,6 @@ class Backend(QtCore.QObject):
         tools.saveConfig(self, now, 'test', filename=fname)
         print('[scan] saved configfile', fname)
 
-        
     def save_current_frame(self):
       
         self.save_FB = False
@@ -1728,102 +1602,84 @@ class Backend(QtCore.QObject):
         # get z-position of focus lock
         # in standalone mode it justs saves -0.0 as focus lock position 
         # sleeps 0.5s to catch return signal from focus.py 
-        #TODO: find better solution than sleeping
+        # TODO: find better solution than sleeping
         self.focuslockpos = -0.0
         self.focuslockpositionSignal.emit(0)
         time.sleep(0.5)
-        
+
         name = tools.getUniqueName(self.filename)
         now = time.strftime("%c")
         tools.saveConfig(self, now, name)
 
         # save image
-        
         data = self.image_to_save
         result = Image.fromarray(data.astype('uint16'))
         result.save(r'{}.tiff'.format(name))
-        
+
         if self.save_FB is True:
-          
-          print('[scan] Saved current frame F and B', name)
-          
-          # save image F
-          
-          data = self.imageF_copy
-          result = Image.fromarray(data.astype('uint16'))
-          result.save(r'{} F.tiff'.format(name))
-          
-          # save image B
-          
-          data = self.imageB_copy
-          result = Image.fromarray(data.astype('uint16'))
-          result.save(r'{} B.tiff'.format(name))
-        
+            print('[scan] Saved current frame F and B', name)
+
+            # save image F
+            data = self.imageF_copy
+            result = Image.fromarray(data.astype('uint16'))
+            result.save(r'{} F.tiff'.format(name))
+
+            # save image B
+            data = self.imageB_copy
+            result = Image.fromarray(data.astype('uint16'))
+            result.save(r'{} B.tiff'.format(name))
         print('[scan] Saved current frame', name)
 
 #        self.gui.currentFrameButton.setChecked(False)
-        
+
     @pyqtSlot(bool, str, np.ndarray)
     def get_scan_signal(self, lvbool, mode, initialPos):
-    
         """
         Connection: [psf] scanSignal
         Description: get drift-corrected initial position, calculates the
         derived parameters (and updates ADwin data)
         """
-        
         self.initialPos = initialPos
         self.calculate_derived_param()
-        
+
         self.liveview(lvbool, mode)
         
         
     def line_acquisition(self):
-        
+
         self.adw.Start_Process(1)
-        
+
         line_time = (1/1000) * self.data_t[-1]  # target linetime in ms
         wait_time = line_time * 1.05 # TO DO: optimize this, it should work with 1.00, or maybe even less?
                                      # it should even work without the time.sleep()
-        
-        time.sleep(wait_time/1000) # in s
+        time.sleep(wait_time/1000)  # in s
 
         line_data = self.adw.GetData_Long(1, 0, self.tot_pixels)
-        
+
         line_data[0] = 0  # TO DO: fix the high count error on first element
-        
+
         return line_data
-   
+
     @pyqtSlot(bool, str)
     def liveview(self, lvbool, mode):
-        
+
         if lvbool:
-            
             self.acquisitionMode = mode # modes: 'liveview', 'frame'
             self.liveview_start()
-            
         else:
-            
             self.liveview_stop()
 
     def liveview_start(self):
-        
+
 #        self.plot_scan()
-        
         if self.scantype == 'xy':
-
             self.moveTo(self.x_i, self.y_i, self.z_i)
-
         if self.scantype == 'xz':
-
             self.moveTo(self.x_i, self.y_i + self.scanRange/2,
                         self.z_i - self.scanRange/2)
-
         if self.scantype == 'yz':
-
             self.moveTo(self.x_i + self.scanRange/2, self.y_i,
                         self.z_i - self.scanRange/2)
-
         self.viewtimer.start(self.viewtimer_time)
 
     def liveview_stop(self):
@@ -1833,207 +1689,146 @@ class Backend(QtCore.QObject):
     def update_view(self):
              
         if self.i < self.NofPixels:
-
             if self.scantype == 'xy':
-    
                 dy = tools.convert(self.dy, 'ΔXtoU')
                 self.y_offset = int(self.y_offset + dy)
                 self.adw.Set_FPar(2, self.y_offset)
-    
             if self.scantype == 'xz' or self.scantype == 'yz':
-    
                 dz = tools.convert(self.dz, 'ΔXtoU')
                 self.z_offset = int(self.z_offset + dz)
                 self.adw.Set_FPar(2, self.z_offset)
-    
             self.lineData = self.line_acquisition()
-    
+
             if self.full_scan is True:
-    
                 self.image[self.i, :] = self.lineData
-                
             elif self.FBaverage_scan is True:
-                
                 # display average of forward and backward image
-                
                 c0 = self.NofAuxPixels
                 c1 = self.NofPixels
-                
                 lineData_F = self.lineData[c0:c0+c1]
                 lineData_B = self.lineData[3*c0+c1:3*c0+2*c1]
-                
                 if self.i % 2 == 0:
-                
                     self.image[self.i, :] = lineData_F
-                
                 if self.i % 2 != 0:
-                    
                     self.image[self.i, :] = lineData_B[::-1]
-    
-            else: 
-    
+            else:
                 # displays only forward image
-                
                 c0 = self.NofAuxPixels
                 c1 = self.NofPixels
-    
                 lineData_F = self.lineData[c0:c0+c1]
                 lineData_B = self.lineData[3*c0+c1:3*c0+2*c1]
-                
                 self.imageF[self.i, :] = lineData_F
                 self.imageB[self.i, :] = lineData_B[::-1]
-                
                 self.image[self.i, :] = lineData_F
-    
             # display image after every scanned line
-                
             self.image_to_save = self.image
-            self.imageF_copy = self.imageF     # TO DO: clean up with fit signal to avoid the copy image
+            self.imageF_copy = self.imageF  # TO DO: clean up with fit signal to avoid the copy image
             self.imageB_copy = self.imageB
     #        self.image_copy = self.image
-            
             self.imageSignal.emit(self.image)
     #        print(datetime.now(), '[scan] Image emitted to frontend')
-
             self.i = self.i + 1
-
         else:
-
             print(datetime.now(), '[scan] Frame ended')
-
             self.i = 0
             self.y_offset = 0
             self.z_offset = 0
 
             if self.scantype == 'xy':
-
                 self.moveTo(self.x_i, self.y_i, self.z_i)
-                    
             if self.scantype == 'xz':
-
                 self.moveTo(self.x_i, self.y_i + self.scanRange/2,
                             self.z_i - self.scanRange/2)
-
             if self.scantype == 'yz':
-
                 self.moveTo(self.x_i + self.scanRange/2, self.y_i,
                             self.z_i - self.scanRange/2)
-                
             if self.acquisitionMode == 'frame':
-                
                 self.liveview_stop()
                 self.frameIsDone.emit(True, self.image)
-                
-                
             if self.acquisitionMode == 'chechu':
-                
                 self.liveview_stop()
                 self.frameIsDoneChechu.emit(True, self.imageF_copy, self.imageB_copy)
-                
             self.update_device_param()  
-   
+
     @pyqtSlot(int, bool)
     def control_shutters(self, num, val):
-        
+
         if val is True:
-                        
             tools.toggle_shutter(self.adw, num, True)
             print(datetime.now(), '[scan] Shutter ' + str(num) + ' opened')
-            
         if val is False:
-                        
             tools.toggle_shutter(self.adw, num, False)
             print(datetime.now(), '[scan] Shutter ' + str(num) + ' closed')
-                       
+
     @pyqtSlot(int, bool)
     def shutter_handler(self, num, on):
         self.shuttermodeSignal.emit(num, on)
-        
+
     @pyqtSlot(bool)
     def toggle_flipper(self, val):
-        
-        if val is True:
-            
-            self.flipper_state = True
-            
-            self.adw.Set_Par(55, 1)
-            self.adw.Start_Process(5)
-            
-            print('[scan] Flipper down')
-            
-        if val is False:
-            
-            self.flipper_state = False
-            
-            self.adw.Set_Par(55, 1)
-            self.adw.Start_Process(5)
 
+        if val is True:
+            self.flipper_state = True
+            self.adw.Set_Par(55, 1)
+            self.adw.Start_Process(5)
+            print('[scan] Flipper down')
+        if val is False:
+            self.flipper_state = False
+            self.adw.Set_Par(55, 1)
+            self.adw.Start_Process(5)
             print('[scan] Flipper up')
-    
+
     @pyqtSlot(bool)        
     def toggle_FBav_scan(self, val):
-        
+
         if val is True:
-            
             self.FBaverage_scan = True
-        
         if val is False:
-            
             self.FBaverage_scan = False
-        
+
     def emit_ROI_center(self):
-        
+
         self.ROIcenterSignal.emit(self.ROIcenter)
-        
         print('[scan] ROI center emitted')
-        
+
     def trace_measurement(self):
-      
+
         n = 100
         pxtime = 1000
         trace_data = self.trace_acquisition(Npoints=n, pixeltime=pxtime)
-        
+
         time = np.arange(n)
-        
         plt.style.use('dark_background')
         plt.figure()
         plt.plot(time, trace_data)
         plt.xlabel('Time (ms)')
         plt.ylabel('Count rate (kHz)')
-        
+
     def trace_acquisition(self, Npoints, pixeltime):
-      
         """ 
         Method to acquire a trace of photon counts at the current position.
-        
+
         Npoints = number of points to be acquired (max = 1024)
         pixeltime = time per point (in μs)
-        
-        
         """
-        
         # pixeltime in μs
-      
         self.adw.Set_FPar(65, tools.timeToADwin(pixeltime))
         self.adw.Set_Par(60, Npoints+1)
-
         self.adw.Start_Process(6)
-        
+
         trace_time = Npoints * (pixeltime/1000)  # target linetime in ms
         wait_time = trace_time * 1.05 # TO DO: optimize this, it should work with 1.00, or maybe even less?
                                      # it should even work without the time.sleep()
-        
-        time.sleep(wait_time/1000) # in s
+        time.sleep(wait_time/1000)  # in s
 
         trace_data = self.adw.GetData_Long(6, 0, Npoints+1)
-        
-        trace_data = trace_data[1:]# TO DO: fix the high count error on first element
+
+        trace_data = trace_data[1:]  # TO DO: fix the high count error on first element
 
         return trace_data
 
-    
     def enableDiodelaser(self, enable):
-        
+
         diodelasID = self.diodelas.idn()
         
         if enable:
@@ -2071,20 +1866,20 @@ class Backend(QtCore.QObject):
             print(datetime.now(), '[scan] Power of diodelaser set to', str(value), 'mW')
         
     def plot_scan(self):
-        
+
         # save scan plot (x vs t)
         plt.figure()
         plt.title('Scan plot x vs t')
         plt.plot(self.data_t_adwin[0:-1], self.data_x_adwin, 'go')
         plt.xlabel('t (ADwin time)')
         plt.ylabel('V (DAC units)')
-        
+
         c0 = self.NofAuxPixels
         c1 = self.NofPixels
-        
+
         plt.plot(self.data_t_adwin[c0], self.data_x_adwin[c0], 'r*')
         plt.plot(self.data_t_adwin[c0+c1-1], self.data_x_adwin[c0+c1-1], 'r*')
-                
+
         plt.plot(self.data_t_adwin[3*c0+c1], self.data_x_adwin[3*c0+c1], 'r*')
         plt.plot(self.data_t_adwin[3*c0+2*c1-1], self.data_x_adwin[3*c0+2*c1-1], 'r*')
 
@@ -2095,7 +1890,7 @@ class Backend(QtCore.QObject):
                     transparent=False, bbox_inches=None, pad_inches=0.1,
                     frameon=None)
 
-                      
+
     def make_connection(self, frontend):
         
         frontend.liveviewSignal.connect(self.liveview)
@@ -2130,25 +1925,23 @@ class Backend(QtCore.QObject):
         frontend.zDownButton.pressed.connect(lambda: self.relative_move('z', 'down'))
           
     def stop(self):
-        
+
         self.shuttermodeSignal.emit(8, False)
         if self.flipper_state is True:
             self.toggle_flipper(False)
         self.liveview_stop()
-        
+
         if self.laserstate:
             self.enableDiodelaser(False)
         self.diodelas.closeLaserPort()
         print(datetime.now(), '[scan] Serial port of diode laser closed')
-        
-        # Go back to 0 position
 
+        # Go back to 0 position
         x_0 = 0
         y_0 = 0
         z_0 = 0
-
         self.moveTo(x_0, y_0, z_0)
-        
+
 
 if __name__ == '__main__':
 
