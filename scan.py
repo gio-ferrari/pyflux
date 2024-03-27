@@ -1831,11 +1831,16 @@ class Backend(QtCore.QObject):
         self.viewtimer.start(self.viewtimer_time)
 
     def liveview_stop(self):
-
+        """Finish liveview scan."""
         self.viewtimer.stop()
+        time.sleep(.5)  # Not sure if neccesary, but let's wait
+        self.moveTo(self.x_i + self.scanRange/2,
+                    self.y_i + self.scanRange/2,
+                    self.z_i
+                    )
 
     def update_view(self):
-             
+
         if self.i < self.NofPixels:
 
             if self.scantype == 'xy':
