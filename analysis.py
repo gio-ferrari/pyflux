@@ -54,6 +54,8 @@ from scipy import optimize as opt
 from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 from scipy import ndimage as ndi
+# import `zoom` from the `scipy.ndimage` namespace; the `scipy.ndimage.interpolation` namespace is deprecated and will be removed in SciPy 2.0.0
+# import `shift` from the `scipy.ndimage` namespace; the `scipy.ndimage.interpolation` namespace is deprecated and will be removed in SciPy 2.0.0.
 import matplotlib.pyplot as plt
 
 import pyqtgraph as pg
@@ -110,11 +112,11 @@ class Frontend(QtWidgets.QMainWindow):
         self.tracePlot = None
         self.tcspcMode = self.ui.radioButton_NP.text()
         self.x0 = np.zeros(self.k)
-        self.y0 = self.x0
+        self.y0 = np.zeros(self.k)
         self.crop_window = None
-        
+
         self.ui.buttonGroup_tcspcmode.buttonClicked['QAbstractButton *'].connect(self.check_tcspcmode)
-        
+
     def emit_param(self):
         params = dict()
 
@@ -131,18 +133,17 @@ class Frontend(QtWidgets.QMainWindow):
         params['minontime'] = float(self.ui.minONlimit_lineEdit.text())
         params['minphotons'] = float(self.ui.minNperON_lineEdit.text())
         params['crop'] = self.crop_window
-                
+
         self.paramSignal.emit(params)
 
     @pyqtSlot(dict)
     def get_backend_param(self, params):
-        
+
         self.PX = params['pxSize']
         self.ui.threshold_lineEdit.setText(str(params['threshold']))
-        
         self.tcspc_binning = params['binwidth']
         self.ui.binWidthlineEdit.setText(str(self.tcspc_binning))
-    
+
     def select_exppsf(self):
         try:
             root = Tk()
@@ -152,16 +153,16 @@ class Frontend(QtWidgets.QMainWindow):
                                                       filetypes = [('tiff files','.tiff')])
             if root.filenamePSF != '':
                 self.ui.psfFileEditBox.setText(root.filenamePSF)
-                
+
         except OSError:
             pass
-        
+
         if root.filenamePSF == '':
             return
         im = np.array(iio.mimread(root.filenamePSF))
         #transpose image and reverse data in y to display as in scan.py
         for i in range(im.shape[0]):
-            im[i] = im[i].T[:,::-1] 
+            im[i] = im[i].T[:, ::-1] 
 
         self.img_array = im
 
@@ -172,8 +173,8 @@ class Frontend(QtWidgets.QMainWindow):
         self.ui.psfScrollbar.setSliderPosition(0)
 
         self.show_psf(0)
-        
-        
+
+
     def show_psf(self, image_number):
                     
         imageWidget = pg.GraphicsLayoutWidget()
@@ -212,7 +213,7 @@ class Frontend(QtWidgets.QMainWindow):
                                          size=10, pen=pg.mkPen(None), 
                                          brush=pg.mkBrush(donutmarker[i]))
             self.vb.addItem(donut_i)
-            
+
         self.empty_layout(self.ui.psfLayout)        
         self.ui.psfLayout.addWidget(imageWidget)
         
@@ -255,21 +256,20 @@ class Frontend(QtWidgets.QMainWindow):
         self.crop_window = np.array([int(roipos[0]), int(roipos[0]) + cropsize, 
                                      int(roipos[1]), int(roipos[1]) + cropsize])
 
-        
         self.emit_param()
         print(datetime.now(), '[analysis] PSF fitting started')
         self.fitPSFSignal.emit(self.img_array, self.x0, self.y0)
 
     @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
     def plot_psffit(self, fittedpsf, x0, y0):
-        self.x0 = x0
-        self.y0 = y0
+        self.x0[:] = x0[:]
+        self.y0[:] = y0[:]
         print(datetime.now(), '[analysis] Fitting done and PSF received')
 
         self.vb.removeItem(self.roi)
         self.roi.hide()
         self.ui.radioButton_psffit.setChecked(True)
-        
+
         self.ui.psfScrollbar.setMaximum(fittedpsf.shape[0]-1)
         self.ui.psfScrollbar.setSliderPosition(0)
 
@@ -595,7 +595,8 @@ class Backend(QtCore.QObject):
             coord = np.loadtxt(drift_file, unpack=True)
         except Exception as e:
             print("Excepcion abriendo archivos para fitear:", e)
-        
+            return
+
         # total number of frames
         frames = np.min(self.psfexp.shape)
         
@@ -623,53 +624,55 @@ class Backend(QtCore.QObject):
         psfT = np.zeros((frames//fxpsf, sizepsf, sizepsf))
         for i in np.arange(self.k):
             psfT[i, :, :] = np.sum(psf[fi[i]:fi[i+1], :, :], axis = 0)
-            
+
         # crop borders to avoid artifacts
         #selected ROI windwow from GUI has pixel size pxexp compared to 
         #interpolated PSF with 1 nm px size
         for i in range(4):
             self.crop_window[i] = int(self.crop_window[i] * self.pxexp)  
-            
+
         #remember that there will be a slight shift between cropped PSF and ROI
         #as we correct for the drift when interpolating
         print('[analysis] Interpolated PSF size, crop boundaries: ', psfT[0].shape, self.crop_window)
         psfTc = psfT[:, self.crop_window[0]:self.crop_window[1], self.crop_window[2]:self.crop_window[3]]
-        
+
         # spatial grid
         self.size = np.size(psfTc, axis = 1)
-      
+
         x = np.arange(0, self.size, self.PX)
         y = self.size - np.arange(0, self.size, self.PX)
         x, y = np.meshgrid(x, y)
-        
+
         # fit PSFs  with poly_func and find central coordinates (x0, y0)
         self.PSF = np.zeros((self.k, self.size, self.size))
         self.x0 = np.zeros(self.k)
         self.y0 = np.zeros(self.k)
-        self.index = np.zeros((self.k,2))
-        self.aopt = np.zeros((self.k,27))
-            
+        self.index = np.zeros((self.k, 2))
+        self.aopt = np.zeros((self.k, 27))
+
         print('[analysis] Fitting loop started')
         for i in np.arange(self.k): 
             # initial values for fit parameters x0,y0 and c00
-            ind1 = np.unravel_index(np.argmin(psfTc[i, :, :], 
-                axis=None), psfTc[i, :, :].shape)
+            ind1 = np.unravel_index(np.argmin(psfTc[i, :, :], axis=None),
+                                    psfTc[i, :, :].shape)
             x0i = x[ind1]
             y0i = y[ind1]
-            c00i = np.min(psfTc[i, :, :])     
+            c00i = np.min(psfTc[i, :, :])
             p0 = [x0i, y0i, c00i, 0 ,1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 
                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             print('fit started')
             self.aopt[i,:], cov = opt.curve_fit(self.poly_func, (x,y), psfTc[i, :, :].ravel(), p0)   
-            q = self.poly_func((x,y), *self.aopt[i,:])   
+            q = self.poly_func((x,y), *self.aopt[i,:])
             self.PSF[i, :, :] = np.reshape(q, (self.size, self.size))
             # find min value for each fitted function (EBP centers)
-            ind = np.unravel_index(np.argmin(self.PSF[i, :, :], 
+            ind = np.unravel_index(np.argmin(self.PSF[i, :, :],
                 axis=None), self.PSF[i, :, :].shape)
+            # use FITTED center as EBP center
+            # ind = self.aopt[i, 0:2]  # [::-1]
             self.x0[i] = ind[0]
             self.y0[i] = ind[1]
             print(datetime.now(), '[analysis]', str(i+1), '/', str(self.k), ' donuts fitted')
-       
+
 #        #use code for swapping PSF order
 #        psfTc[0,:,:] = self.PSF[0, :, :]
 #        self.PSF[0, :, :] = self.PSF[1, :, :]
@@ -677,7 +680,7 @@ class Backend(QtCore.QObject):
 #        psfTc[0,:,:] = self.PSF[2, :, :]
 #        self.PSF[2, :, :] = self.PSF[3, :, :]
 #        self.PSF[3, :, :] = psfTc[0,:,:]
-        
+
         self.emit_param()
         self.sendPsffitSignal.emit(self.PSF, self.x0, self.y0)
 
@@ -686,12 +689,12 @@ class Backend(QtCore.QObject):
     def open_tcspc(self):
         """   
         Open experimental TCSPC data
-    
+
         Input
         ----------
-    
+
         datadir : directory where MINFLUX data are saved
-        folder : folder with TCSPC data files    
+        folder : folder with TCSPC data files
         filename: name of file containing TSCPC data  
         k : number of excitation donut positions
         
@@ -988,22 +991,19 @@ class Backend(QtCore.QObject):
 
         #### PLOT SECTION#####
         if saveplot:
-                    
             fig, ax = plt.subplots(1, 1)  
             ax.set_title('Np Au, <N> = ' + str(int(np.round(np.mean(self.N), decimals = 0))) , fontsize=16) 
             ax.set_xlabel('x [nm]')
             ax.set_ylabel('y [nm]')            
             for i in np.arange(self.k):
                 ax.plot(self.x0[i], self.y0[i], marker='o', markersize = 10, color=np.array(donutmarker[i])/255)
-                
             for i in np.arange(self.pos.shape[0]):
                 ax.plot(self.pos[i,0], self.pos[i,1], marker='*', markersize = 5, color = 'k')
-           
             ax.set_aspect('equal')
             fig.show()
 
             plt.savefig(plot_filename, format='pdf', dpi=1000)
-        
+
         ###  PARAMETER FILE####
         
         sigmax = np.round(np.std(self.pos[:, 0]), 1)
