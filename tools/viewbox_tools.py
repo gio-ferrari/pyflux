@@ -250,7 +250,7 @@ class ROI(pg.ROI):
                           self.pos()[1])
 #        self.label.setPos(self.pos()[0] + self.size()[0],
 #                          self.pos()[1] + self.size()[1])
-        size = np.round(self.size()).astype(np.int)
+        size = np.round(self.size()).astype(np.int64)
         #TODO: change to show ROI size in um, also in updatetext()
         self.label.setText('{} x {} [px]'.format(int(size[0]), int(size[0])))
 
@@ -288,12 +288,12 @@ class ROI2(pg.ROI):
         
         self.label.setPos(self.pos()[0] + self.size()[0],
                           self.pos()[1] + self.size()[1])
-        size = np.round(self.size()).astype(np.int)
+        size = np.round(self.size()).astype(np.int64)
         self.label.setText('{} px x {} px'.format(int(size[0]), int(size[0])))
         
         self.number.setPos(self.pos()[0] - 0.0*self.size()[0],
                           self.pos()[1] + self.size()[1])
-        size = np.round(self.size()).astype(np.int)
+        size = np.round(self.size()).astype(np.int64)
         self.number.setText('{}'.format(self.id))
 
     def hide(self, *args, **kwargs):
