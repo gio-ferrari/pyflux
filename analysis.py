@@ -42,8 +42,6 @@ examples.run()
 import os
 import copy
 
-os.chdir(r'C:\Users\Lars\Documents\Studium\Argentina\research\minflux\code\pyflux')
-
 import sys
 import time
 import ctypes
@@ -59,8 +57,9 @@ from scipy import ndimage as ndi
 import matplotlib.pyplot as plt
 
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui
+from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
+# from PyQt5 import QtWidgets
 from pyqtgraph.Point import Point
 
 import tools.viewbox_tools as viewbox_tools
@@ -76,10 +75,17 @@ donutmarker = [[29, 112, 183], [128, 128, 128], [255, 237, 0], [243, 170, 80]]
 # see https://stackoverflow.com/questions/1551605
 # /how-to-set-applications-taskbar-icon-in-windows-7/1552105#1552105
 # to understand why you need the preceeding two lines
-myappid = 'mycompany.myproduct.subproduct.version' # arbitrary string
-ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+if os.name == 'nt':
+    myappid = 'mycompany.myproduct.subproduct.version' # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
-class Frontend(QtGui.QMainWindow):
+try:
+    os.chdir(r'C:\Users\Lars\Documents\Studium\Argentina\research\minflux\code\pyflux')
+except FileNotFoundError:
+    pass
+
+
+class Frontend(QtWidgets.QMainWindow):
     
     paramSignal = pyqtSignal(dict)
     fitPSFSignal = pyqtSignal(np.ndarray, np.ndarray, np.ndarray)
@@ -97,6 +103,7 @@ class Frontend(QtGui.QMainWindow):
         self.initialDir = r'Desktop'
         self.img_array = np.zeros((4, 100, 100))
         self.k = int(self.ui.spinBox_donuts.text())
+        self.roi = None
         self.regionNum = 0
         self.region = []
         self.ontimes = []
@@ -151,21 +158,19 @@ class Frontend(QtGui.QMainWindow):
         
         if root.filenamePSF == '':
             return
-        
         im = np.array(iio.mimread(root.filenamePSF))
-            
         #transpose image and reverse data in y to display as in scan.py
         for i in range(im.shape[0]):
             im[i] = im[i].T[:,::-1] 
-        
+
         self.img_array = im
-       
+
         self.emit_param()
-        
+
         self.ui.psfScrollbar.setEnabled(True)
         self.ui.psfScrollbar.setMaximum(self.img_array.shape[0]-1)
         self.ui.psfScrollbar.setSliderPosition(0)
-        
+
         self.show_psf(0)
         
         
@@ -193,8 +198,9 @@ class Frontend(QtGui.QMainWindow):
         self.vb.setAspectLocked(True)
 
         hist = pg.HistogramLUTItem(image=img)   #set up histogram for the liveview image
-        lut = viewbox_tools.generatePgColormap(cmaps.inferno)
-        hist.gradient.setColorMap(lut)
+        hist.gradient.loadPreset('viridis')
+        # lut = viewbox_tools.generatePgColormap(cmaps.inferno)
+        # hist.gradient.setColorMap(lut)
 #        hist.vb.setLimits(yMin=0, yMax=10000) #TODO: check maximum value
 #        for tick in hist.gradient.ticks:
 #            tick.hide()
@@ -235,7 +241,14 @@ class Frontend(QtGui.QMainWindow):
     def fit_exppsf(self):
         #TODO: room for reading analysis parameter
         self.k = int(self.ui.spinBox_donuts.text())
-        
+        if self.roi is None:
+            mb = QtWidgets.QMessageBox()
+            mb.setIcon(QtWidgets.QMessageBox.Information)
+            mb.setText("Debe seleccionar un ROI primero")
+            mb.setWindowTitle("Atencion")
+            mb.setStandardButtons(QtWidgets.QMessageBox.Ok)
+            mb.exec()
+            return
         roipos = self.roi.pos()
         #to ensure that the cropped image is quadratic we only use one roi length
         cropsize = int(self.roi.size()[0])
@@ -308,10 +321,10 @@ class Frontend(QtGui.QMainWindow):
         print(datetime.now(), '[analysis] TCSPC data received and plotted')
     
     @pyqtSlot(bool)
-    @pyqtSlot(QtGui.QAbstractButton)    
+    @pyqtSlot(QtWidgets.QAbstractButton)    
     def check_tcspcmode(self, id_or_state):
         
-        if isinstance(id_or_state, QtGui.QAbstractButton):
+        if isinstance(id_or_state, QtWidgets.QAbstractButton):
             self.tcspcMode = id_or_state.text()
             if not self.tcspcMode == 'Origami (manual)':
                 self.ui.pushButton_addWindow.setEnabled(False)
@@ -443,7 +456,7 @@ class Frontend(QtGui.QMainWindow):
     def closeEvent(self, event, *args, **kwargs):
 
         print(datetime.now(), '[analysis] Analysis module closed')        
-        super().closeEvent(*args, **kwargs)
+        super().closeEvent(event, *args, **kwargs)
 #        popuptext = 'Do you really want quit?'
 #        qPopup = viewbox_tools.popupWindow(self, popuptext)
 #        
@@ -568,18 +581,20 @@ class Backend(QtCore.QObject):
         root = os.path.splitext(self.psffilename)[0]
         drift_file = root + '_xydata.txt'
         config_file = root + '.txt'
+        try:    
+            # open any file with metadata from PSF images 
+            config = configparser.ConfigParser()
+            # config.sections()
+            config.read(config_file, encoding='ISO-8859-1')
+            
+            pxex = config['Scanning parameters']['pixel size (µm)']
+            self.pxexp = float(pxex) * 1000.0 # convert to nm
+            print('[analysis] psf image pixel size [nm]:', self.pxexp)
         
-        # open any file with metadata from PSF images 
-        config = configparser.ConfigParser()
-        config.sections()
-        config.read(config_file, encoding='ISO-8859-1')
-        
-        pxex = config['Scanning parameters']['pixel size (µm)']
-        self.pxexp = float(pxex) * 1000.0 # convert to nm
-        print('[analysis] psf image pixel size [nm]:', self.pxexp)
-    
-        # open txt file with xy drift data
-        coord = np.loadtxt(drift_file, unpack=True)
+            # open txt file with xy drift data
+            coord = np.loadtxt(drift_file, unpack=True)
+        except Exception as e:
+            print("Excepcion abriendo archivos para fitear:", e)
         
         # total number of frames
         frames = np.min(self.psfexp.shape)
@@ -1252,10 +1267,10 @@ class Backend(QtCore.QObject):
 
 if __name__ == '__main__':
     
-    if not QtGui.QApplication.instance():
-        app = QtGui.QApplication([])
+    if not QtWidgets.QApplication.instance():
+        app = QtWidgets.QApplication([])
     else:
-        app = QtGui.QApplication.instance()
+        app = QtWidgets.QApplication.instance()
 
     app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
     

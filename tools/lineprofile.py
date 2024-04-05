@@ -9,7 +9,7 @@ from pyqtgraph.Qt import QtGui
 import pyqtgraph as pg
 from PyQt5 import QtWidgets
 
-class linePlotWidget(QtGui.QWidget):
+class linePlotWidget(QtWidgets.QWidget):
         
     def __init__(self, *args, **kwargs):
         

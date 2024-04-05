@@ -11,8 +11,8 @@ import os
 from datetime import datetime
 import matplotlib.pyplot as plt
 from scipy.stats import norm, chi2
-import win32com.client
-
+if os.name == 'nt':
+    import win32com.client
 
 def convert(x, key):
     
