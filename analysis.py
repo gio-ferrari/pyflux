@@ -278,28 +278,27 @@ class Frontend(QtWidgets.QMainWindow):
         self.img_array = fittedpsf
         self.show_psf(0)
 
-        
     @pyqtSlot(int)
     def update_image(self, image_number):
         self.show_psf(image_number)
-        
+
     @pyqtSlot(np.ndarray, np.ndarray)
     def plot_tcspc(self, abs_time, rel_time):
         if not self.tracePlot == None:
             for reg in self.region:
                 self.tracePlot.removeItem(reg)
-        
+
         dataWidget = pg.GraphicsLayoutWidget()
         dataWidget.clear()
-        
+
         histPlot = dataWidget.addPlot(row=1, col=0, title="Relative Time Histogram")
         histPlot.setLabels(bottom=('ns'),
                                 left=('counts'))
-        
+
         self.tracePlot = dataWidget.addPlot(row=2, col=0, title="Time Trace")
         self.tracePlot.setLabels(bottom=('s'),
-                                left=('kHz'))
-        
+                                 left=('kHz'))
+
         nbins = int((np.max(abs_time)/self.tcspc_binning))
         counts, bin_edges = np.histogram(rel_time, bins=nbins)
         x = np.ediff1d(bin_edges) + bin_edges[:-1]
@@ -307,25 +306,25 @@ class Frontend(QtWidgets.QMainWindow):
 
         counts, bin_edges = np.histogram(abs_time, bins=nbins)
         x = np.ediff1d(bin_edges) + bin_edges[:-1]
-        #display in binned counts in kHz
+        # display in binned counts in kHz
         freq = counts / (self.tcspc_binning * 1000)
         self.tracePlot.plot(x, freq)
-            
+
         self.empty_layout(self.ui.tcspcLayout)
         self.ui.tcspcLayout.addWidget(dataWidget)
-        
-        self.regionNum = 0 
+
+        self.regionNum = 0
         self.region_selection()
         self.region[0].setMovable(False)
         self.ui.checkBox_TraceSelection.setChecked(False)
         self.ui.radioButton_NP.setChecked(True)
 
         print(datetime.now(), '[analysis] TCSPC data received and plotted')
-    
+
     @pyqtSlot(bool)
     @pyqtSlot(QtWidgets.QAbstractButton)    
     def check_tcspcmode(self, id_or_state):
-        
+
         if isinstance(id_or_state, QtWidgets.QAbstractButton):
             self.tcspcMode = id_or_state.text()
             if not self.tcspcMode == 'Origami (manual)':
@@ -349,40 +348,39 @@ class Frontend(QtWidgets.QMainWindow):
                     self.ui.pushButton_addWindow.setEnabled(True)
             else:
                 self.ui.pushButton_addWindow.setEnabled(False)
-                
+
     def region_selection(self):
         self.region.append(pg.LinearRegionItem())
         self.region[self.regionNum].setZValue(10)
         self.tracePlot.addItem(self.region[self.regionNum], ignoreBounds=True)
         self.region[self.regionNum].setRegion([0, 0.5])
-        
+
         self.regionNum += 1
-                
+
     def read_ontimes(self):
         for i in np.arange(self.regionNum):
-            self.ontimes.append(self.region[i].getRegion()) 
-            
-        #TODO: write logfile containing selected trace regions and binning information
-            
+            self.ontimes.append(self.region[i].getRegion())
+    #TODO: write logfile containing selected trace regions and binning information
+
     def select_tcspc(self):
         try:
             root = Tk()
             root.withdraw()
-            root.filenameTCSPC = filedialog.askopenfilename(initialdir=self.initialDir,
-                                                      title = 'Select TCSPC file',
-                                                      filetypes = [('txt files','.txt')])
+            root.filenameTCSPC = filedialog.askopenfilename(
+                initialdir=self.initialDir, title='Select TCSPC file',
+                filetypes=[('txt files', '.txt')])
             if root.filenameTCSPC != '':
                 self.ui.tcspcEditBox.setText(root.filenameTCSPC)
-                
+
         except OSError:
-            pass 
+            pass
 
     @pyqtSlot()
     def load_tcspc(self):
 
         self.emit_param()
         print(datetime.now(), '[analysis] Loading TCSPC data')
-        
+
         self.loadTCSPCSignal.emit()
 
     @pyqtSlot()
