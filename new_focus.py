@@ -399,8 +399,9 @@ class Frontend(QtGui.QFrame):
         self.vb.addItem(self.img)
 
         self.hist = pg.HistogramLUTItem(image=self.img)   # set up histogram for the liveview image
-        lut = viewbox_tools.generatePgColormap(cmaps.inferno)
-        self.hist.gradient.setColorMap(lut)
+        #lut = viewbox_tools.generatePgColormap(cmaps.inferno)
+        #self.hist.gradient.setColorMap(lut)
+        self.hist.gradient.loadPreset('plasma')
         self.hist.vb.setLimits(yMin=0, yMax=10000)
 
         for tick in self.hist.gradient.ticks:
