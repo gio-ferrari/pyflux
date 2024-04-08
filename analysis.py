@@ -53,15 +53,15 @@ import imageio as iio
 from scipy import optimize as opt
 from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
-from scipy import ndimage as ndi
-# import `zoom` from the `scipy.ndimage` namespace; the `scipy.ndimage.interpolation` namespace is deprecated and will be removed in SciPy 2.0.0
-# import `shift` from the `scipy.ndimage` namespace; the `scipy.ndimage.interpolation` namespace is deprecated and will be removed in SciPy 2.0.0.
+try:  # interpolation namespcace will be removed in scipy 2
+    import scipy.ndimage.interpolation as ndi
+except ImportError:
+    import scipy.ndimage as ndi
 import matplotlib.pyplot as plt
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
-# from PyQt5 import QtWidgets
+from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from pyqtgraph.Point import Point
 
 import tools.viewbox_tools as viewbox_tools
@@ -156,6 +156,8 @@ class Frontend(QtWidgets.QMainWindow):
 
         except OSError:
             pass
+        except TypeError:
+            print("Typeerror, value is:", root.filenamePSF)
 
         if root.filenamePSF == '':
             return
@@ -615,10 +617,10 @@ class Backend(QtCore.QObject):
         # interpolation to have 1 nm px and realignment with drift data
         psf = np.zeros((frames, sizepsf, sizepsf))        
         for i in np.arange(frames):
-            psfz = ndi.interpolation.zoom(self.psfexp[i,:,:], self.pxexp)
+            psfz = ndi.zoom(self.psfexp[i,:,:], self.pxexp)
             deltax = coord[1, i] - coord[1, 0]
             deltay = coord[2, i] - coord[2, 0]
-            psf[i, :, :] = ndi.interpolation.shift(psfz, [deltax, deltay])
+            psf[i, :, :] = ndi.shift(psfz, [deltax, deltay])
         
         # sum all interpolated and re-centered images for each PSF
         psfT = np.zeros((frames//fxpsf, sizepsf, sizepsf))
@@ -651,6 +653,7 @@ class Backend(QtCore.QObject):
         self.aopt = np.zeros((self.k, 27))
 
         print('[analysis] Fitting loop started')
+        # TODO: Usar threadpool ya que usa numpy
         for i in np.arange(self.k): 
             # initial values for fit parameters x0,y0 and c00
             ind1 = np.unravel_index(np.argmin(psfTc[i, :, :], axis=None),
@@ -708,8 +711,12 @@ class Backend(QtCore.QObject):
         
         """        
         # open txt file with TCSPC data 
-        coord = np.loadtxt(self.tcspcfilename, unpack=True)
-        
+        try:
+            coord = np.loadtxt(self.tcspcfilename, unpack=True)
+        except (FileNotFoundError, ValueError):
+            print("Could not open file:", self.tcspcfilename)
+            return
+            
         #shift if you want to permute the histogramm values by some offset
         shift = 0.0 #4.0
         
