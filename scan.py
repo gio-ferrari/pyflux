@@ -1802,32 +1802,23 @@ class Backend(QtCore.QObject):
     def liveview(self, lvbool, mode):
         
         if lvbool:
-            
             self.acquisitionMode = mode # modes: 'liveview', 'frame'
             self.liveview_start()
-            
         else:
-            
             self.liveview_stop()
 
     def liveview_start(self):
         
 #        self.plot_scan()
-        
+
         if self.scantype == 'xy':
-
             self.moveTo(self.x_i, self.y_i, self.z_i)
-
         if self.scantype == 'xz':
-
             self.moveTo(self.x_i, self.y_i + self.scanRange/2,
                         self.z_i - self.scanRange/2)
-
         if self.scantype == 'yz':
-
             self.moveTo(self.x_i + self.scanRange/2, self.y_i,
                         self.z_i - self.scanRange/2)
-
         self.viewtimer.start(self.viewtimer_time)
 
     def liveview_stop(self):
@@ -1907,33 +1898,21 @@ class Backend(QtCore.QObject):
             self.i = self.i + 1
 
         else:
-
             print(datetime.now(), '[scan] Frame ended')
-
             self.i = 0
             self.y_offset = 0
             self.z_offset = 0
-
             if self.scantype == 'xy':
-
                 self.moveTo(self.x_i, self.y_i, self.z_i)
-                    
             if self.scantype == 'xz':
-
                 self.moveTo(self.x_i, self.y_i + self.scanRange/2,
                             self.z_i - self.scanRange/2)
-
             if self.scantype == 'yz':
-
                 self.moveTo(self.x_i + self.scanRange/2, self.y_i,
                             self.z_i - self.scanRange/2)
-                
             if self.acquisitionMode == 'frame':
-                
                 self.liveview_stop()
                 self.frameIsDone.emit(True, self.image)
-                
-                
             if self.acquisitionMode == 'chechu':
                 
                 self.liveview_stop()
