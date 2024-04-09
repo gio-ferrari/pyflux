@@ -1038,7 +1038,7 @@ class Backend(QtCore.QObject):
         
         # calculate z estimator
         
-        self.currentz = np.sqrt(self.m_center[0]**2 + self.m_center[1]**2) #Chequear si aquí conviene poner signo menos
+        self.currentz = -np.sqrt(self.m_center[0]**2 + self.m_center[1]**2) #Chequear si aquí conviene poner signo menos
         #Nota: self.currentz es self.focusSignal
         
     def gaussian_fit(self,roi_coordinates): #Le estoy agregando un parámetro (roi_coordinates) para que sea como en xyz_tracking
@@ -1270,7 +1270,7 @@ class Backend(QtCore.QObject):
             self.toggle_feedback(False)
         
         if np.abs(xmean) > threshold:
-            dx = - (xmean)/1000 # conversion to µm
+            dx = -(xmean)/1000 # conversion to µm
             #print('TEST','dx: ', dx)
             
             if dx < far_threshold: #TODO: double check this conditions (do they work?)
@@ -1279,7 +1279,7 @@ class Backend(QtCore.QObject):
             
         if np.abs(ymean) > threshold:
                         
-            dy = - (ymean)/1000 # conversion to µm
+            dy = -(ymean)/1000 # conversion to µm
             #print('TEST','dy: ', dy)
             
             if dy < far_threshold:
@@ -1287,7 +1287,7 @@ class Backend(QtCore.QObject):
                 dy = correct_factor * dy
     
         if np.abs(self.z) > z_threshold:
-            dz = (self.z)/1000 #Le saco el signo menos 8/4/24
+            dz = -(self.z)/1000 #Le saco el signo menos 8/4/24
             #print('dz: ', dz)
                 
             if dz < far_threshold:
