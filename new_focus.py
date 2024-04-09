@@ -782,11 +782,11 @@ class Backend(QtCore.QObject):
         
         threshold = 7 # in nm
         far_threshold = 20 # in nm
-        correct_factor = 1
+        correct_factor = 1 #probar con 0.6
         security_thr = 200 # in nm
         correction = 0.1
         
-        # if np.abs(dz) > threshold:
+        # if np.abs(dz) > threshold: #Descomentar esto luego de probar en ofi
             
         #     if np.abs(dz) < far_threshold:
                 
