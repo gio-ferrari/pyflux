@@ -41,7 +41,7 @@ DEBUG1 = True
 VIDEO = False
 #to commit
 PX_SIZE = 33.5 #px size of camera in nm #antes 80.0 para Andor
-PX_Z = 100 # 202 nm/px for z in nm //Thorcam px size 25nm // IDS px size 50nm 
+PX_Z = 50 # 202 nm/px for z in nm //Thorcam px size 25nm // IDS px size 50nm 
 
 def actuatorParameters(adwin, z_f, n_pixels_z=50, pixeltime=1000): #funciones necesarias para calibrate
 
@@ -976,8 +976,8 @@ class Backend(QtCore.QObject):
         
         if val is True:
             #self.reset() #Qué efecto tendría colocar esta función aquí? Esto es según focus.py
-            self.setup_feedback() #Añado esto por focus
-            #self.update() ##Qué efecto tendría colocar esta función aquí? Esto es según focus.py
+            #self.setup_feedback() #Añado esto por focus pero creo que aquí no debería ir porque esta función es track en este script
+            #self.update() #Qué efecto tendría colocar esta función aquí? Esto es según focus.py
             self.feedback_active = True
 
             # set up and start actuator process
@@ -1241,7 +1241,7 @@ class Backend(QtCore.QObject):
             
             if self.initial_focus is True:
                 
-                self.initialz = self.currentz
+                self.initialz = self.currentz #Nota: self.currentz es self.focusSignal (en px) se obtiene en center_of_mass
                 
                 self.initial_focus = False
             
@@ -1292,7 +1292,7 @@ class Backend(QtCore.QObject):
                 
 #                print('dz', dz)
         else:
-            dz = - (self.z)/1000
+            dz = (self.z)/1000 #Le saco el signo menos 8/4/24
 
         if dx > security_thr or dy > security_thr or dz > 2 * security_thr:
             
