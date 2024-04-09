@@ -1266,21 +1266,21 @@ class Backend(QtCore.QObject):
         security_thr = 0.35 # in µm
                 
         if np.abs(xmean) > threshold:
-            dx = - (xmean)/1000 # conversion to µm
             if dx < far_threshold: #TODO: double check this conditions (do they work?)
                 dx = correct_factor * dx #TODO: double check this conditions (do they work?)
+            dx = - (xmean)/1000 # conversion to µm
             #print('TEST','dx: ', dx)
                     
         if np.abs(ymean) > threshold:
-            dy = - (ymean)/1000 # conversion to µm
             if dy < far_threshold:
                 dy = correct_factor * dy
+            dy = - (ymean)/1000 # conversion to µm
             #print('TEST','dy: ', dy)
     
         if np.abs(self.z) > z_threshold:
-            dz = (self.z)/1000 #Le saco el signo menos 8/4/24
             if dz < far_threshold:
                 dz = z_correct_factor * dz
+            dz = -(self.z)/1000 #Le saco el signo menos 8/4/24
             #print('dz: ', dz)
 
         if dx > security_thr or dy > security_thr or dz > 2 * security_thr:
@@ -1466,14 +1466,16 @@ class Backend(QtCore.QObject):
         
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
+        currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX') #Duda con esto! 8/4/2024
         #por qué no debo colocar una linea similar para current z_position
     
         x_f = tools.convert(currentXposition, 'XtoU')
         y_f = tools.convert(currentYposition, 'XtoU')
+        z_f = tools.convert(currentZposition, 'XtoU')
         
         # set-up actuator initial param
     
-        z_f = tools.convert(10, 'XtoU') #no estoy segura de esta linea #Añado para z, focus.py
+        #z_f = tools.convert(10, 'XtoU') #no estoy segura de esta linea #Añado para z, focus.py
         
         self.adw.Set_FPar(40, x_f)
         self.adw.Set_FPar(41, y_f)
