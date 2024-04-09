@@ -57,6 +57,7 @@ try:  # interpolation namespcace will be removed in scipy 2
     import scipy.ndimage.interpolation as ndi
 except ImportError:
     import scipy.ndimage as ndi
+from scipy.ndimage import center_of_mass as _cm
 import matplotlib.pyplot as plt
 
 import pyqtgraph as pg
@@ -159,7 +160,7 @@ class Frontend(QtWidgets.QMainWindow):
         except TypeError:
             print("Typeerror, value is:", root.filenamePSF)
 
-        if root.filenamePSF == '':
+        if root.filenamePSF == '' or isinstance(root.filenamePSF, tuple):
             return
         im = np.array(iio.mimread(root.filenamePSF))
         #transpose image and reverse data in y to display as in scan.py
@@ -670,6 +671,7 @@ class Backend(QtCore.QObject):
                 axis=None), self.PSF[i, :, :].shape)
             # use FITTED center as EBP center
             # ind = self.aopt[i, 0:2]  # [::-1]
+            # ind = _cm(self.PSF[i, :, :])
             self.x0[i] = ind[0]
             self.y0[i] = ind[1]
             print(datetime.now(), '[analysis]', str(i+1), '/', str(self.k), ' donuts fitted')
