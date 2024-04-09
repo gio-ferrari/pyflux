@@ -593,7 +593,7 @@ class Backend(QtCore.QObject):
     ##################NO entiendo esto
         z_f = tools.convert(10, 'XtoU') # TO DO: make this more robust #Cómo es esto de 10um para que convierta a bits
         self.adw.Set_FPar(32, z_f)
-        self.adw.Set_Par(30, 1)
+        self.adw.Set_Par(30, 1) #en teoría (Andi) no estaría usando esto porque en actuator_z, está comentado
         print("z_f in set_actuator_param", z_f, "bits")
         
     def actuator_z(self, z_f):
@@ -608,7 +608,7 @@ class Backend(QtCore.QObject):
         self.adw.Set_FPar(32, z_f) # Index = 32 (to choose process 3), Value = z_f, le asigna a setpointz (en process 3) el valor z_f
         #Luego se asigna setpointz a currentz y ese valor se pasa al borne 6 de la ADwin
         #Luego ese valor currentz se asigna a fpar_72 y es el nuevo valor actual de z
-        self.adw.Set_Par(30, 1)
+        self.adw.Set_Par(30, 1) #en teoría (Andi) no estaría usando esto porque en actuator_z, está comentado
         actual_z = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         print("actual_z: ", actual_z, "um. Espero que este valor sea: ", self.initial_z, "um")
         #Si en esta linea son iguales, listo, sino probar restando dz/1000 en self.target_z
