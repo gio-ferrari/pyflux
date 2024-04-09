@@ -1261,69 +1261,64 @@ class Backend(QtCore.QObject):
         z_threshold = 3
         far_threshold = 12 #ojo con estos parametros chequear focus
         correct_factor = 0.6
+        z_correct_factor = 1
         
         security_thr = 0.35 # in µm
-        
-        if dx > security_thr or dy > security_thr or dz > 2 * security_thr:
-            
-            print(datetime.now(), '[xyz_tracking] Correction movement larger than 200 nm, active correction turned OFF')
-            self.toggle_feedback(False)
-        
+                
         if np.abs(xmean) > threshold:
             dx = - (xmean)/1000 # conversion to µm
-            #print('TEST','dx: ', dx)
-            
             if dx < far_threshold: #TODO: double check this conditions (do they work?)
-                
                 dx = correct_factor * dx #TODO: double check this conditions (do they work?)
-            
+            #print('TEST','dx: ', dx)
+                    
         if np.abs(ymean) > threshold:
-                        
             dy = - (ymean)/1000 # conversion to µm
-            #print('TEST','dy: ', dy)
-            
             if dy < far_threshold:
-                
                 dy = correct_factor * dy
+            #print('TEST','dy: ', dy)
     
         if np.abs(self.z) > z_threshold:
             dz = (self.z)/1000 #Le saco el signo menos 8/4/24
-            #print('dz: ', dz)
-                
             if dz < far_threshold:
-                    
-                dz = correct_factor * dz
+                dz = z_correct_factor * dz
+            #print('dz: ', dz)
+
+        if dx > security_thr or dy > security_thr or dz > 2 * security_thr:
             
-        # compensate for the mismatch between camera/piezo system of reference
+            print(datetime.now(), '[xyz_tracking] Correction movement larger than 200 nm, active correction turned OFF')
+            self.toggle_feedback(False)    
+        
+        else:
+            # compensate for the mismatch between camera/piezo system of reference
             
-        theta = np.radians(-3.7)   # 86.3 (or 3.7) is the angle between camera and piezo (measured)
-        c, s = np.cos(theta), np.sin(theta)
-        R = np.array(((c,-s), (s, c)))
+            # theta = np.radians(-3.7)   # 86.3 (or 3.7) is the angle between camera and piezo (measured)
+            # c, s = np.cos(theta), np.sin(theta)
+            # R = np.array(((c,-s), (s, c)))
             
-        dy, dx = np.dot(R, np.asarray([dx, dy])) #ver si se puede arreglar esto añadiendo dz
+            # dy, dx = np.dot(R, np.asarray([dx, dy])) #ver si se puede arreglar esto añadiendo dz
             
-        # add correction to piezo position
+            # add correction to piezo position
             
-        currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX') #Get_FPar(self, Index): Retorna el valor de una variable global de tipo float.
-        currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
-        currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX') #¿Está bien que sea key='UtoX'? FPar keeps track of z position of the piezo
+            currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX') #Get_FPar(self, Index): Retorna el valor de una variable global de tipo float.
+            currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
+            currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX') #¿Está bien que sea key='UtoX'? FPar keeps track of z position of the piezo
             
-        #print("self.z: ",self.z, " nm.")
-        #print("dz: ",dz, " µm.")
-        targetXposition = currentXposition + dx  
-        targetYposition = currentYposition + dy
-        targetZposition = currentZposition + dz  # in µm
+            #print("self.z: ",self.z, " nm.")
+            #print("dz: ",dz, " µm.")
+            targetXposition = currentXposition + dx  
+            targetYposition = currentYposition + dy
+            targetZposition = currentZposition + dz  # in µm
             
-        if mode == 'continous':
-            #Le mando al actuador las posiciones x,y,z
-            self.actuator_xyz(targetXposition, targetYposition, targetZposition) #aquí debería agregar targetZposition
+            if mode == 'continous':
+                #Le mando al actuador las posiciones x,y,z
+                self.actuator_xyz(targetXposition, targetYposition, targetZposition) #aquí debería agregar targetZposition
                 
-        if mode == 'discrete':
+            if mode == 'discrete':
                 
-#            self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
-            self.target_x = targetXposition
-            self.target_y = targetYposition
-            self.target_z = targetZposition
+                #self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
+                self.target_x = targetXposition
+                self.target_y = targetYposition
+                self.target_z = targetZposition
             
     @pyqtSlot(bool, bool)
     def single_xy_correction(self, feedback_val, initial): 
