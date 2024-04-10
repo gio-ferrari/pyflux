@@ -103,10 +103,12 @@ class DonutScan(QDialog):
                        )
         self._centerplots[donut_number] = sp
 
-    @pyqtSlot()
-    def frame_finished(self):
+    @pyqtSlot(bool, _np.ndarray)
+    def frame_finished(self, unknwn_param: bool, image: _np.ndarray):
         """Procesa cada dona."""
         _lgr.info("Dona %s escaneada.", self._current_donut)
+        self.update_donut_image(self._current_donut, image)
+        self.update_donut_center(self._current_donut)
         self._current_donut += 1
         if self.abort:
             _lgr.warning("Medidas abortadas")
