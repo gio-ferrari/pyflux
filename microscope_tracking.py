@@ -180,20 +180,16 @@ class Backend(QtCore.QObject):
         self.minfluxWorker.tcspcStartSignal.connect(self.tcspcWorker.measure_minflux)
         
         self.minfluxWorker.xyzStartSignal.connect(self.xyzWorker.get_lock_signal)
-        self.minfluxWorker.xyzStartSignal.connect(self.xyzWorker.get_lock_signal)
         
         # TO DO: check if this is compatible with both psf and minflux measurement
-        
         self.minfluxWorker.moveToSignal.connect(self.xyzWorker.get_move_signal)
         
         self.minfluxWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
-        self.minfluxWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
         self.minfluxWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
         
         self.tcspcWorker.tcspcDoneSignal.connect(self.minfluxWorker.get_tcspc_done_signal)
        
         self.minfluxWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
-        self.minfluxWorker.xyzEndSignal.connect(self.xyzWorker.get_end_measurement_signal)
         self.minfluxWorker.xyzEndSignal.connect(self.xyzWorker.get_end_measurement_signal)
         self.minfluxWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
 
@@ -208,9 +204,7 @@ class Backend(QtCore.QObject):
        
         self.psfWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
         self.psfWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
-        self.psfWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
                 
-        self.psfWorker.endSignal.connect(self.xyzWorker.get_end_measurement_signal)
         self.psfWorker.endSignal.connect(self.xyzWorker.get_end_measurement_signal)
         self.psfWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
         
@@ -237,7 +231,7 @@ class Backend(QtCore.QObject):
         self.xyzWorker.focuslockpositionSignal.connect(self.scanWorker.get_focuslockposition) #Signal & Slot connection Checked FC
         #FC NOTE: Both scan & focus emit the same signal focuslockpositionSignal and both have the same function get_focuslockposition (but though they have the same name they do not do the same)
         frontend.closeSignal.connect(self.stop)
-        
+
     def stop(self):
         
         self.scanWorker.stop()
