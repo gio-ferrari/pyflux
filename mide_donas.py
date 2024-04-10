@@ -10,13 +10,14 @@ Created on Mon Apr  8 15:24:27 2024
 import logging as _lgn
 import numpy as _np
 import scipy as _sp
+from find_center import find_center
 from PyQt5.QtWidgets import (QWidget, QPushButton, QApplication, QDialog,
                              QDialogButtonBox, QVBoxLayout, QLabel, QLineEdit)
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 
-
-from scan import Backend as _scan_backend
-_lgn.basicConfig(format='%(levelname)s:%(message)s', level=_lgn.DEBUG)
+_scan_backend = int  # for testing
+# from scan import Backend as _scan_backend
+_lgn.basicConfig(format='%(levelname)s:%(message)s', level=_lgn.INFO)
 _lgr = _lgn.getLogger(__name__)
 
 class DonutScan(QDialog):
@@ -45,7 +46,7 @@ class DonutScan(QDialog):
         self._scan.frameIsDone.connect(self.frame_finished)
         self.abort = False
 
-    @pyqtSlot
+    @pyqtSlot()
     def frame_finished(self):
         """Procesa cada dona."""
         _lgr.info("Dona %s escaneada.", self._current_donut)
@@ -101,53 +102,15 @@ class DonutScan(QDialog):
         ...
 
 
-# def find_radial_center(image: _np.ndarray):
-#     if len(image.shape) != 2:
-#         raise ValueError("Invalid donut shape")
-#     x, y = [_np.arange(_) for _ in image.shape]
-#     xx, yy = _np.meshgrid(x, y)
-#     interp = _sp.interpolate.RegularGridInterpolator((x, y), image,
-#                                                      # bounds_error=False,
-#                                                      fill_value=0.0)
-#     vinterp = _np.vectorize(interp)
-
-#     for xcenter in x[5:-5]:
-#         for ycenter in y[5:-5]:
-#             max_r = min(xcenter, x[-1]-xcenter, ycenter, y[-1]-ycenter)
-#             print("max_r = ", max_r)
-#             # arclen = 2*np.pi*r
-#             angle = np.linspace(0, 2*_np.pi, 360, endpoint=False)
-#             for r in np.linspace()
-#             value = vinterp(xcenter + r * np.sin(angle),
-#                             ycenter + r*np.cos(angle))
-
-
-#     return xx, yy
-
-
-# def analyze_donut(dona: _np.ndarray):
-#     if len(dona.shape) != 2:
-#         raise ValueError("Invalid donut shape")
-#     xc, yc = _sp.ndimage.center_of_mass(dona)
-    
-#     pass
-
-
-
 if __name__ == '__main__':
     import imageio as iio
     import matplotlib.pyplot as plt
     im = _np.array(iio.mimread("/home/azelcer/Devel/datos_test/donasPSF.tiff"))
     for i in range(im.shape[0]):
-        # im[i] = im[i].T[:, ::-1]
-        m = im[i].min()
-        mask = im[i] < 2. * m
-        im[i][mask] = 0
-        plt.figure()
-        plt.contourf(im[i])
-        # Porque el swap de x e y?
-        yc, xc = _sp.ndimage.center_of_mass(im[i])
+        plt.figure(f"f{i}")
+        # plt.contour(im[i])
+        plt.imshow(im[i])
+        yc, xc = find_center(im[i], trim=30)
         plt.scatter(xc, yc)
         print(xc, yc)
     ...
-
