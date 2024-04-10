@@ -43,7 +43,7 @@ def radial_sum(image: _np.ndarray):
 
 
 def find_center(image: _np.ndarray, trim: int = 20) -> tuple:
-    """Find the center of a radially simmetric feature.
+    """Find the center of a radially symmetric feature.
 
     Parameters
     ----------

@@ -14,6 +14,7 @@ from find_center import find_center
 from PyQt5.QtWidgets import (QWidget, QPushButton, QApplication, QDialog,
                              QDialogButtonBox, QVBoxLayout, QLabel, QLineEdit)
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
+import pyqtgraph as pg
 
 _scan_backend = int  # for testing
 # from scan import Backend as _scan_backend
@@ -22,6 +23,9 @@ _lgr = _lgn.getLogger(__name__)
 
 class DonutScan(QDialog):
     # sgn_scan = pyqtSignal(str)
+    _plots: list[pg.PlotItem] = []  # plots de las donas
+    _images: list[_np.ndarray] = [None, ] * 4
+    _centerplots: list = [None, ] * 4
 
     def __init__(self, parent, scanback: _scan_backend, *args, **kwargs):
         _lgr.debug("Iniciando DonutScan")
@@ -43,8 +47,61 @@ class DonutScan(QDialog):
         self.Available = True
         # self._
         # conectar scanback.frameIsDone acá o en el start/stop
-        self._scan.frameIsDone.connect(self.frame_finished)
+        # self._scan.frameIsDone.connect(self.frame_finished)
         self.abort = False
+        self.show()
+        win = pg.GraphicsLayoutWidget(show=True, title="Measured donuts")
+        win.resize(600, 600)
+        win.setMinimumSize(600, 600)
+        
+        # Enable antialiasing for prettier plots
+        # pg.setConfigOptions(antialias=True)
+        for i in range(4):
+            self._plots.append(win.addPlot(title=f"Dona {i+1}"))
+            if i == 1:  # es lo que hay
+                win.nextRow()
+                
+        # p1 = win.addPlot(title="Basic array plotting", y=_np.random.normal(size=100))
+        
+        # p2 = win.addPlot(title="Multiple curves")
+        # p2.plot(_np.random.normal(size=100), pen=(255,0,0), name="Red curve")
+        # p2.plot(_np.random.normal(size=110)+5, pen=(0,255,0), name="Green curve")
+        # p2.plot(_np.random.normal(size=120)+10, pen=(0,0,255), name="Blue curve")
+        
+        # p1
+        self._donuts_window = win
+        im = _np.array(iio.mimread("/home/azelcer/Devel/datos_test/donasPSF.tiff"))
+        for i in range(min(im.shape[0], len(self._plots))):  # demasiado cuidadoso
+            self.update_donut_image(i, im[i])
+            self.update_donut_center(i)
+
+    def update_donut_image(self, donut_number: int, image: _np.ndarray):
+        """Actualiza la imagen de la dona.
+
+        Zero-based indexing
+        """
+        if donut_number > len(self._plots):
+            _lgr.error("Invalid donut number: %s", donut_number)
+        plot = self._plots[donut_number]
+        plot.clear()
+        img = pg.ImageItem(image)
+        plot.addItem(img)
+        self._images[donut_number] = image
+
+    def update_donut_center(self, donut_number: int):
+        """Actualiza el plot del centro."""
+        plot = self._plots[donut_number]
+        xc, yc = find_center(self._images[donut_number], trim=30)
+        if self._centerplots[donut_number] is not None:
+            try:
+                plot.removeItem[self._centerplots[donut_number]]
+            except Exception as e:
+                _lgr.error("Error updating center: %s", e)
+        sp = plot.plot([xc], [yc], pen=(200, 200, 200),
+                       symbolBrush=(255, 0, 0),
+                       symbolPen='w',
+                       )
+        self._centerplots[donut_number] = sp
 
     @pyqtSlot()
     def frame_finished(self):
@@ -105,12 +162,16 @@ class DonutScan(QDialog):
 if __name__ == '__main__':
     import imageio as iio
     import matplotlib.pyplot as plt
-    im = _np.array(iio.mimread("/home/azelcer/Devel/datos_test/donasPSF.tiff"))
-    for i in range(im.shape[0]):
-        plt.figure(f"f{i}")
-        # plt.contour(im[i])
-        plt.imshow(im[i])
-        yc, xc = find_center(im[i], trim=30)
-        plt.scatter(xc, yc)
-        print(xc, yc)
+    import sys
+    # im = _np.array(iio.mimread("/home/azelcer/Devel/datos_test/donasPSF.tiff"))
+    # for i in range(im.shape[0]):
+    #     plt.figure(f"f{i}")
+    #     # plt.contour(im[i])
+    #     plt.imshow(im[i])
+    #     yc, xc = find_center(im[i], trim=30)
+    #     plt.scatter(xc, yc)
+    #     print(xc, yc)
     ...
+    app = QApplication(sys.argv)
+    ex = DonutScan(None, 11)
+    sys.exit(app.exec())
