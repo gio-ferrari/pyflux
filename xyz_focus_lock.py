@@ -1209,9 +1209,10 @@ class Backend(QtCore.QObject):
         dy = 0
         dz = 0 #comparar con update_feedback, entiendo que podría comentar esta linea
 
-        threshold = 3 #antes era 5 con Andor
+        # Thresholds en unidades de self.x, self.y
+        threshold = 3  # antes era 5 con Andor
         z_threshold = 3
-        far_threshold = 12 #ojo con estos parametros chequear focus
+        far_threshold = 12  # ojo con estos parametros chequear focus 
         correct_factor = 0.6
         z_correct_factor = 1
 
@@ -1219,21 +1220,21 @@ class Backend(QtCore.QObject):
 
         # TODO: acá dx, dy y dz no están inicializados ¿No deberian ser xmean?.
         if np.abs(xmean) > threshold:
-            if abs(dx) < far_threshold: #TODO: double check this conditions (do they work?)
-                dx = correct_factor * dx #TODO: double check this conditions (do they work?)
-            dx = - (xmean)/1000  # conversion to µm
+            dx = -xmean / 1000  # conversion to µm
+            if abs(dx) < far_threshold:
+                dx *= correct_factor
             # print('TEST','dx: ', dx)
 
         if np.abs(ymean) > threshold:
+            dy = -ymean / 1000  # conversion to µm
             if abs(dy) < far_threshold:
-                dy = correct_factor * dy
-            dy = - (ymean)/1000  # conversion to µm
+                dy *= correct_factor
             # print('TEST','dy: ', dy)
 
         if np.abs(self.z) > z_threshold:
+            dz = -self.z / 1000
             if abs(dz) < far_threshold:
                 dz = z_correct_factor * dz
-            dz = -(self.z)/1000  # Le saco el signo menos 8/4/24
             # print('dz: ', dz)
 
         if abs(dx) > security_thr or abs(dy) > security_thr or abs(dz) > 2 * security_thr:
