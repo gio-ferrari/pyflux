@@ -1018,133 +1018,100 @@ class Backend(QtCore.QObject):
     def gaussian_fit(self, roi_coordinates): #Le estoy agregando un parámetro (roi_coordinates) para que sea como en xyz_tracking
         """Devuelve el centro del fiteo, en nm respecto al ROI"""
         # set main reference frame
-        
         roi_coordinates = np.array(roi_coordinates, dtype=np.int)
-        
         xmin, xmax, ymin, ymax = roi_coordinates
         xmin_nm, xmax_nm, ymin_nm, ymax_nm = roi_coordinates * PX_SIZE
-        
-        # select the data of the image corresponding to the ROI
 
+        # select the data of the image corresponding to the ROI
         array = self.image[xmin:xmax, ymin:ymax]
-        
         if np.size(array) == 0:
-            
             print('WARNING: array is []')
-        
         # set new reference frame
-        
         xrange_nm = xmax_nm - xmin_nm
         yrange_nm = ymax_nm - ymin_nm
-             
         x_nm = np.arange(0, xrange_nm, PX_SIZE)
         y_nm = np.arange(0, yrange_nm, PX_SIZE)
-        
+
         (Mx_nm, My_nm) = np.meshgrid(x_nm, y_nm)
-        
         # find max 
-        
         argmax = np.unravel_index(np.argmax(array, axis=None), array.shape)
-        
         x_center_id = argmax[0]
         y_center_id = argmax[1]
-        
+
         # define area around maximum
-    
-        xrange = 15 # in px #en el código original era 10, pero lo cambié porque así está en xyz_tracking
-        yrange = 15 # in px
-        
+        # en el código original era 10, pero lo cambié porque así está en xyz_tracking
+        xrange = 15  # in px
+        yrange = 15  # in px
         xmin_id = int(x_center_id-xrange)
         xmax_id = int(x_center_id+xrange)
-        
         ymin_id = int(y_center_id-yrange)
         ymax_id = int(y_center_id+yrange)
-        
+
         array_sub = array[xmin_id:xmax_id, ymin_id:ymax_id]
-                
         xsubsize = 2 * xrange
         ysubsize = 2 * yrange
-        
+
 #        plt.imshow(array_sub, cmap=cmaps.parula, interpolation='None')
-        
         x_sub_nm = np.arange(0, xsubsize) * PX_SIZE
         y_sub_nm = np.arange(0, ysubsize) * PX_SIZE
-
         [Mx_sub, My_sub] = np.meshgrid(x_sub_nm, y_sub_nm)
-        
+
         # make initial guess for parameters
-        
         bkg = np.min(array)
         A = np.max(array) - bkg
-        σ = 200 # nm #antes era 130nm
+        σ = 200  # nm, antes era 130nm
         x0 = x_sub_nm[int(xsubsize/2)]
         y0 = y_sub_nm[int(ysubsize/2)]
-        
-        initial_guess_G = [A, x0, y0, σ, σ, bkg]
-        
-        if np.size(array_sub) == 0:
-            
-            print('WARNING: array_sub is []')
-         
-        poptG, pcovG = opt.curve_fit(PSF.gaussian2D, (Mx_sub, My_sub), 
-                                     array_sub.ravel(), p0=initial_guess_G)
-        
-        perr = np.sqrt(np.diag(pcovG))
-        
-        print('perr', perr)
-        
-        # retrieve results
 
+        initial_guess_G = [A, x0, y0, σ, σ, bkg]
+
+        if np.size(array_sub) == 0:
+            print('WARNING: array_sub is []')
+
+        poptG, pcovG = opt.curve_fit(PSF.gaussian2D, (Mx_sub, My_sub),
+                                     array_sub.ravel(), p0=initial_guess_G)
+        perr = np.sqrt(np.diag(pcovG))
+        print('perr', perr)
+
+        # retrieve results
         poptG = np.around(poptG, 2)
-    
         A, x0, y0, σ_x, σ_y, bkg = poptG
-        
         x = x0 + Mx_nm[xmin_id, ymin_id]
         y = y0 + My_nm[xmin_id, ymin_id]
-        
+
         currentx = x
         currenty = y
-#ALERTA comento esta parte porque creo que hay incompatibilidad entre los nombres self.currentx y currentx y lo mismo para y
-#Ver si en un futuro puedo implementar esto para que tenga en cuenta este caso
+# ALERTA comento esta parte porque creo que hay incompatibilidad entre los nombres self.currentx y currentx y lo mismo para y
+# Ver si en un futuro puedo implementar esto para que tenga en cuenta este caso
 #        # if to avoid (probably) false localizations #notar que esta parte no se usa en xyz_tracking
-#        
 #        maxdist = 200 # in nm
-#        
 #        if self.initial is False:
-#        
 #            if np.abs(x - self.currentx) < maxdist and np.abs(y - self.currenty) < maxdist:
-#        
 #                self.currentx = x
 #                self.currenty = y
-#                
-##                print(datetime.now(), '[xy_tracking] normal')
-#                
+#                print(datetime.now(), '[xy_tracking] normal')
 #            else:
-#                
 #                pass
-#                
 #                print(datetime.now(), '[xy_tracking] max dist exceeded')
-#        
 #        else:
-#            
+#
 #            self.currentx = x
 #            self.currenty = y
-#            
-##            print(datetime.now(), '[xy_tracking] else')
-        
+#
+#            print(datetime.now(), '[xy_tracking] else')
+
         return currentx, currenty
-        
-        print('currentx: ', currentx, ' currenty: ',currenty)
-            
-    def track(self, track_type): #Añado parámetro para trabajar en xy y z
-        """ 
+
+        print('currentx: ', currentx, ' currenty: ', currenty)
+
+    def track(self, track_type):  # Añado parámetro para trabajar en xy y z
+        """Track fiducial marks and update shifts.
+
         Function to track fiducial markers (Au NPs) from the selected ROI.
-        The position of the NPs is calculated through an xy gaussian fit 
+        The position of the NPs is calculated through an xy gaussian fit
         If feedback_active = True it also corrects for drifts in xy
         If save_data_state = True it saves the xy data
-        
         """
-
         # Calculate average intensity in the image to check laser fluctuations
         self.avgInt = np.mean(self.image)
         print('Average intensity', self.avgInt)
@@ -1159,7 +1126,7 @@ class Backend(QtCore.QObject):
                 #     print(datetime.now(), '[xy_tracking] Gaussian fit did not work')
                 #     self.toggle_feedback(False)
                 roi = self.roi_coordinates_list[i]
-                print("roi:",roi, "type roi", type(roi))
+                print("roi:", roi, "type roi", type(roi))
                 self.currentx[i], self.currenty[i] = self.gaussian_fit(roi)
                 print("ejecutado con exito")
 
@@ -1180,17 +1147,16 @@ class Backend(QtCore.QObject):
                 self.time_array[self.j] = self.currentTime
                 self.x_array[self.j, :] = self.x + self.displacement[0]
                 self.y_array[self.j, :] = self.y + self.displacement[1]
-
                 self.j += 1
 
-                if self.j >= (self.buffersize - 5):    # TODO: -5, arbitrary bad fix
-                    
+                # TODO: arreglar esto, que ya estaba arreglado en otro branch
+                # ver 8578baffba04b87ce5b2906368bdf8dafd8dea6c en mi repo (ANDI)
+                if self.j >= (self.buffersize - 5): # TODO: -5, arbitrary bad fix
                     self.export_data()
                     self.reset_data_arrays()
-            #         print(datetime.now(), '[xy_tracking] Data array, longer than buffer size, data_array reset')
-            
-        # z track of the reflected IR beam   
-        ####################### Revisar esto del trackeo en z, no puedo correlacionar con focus.py
+
+        # z track of the reflected IR beam
+        # Revisar esto del trackeo en z, no puedo correlacionar con focus.py
         if track_type == 'z':
             self.center_of_mass()
             if self.initial_focus is True:
@@ -1207,18 +1173,17 @@ class Backend(QtCore.QObject):
 
         dx = 0
         dy = 0
-        dz = 0 #comparar con update_feedback, entiendo que podría comentar esta linea
+        dz = 0 #  comparar con update_feedback, entiendo que podría comentar esta linea
 
         # Thresholds en unidades de self.x, self.y
         threshold = 3  # antes era 5 con Andor
         z_threshold = 3
-        far_threshold = 12  # ojo con estos parametros chequear focus 
+        far_threshold = 12  # ojo con estos parametros chequear focus
         correct_factor = 0.6
         z_correct_factor = 1
 
         security_thr = 0.35  # in µm
 
-        # TODO: acá dx, dy y dz no están inicializados ¿No deberian ser xmean?.
         if np.abs(xmean) > threshold:
             dx = -xmean / 1000  # conversion to µm
             if abs(dx) < far_threshold:
@@ -1234,7 +1199,7 @@ class Backend(QtCore.QObject):
         if np.abs(self.z) > z_threshold:
             dz = -self.z / 1000
             if abs(dz) < far_threshold:
-                dz = z_correct_factor * dz
+                dz *= z_correct_factor
             # print('dz: ', dz)
 
         if abs(dx) > security_thr or abs(dy) > security_thr or abs(dz) > 2 * security_thr:
@@ -1600,7 +1565,6 @@ class Backend(QtCore.QObject):
         self.export_image()
         
         if VIDEO:
-            
             tifffile.imwrite(fname + 'video' + '.tif', np.array(self.video))
 
     @pyqtSlot(bool)
