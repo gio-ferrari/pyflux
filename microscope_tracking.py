@@ -41,7 +41,6 @@ import tools.tools as tools
 π = np.pi
 
 
-
 class Frontend(QtGui.QMainWindow):
     
     closeSignal = pyqtSignal()
@@ -237,6 +236,7 @@ class Backend(QtCore.QObject):
         self.scanWorker.stop()
         self.tcspcWorker.stop()
         self.xyzWorker.stop()
+
 
 if __name__ == '__main__':
 
