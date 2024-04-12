@@ -722,13 +722,13 @@ class Backend(QtCore.QObject):
         self.camON = False
         self.roi_area = np.zeros(4) #Esta línea para qué?
 
-        self.npoints = 1200
-        self.buffersize = 30000
-        
-        self.currentx = 0 #Chequear estos dos atributos
+        self.npoints = 1200  # número de puntos a graficar
+        self.buffersize = 30000  # tamano buffer correcciones xy
+
+        self.currentx = 0  #  Chequear estos dos atributos
         self.currenty = 0
-        
-        #self.reset() #comwnté FC
+
+        self.reset()  # comwnté FC -> descomente AZ
        # self.reset_data_arrays() #comenté FC
         
         self.counter = 0
@@ -908,52 +908,42 @@ class Backend(QtCore.QObject):
     
     @pyqtSlot(bool)
     def toggle_tracking(self, val): #esta función es igual a la de xyz_tracking porque es para xy únicamente
-        
         '''
         Connection: [frontend] trackingBeadsBox.stateChanged
         Description: toggles ON/OFF tracking of fiducial fluorescent beads. 
         Drift correction feedback loop is not automatically started.
-        
         '''
 
-        
         self.startTime = time.time()
-        
         if val is True:
-            
             self.reset()
             self.reset_data_arrays()
-            
+
             self.tracking_value = True
             self.counter = 0
-            
+
             # initialize relevant xy-tracking arrays 
-        
             size = len(self.roi_coordinates_list)
-            
+
             self.currentx = np.zeros(size)
             self.currenty = np.zeros(size)
             self.x = np.zeros(size)  # Deltas respecto a posicion inicial
             self.y = np.zeros(size)
-            
+
             if self.initial is True:
-                
                 self.initialx = np.zeros(size)
                 self.initialy = np.zeros(size)
-                    
+
         if val is False:
-        
             self.tracking_value = False
-            
+
     @pyqtSlot(bool)
     def toggle_feedback(self, val, mode='continous'): #Esta función es adecuada porque tiene en cuenta los procesos de de ADwin para drift xy 
-
-        ''' 
+        '''
         Connection: [frontend] feedbackLoopBox.stateChanged
         Description: toggles ON/OFF feedback for either continous (TCSPC) 
         or discrete (scan imaging) correction
         '''
-        
         if val is True:
             #self.reset() #Qué efecto tendría colocar esta función aquí? Esto es según focus.py
             #self.setup_feedback() #Añado esto por focus pero creo que aquí no debería ir porque esta función es track en este script
@@ -961,37 +951,31 @@ class Backend(QtCore.QObject):
             self.feedback_active = True
 
             # set up and start actuator process
-            
+
             if mode == 'continous':
-            
                 self.set_actuator_param()
-                self.adw.Start_Process(4) #proceso para xy
-                self.adw.Start_Process(3) #proceso para z
+                self.adw.Start_Process(4)  # proceso para xy
+                self.adw.Start_Process(3)  # proceso para z
                 print('process 4 status', self.adw.Process_Status(4))
                 print(datetime.now(), '[focus] Process 4 started')
                 print('process 3 status', self.adw.Process_Status(3))
                 print(datetime.now(), '[focus] Process 3 started')
-            
             if DEBUG:
                 print(datetime.now(), '[xy_tracking] Feedback loop ON')
                 print(datetime.now(), ' [focus] Feedback loop ON')
-            
-        if val is False:
-            
+        elif val is False:
             self.feedback_active = False
-            
             if mode == 'continous':
-
                 self.adw.Stop_Process(4)
                 self.adw.Stop_Process(3)
                 print(datetime.now(), '[xy_tracking] Process 4 stopped')
                 print(datetime.now(), '[focus] Process 3 stopped')
                 self.displacement = np.array([0.0, 0.0])
-
-            
             if DEBUG:
                 print(datetime.now(), '[xy_tracking] Feedback loop OFF')
                 print(datetime.now(), ' [focus] Feedback loop OFF')
+        else:
+            print("Deberías pasar un booleano, no:", val)
 #            
 #        self.updateGUIcheckboxSignal.emit(self.tracking_value, 
 #                                          self.feedback_active, 
@@ -1374,52 +1358,59 @@ class Backend(QtCore.QObject):
         time.sleep(0.200)
         
         self.viewtimer.start(self.xyz_time)
-    
-    def set_actuator_param(self, pixeltime=1000): #configura los parámetros del actuador
 
-        self.adw.Set_FPar(46, tools.timeToADwin(pixeltime)) 
+    def set_actuator_param(self, pixeltime=1000): #configura los parámetros del actuador
+        """Inicializar los parámetros antes de arrancar los scripts."""
+        self.adw.Set_FPar(46, tools.timeToADwin(pixeltime))
         self.adw.Set_FPar(36, tools.timeToADwin(pixeltime)) #Añado para z, focus.py
-        # set-up actuator initial param
-        
+
+        # set-up actuator initial param script
+        # MoveTo usa un script que actualiza estos valores, podemos confiar
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
         currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX') #Duda con esto! 8/4/2024
         #por qué no debo colocar una linea similar para current z_position
-    
+
         x_f = tools.convert(currentXposition, 'XtoU')
         y_f = tools.convert(currentYposition, 'XtoU')
         z_f = tools.convert(currentZposition, 'XtoU')
-        
-        # set-up actuator initial param
-    
-        #z_f = tools.convert(10, 'XtoU') #no estoy segura de esta linea #Añado para z, focus.py
-        
+
+        # set-up actuator initial params
         self.adw.Set_FPar(40, x_f)
         self.adw.Set_FPar(41, y_f)
-        self.adw.Set_FPar(32, z_f) #Añado para z, focus.py
-            
-        self.adw.Set_Par(40, 1) #Set_Par(self, Index, Value): Establece una variable global de tipo long con el valor especificado.
-        self.adw.Set_Par(30, 1) #Añado para z, focus.py
-        
+        self.adw.Set_FPar(32, z_f)  # Añado para z, focus.py
+
+        # Comento porque son cosas viejas (Andi)
+        # self.adw.Set_Par(40, 1) #Set_Par(self, Index, Value): Establece una variable global de tipo long con el valor especificado.
+        # self.adw.Set_Par(30, 1) #Añado para z, focus.py
+
     def actuator_xyz(self, x_f, y_f, z_f):
-        
+        """Setear los parámetros de tracking de la adwin mientras corre.
+
+        Estos parámetros son usados por los procesos:
+            actuator_z.bas:
+                FPar_32 es el setpoint z
+            actuator_xy.bas:
+                FPar_40 es el setpoint x
+                FPar_41 es el setpoint y
+        """
 #        print(datetime.now(), '[xy_tracking] actuator x, y =', x_f, y_f)
-        
+
         x_f = tools.convert(x_f, 'XtoU')
         y_f = tools.convert(y_f, 'XtoU')
-        z_f = tools.convert(z_f, 'XtoU') #Añado para z, focus.py
-        
+        z_f = tools.convert(z_f, 'XtoU')  # Añado para z, focus.py
+
         self.adw.Set_FPar(40, x_f)
         self.adw.Set_FPar(41, y_f)
-        self.adw.Set_FPar(32, z_f) #Añado para z, focus.py
-        
-        self.adw.Set_Par(40, 1)   
-        self.adw.Set_Par(30, 1) #Añado para z, focus.py
-            
+        self.adw.Set_FPar(32, z_f)  # Añado para z, focus.py
+
+        # Estas dos líneas son de los scripts viejos (ver .bas y .bak)
+        # self.adw.Set_Par(40, 1)
+        # self.adw.Set_Par(30, 1) #Añado para z, focus.py
+
     def set_moveTo_param(self, x_f, y_f, z_f, n_pixels_x=128, n_pixels_y=128,
                          n_pixels_z=128, pixeltime=2000):
-        #Esta funcion se repite en xy_tracking y focus
-
+        # Esta funcion se repite en xy_tracking y focus
         x_f = tools.convert(x_f, 'XtoU')
         y_f = tools.convert(y_f, 'XtoU')
         z_f = tools.convert(z_f, 'XtoU')
@@ -1435,137 +1426,94 @@ class Backend(QtCore.QObject):
         self.adw.Set_FPar(26, tools.timeToADwin(pixeltime))
 
     def moveTo(self, x_f, y_f, z_f):
-        #Esta funcion se repite en xy_tracking y focus
-
+        """Moves to specified position."""
+        # Esta funcion se repite en xy_tracking y focus
         self.set_moveTo_param(x_f, y_f, z_f)
         self.adw.Start_Process(2)
-            
+
     def reset(self):
-        
+        """Prepare for new measurement"""
         self.initial = True
         self.initial_focus = True
-        
-        try:
+
+        # buffers de datos xy para graficar
+        try:  # esto es un leftover de cuando no inicializaba la lista
             self.xData = np.zeros((self.npoints, len(self.roi_coordinates_list)))
             self.yData = np.zeros((self.npoints, len(self.roi_coordinates_list)))
-            
-        except:
-            
+        except Exception:
             self.xData = np.zeros(self.npoints)
             self.yData = np.zeros(self.npoints)
-        
+        # buffer para data z para graficar
         self.zData = np.zeros(self.npoints)
         self.avgIntData = np.zeros(self.npoints)
         self.time = np.zeros(self.npoints)
-        self.ptr = 0
+        self.ptr = 0  # Posición en los buffers de graficación
         self.startTime = time.time()
-        #self.j = 0  # iterator on the data array
-        #-----------
-        self.max_dev = 0 # Sale de focus.py se usa en update_stats
+        # -----------
+        self.max_dev = 0  # Sale de focus.py se usa en update_stats
         self.std = 0
         self.n = 1
-        #-----------
-        self.changedData.emit(self.time, self.xData, self.yData, self.zData, 
+        # -----------
+        self.changedData.emit(self.time, self.xData, self.yData, self.zData,
                               self.avgIntData)
-        
+
     def reset_data_arrays(self):
-        
+        """Reset/create buffers holding measured positions vs time."""
         self.time_array = np.zeros(self.buffersize, dtype=np.float16)
-        
-        self.x_array = np.zeros((self.buffersize, 
-                                 len(self.roi_coordinates_list)), 
-                                 dtype=np.float16)
-        
-        self.y_array = np.zeros((self.buffersize, 
-                                 len(self.roi_coordinates_list)), 
-                                 dtype=np.float16)
-        self.z_array = []
-        
+        self.x_array = np.zeros((self.buffersize,
+                                 len(self.roi_coordinates_list)),
+                                dtype=np.float16)
+        self.y_array = np.zeros((self.buffersize,
+                                 len(self.roi_coordinates_list)),
+                                dtype=np.float16)
+        self.z_array = []  # TODO: hacer consistente
         self.j = 0  # iterator on the data array
-        
-        
-    def export_data(self): #Todavía tengo que modificar esta función para guardar data, la dejo tal cual esta por ahora
-        
-        """
-        Exports the x, y and t data into a .txt file
-        """
 
-#        fname = self.filename
-##        filename = tools.getUniqueName(fname)    # TO DO: make compatible with psf measurement and stand alone
-#        filename = fname + '_xydata.txt'
-        
-        fname = self.filename
-        #case distinction to prevent wrong filenaming when starting minflux or psf measurement
-        if fname[0] == '!':
-            filename = fname[1:]
-        else:
-            filename = tools.getUniqueName(fname)
-        filename = filename + '_xydata.txt'
-        
-        size = self.j
-        savedData = np.zeros((3, size))
-
-        savedData[0, :] = self.time_array[0:self.j]
-        savedData[1, :] = self.x_array[0:self.j]
-        savedData[2, :] = self.y_array[0:self.j]
-        
-        np.savetxt(filename, savedData.T,  header='t (s), x (nm), y(nm)') # transpose for easier loading
-        
-        print(datetime.now(), '[xy_tracking] xy data exported to', filename)
-
-    @pyqtSlot(bool)    
+    @pyqtSlot(bool)
     def get_stop_signal(self, stoplive): #Está en xy y en focus. Creo que no está conectado a nada
-        
         """
         Connection: [psf] xyStopSignal
         Description: stops liveview, tracking, feedback if they where running to
         start the psf measurement with discrete xy - z corrections
         """
-                
         self.toggle_feedback(False)
         self.toggle_tracking(False)
-        
+
         self.reset()
         self.reset_data_arrays()
-        
+
         self.save_data_state = True  # TO DO: sync this with GUI checkboxes (Lantz typedfeat?)
-            
+
         if not stoplive:
             self.liveviewSignal.emit(False)
-            
+
     def export_data(self):
-        
-        """
-        Exports the x, y and t data into a .txt file
-        """
-        
+        """Export t and x, y for each Roi data into a .txt file"""
         fname = self.folder + '/xy_data'
-        
-        #case distinction to prevent wrong filenaming when starting minflux or psf measurement
+        # case distinction to prevent wrong filenaming when starting minflux or psf measurement
         if fname[0] == '!':
             filename = fname[1:]
         else:
             filename = tools.getUniqueName(fname)
         filename = filename + '.txt'
-        
+
         size = self.j
         N_NP = len(self.roi_coordinates_list)
-        
+
         savedData = np.zeros((size, 2*N_NP+1))
 
         savedData[:, 0] = self.time_array[0:self.j]
         savedData[:, 1:N_NP+1] = self.x_array[0:self.j, :]
         savedData[:, N_NP+1:2*N_NP+1] = self.y_array[0:self.j, :]
-        
-        np.savetxt(filename, savedData,  header='t (s), x (nm), y(nm)') # transpose for easier loading
-        
+
+        np.savetxt(filename, savedData,  header='t (s), x (nm), y(nm)')
         print(datetime.now(), '[xy_tracking] xy data exported to', filename)
         print('Exported data shape', np.shape(savedData))
-        
+
         self.export_image()
-        
-        if VIDEO:
-            tifffile.imwrite(fname + 'video' + '.tif', np.array(self.video))
+
+        # if VIDEO:
+        #     tifffile.imwrite(fname + 'video' + '.tif', np.array(self.video))
 
     @pyqtSlot(bool)
     def get_save_data_state(self, val): #Dejo esta funcion como está, se repite en xy y en focus.py
