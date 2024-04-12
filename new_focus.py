@@ -7,7 +7,6 @@ Created on Wed Oct  1 13:41:48 2018
 from PIL import Image
 import numpy as np
 import time
-from time import process_time_ns
 
 import scipy.ndimage as ndi
 import matplotlib.pyplot as plt
@@ -777,28 +776,25 @@ class Backend(QtCore.QObject):
         #[dz] = px*(nm/px) - nm =nm
         # print ("Image setpoint: ", self.setPoint, "nm")
         # print("New value in image", self.focusSignal*self.pxSize, "nm")
-        # print("dz: ", dz, "nm")
+        print("dz: ", dz, "nm")
         # print("self.initial_z in piezo: ", self.initial_z, "um")
         
         threshold = 3 # in nm
         far_threshold = 16 # in nm
-        correct_factor = 0.6 #probar con 0.6
+        correct_factor = 0.6 #probar con valores mayores, puede ser que sea muy chico este valor porque en algunos casos veo que demora en corregir
         security_thr = 200 # in nm
         correction = 0.1
         
-        # if np.abs(dz) > threshold: #Descomentar esto luego de probar en ofi
-            
-        #     if np.abs(dz) < far_threshold:
-                
-        #         dz = correct_factor * dz
+        if np.abs(dz) > threshold: #Descomentar esto luego de probar en ofi
+            if np.abs(dz) < far_threshold:
+                dz = correct_factor * dz
     
         if np.abs(dz) > security_thr:
-            
             print(datetime.now(), '[focus] Correction movement larger than 200 nm, active correction turned OFF')
             
         else:
             #Esto es cuanto es el movimiento real de la platina
-            self.target_z = self.initial_z + dz/1000  # conversion to µm #Creo que aquí está corrigiendo bien, le puse el signo menos 
+            self.target_z = self.initial_z - dz/1000  # conversion to µm #Creo que aquí está corrigiendo bien, le puse el signo menos 
             # [self.target_z] = µm + nm/1000 = µm
             #print("self.target_z in piezo: ", self.target_z, "µm.")
                         
@@ -917,9 +913,10 @@ class Backend(QtCore.QObject):
         #print("center of mass: ", self.masscenter)
         
         # calculate z estimator
-        
-        self.focusSignal = np.sqrt(self.masscenter[0]**2 + self.masscenter[1]**2) #OJO aquí, a veces puede ser que vaya el signo menos, pero el original es signo mas
-        #print("FocusSignal in center of mass:", self.focusSignal)       
+        self.focusSignal = self.masscenter[0]
+        #self.focusSignal = np.sqrt(self.masscenter[0]**2 + self.masscenter[1]**2) #OJO aquí, a veces puede ser que vaya el signo menos, pero el original es signo mas
+        #print("coord x: ", self.masscenter[0], "coord y: ", self.masscenter[1])
+        #print("FocusSignal in center of mass:", self.focusSignal)      
         self.currentTime = ptime.time() - self.startTime
         
     @pyqtSlot(bool, bool)
@@ -1226,10 +1223,7 @@ class Backend(QtCore.QObject):
         self.adw.Set_Par(21, n_pixels_x)
         self.adw.Set_Par(22, n_pixels_y)
         self.adw.Set_Par(23, n_pixels_z)
-        t = time.perf_counter_ns()
         self.adw.Set_FPar(23, x_f)
-        elapsed_time = time.perf_counter_ns() - t
-        print("Moving x took: ", t, time.perf_counter_ns(), elapsed_time)
         self.adw.Set_FPar(24, y_f)
         self.adw.Set_FPar(25, z_f)
 
