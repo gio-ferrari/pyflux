@@ -40,7 +40,7 @@ DEBUG = True
 DEBUG1 = True
 VIDEO = False
 #to commit
-PX_SIZE = 33.5 #px size of camera in nm #antes 80.0 para Andor
+PX_SIZE = 33.5 #px size of camera in nm #antes 80.0 para Andor #33.5
 PX_Z = 50 # 202 nm/px for z in nm //Thorcam px size 25nm // IDS px size 50nm 
 
 def actuatorParameters(adwin, z_f, n_pixels_z=50, pixeltime=1000): #funciones necesarias para calibrate
@@ -1030,15 +1030,15 @@ class Backend(QtCore.QObject):
         
         # WARNING: extra rotation added to match the sensitive direction (hardware)
         
-        zimage = np.rot90(zimage, k=3)
+        #zimage = np.rot90(zimage, k=3)
         
         # calculate center of mass
         
         self.m_center = np.array(ndi.measurements.center_of_mass(zimage))
         
         # calculate z estimator
-        
-        self.currentz = -np.sqrt(self.m_center[0]**2 + self.m_center[1]**2) #Chequear si aquí conviene poner signo menos
+        self.currentz = self.m_center[0]
+        #self.currentz = np.sqrt(self.m_center[0]**2 + self.m_center[1]**2) #Chequear si aquí conviene poner signo menos
         #Nota: self.currentz es self.focusSignal
         
     def gaussian_fit(self,roi_coordinates): #Le estoy agregando un parámetro (roi_coordinates) para que sea como en xyz_tracking
@@ -1253,9 +1253,9 @@ class Backend(QtCore.QObject):
         xmean = np.mean(self.x)
         ymean = np.mean(self.y)        
 
-        dx = 0
-        dy = 0
-        dz = 0 #comparar con update_feedback, entiendo que podría comentar esta linea
+        #dx = 0
+        #dy = 0
+        #dz = 0 #comparar con update_feedback, entiendo que podría comentar esta linea
         
         threshold = 3 #antes era 5 con Andor
         z_threshold = 3
@@ -1268,19 +1268,19 @@ class Backend(QtCore.QObject):
         if np.abs(xmean) > threshold:
             if dx < far_threshold: #TODO: double check this conditions (do they work?)
                 dx = correct_factor * dx #TODO: double check this conditions (do they work?)
-            dx = - (xmean)/1000 # conversion to µm
+            dx = (xmean)/1000 # conversion to µm
             #print('TEST','dx: ', dx)
                     
         if np.abs(ymean) > threshold:
             if dy < far_threshold:
                 dy = correct_factor * dy
-            dy = - (ymean)/1000 # conversion to µm
+            dy = (ymean)/1000 # conversion to µm
             #print('TEST','dy: ', dy)
     
         if np.abs(self.z) > z_threshold:
             if dz < far_threshold:
                 dz = z_correct_factor * dz
-            dz = -(self.z)/1000 #Le saco el signo menos 8/4/24
+            dz = (self.z)/1000 #Le saco el signo menos 8/4/24
             #print('dz: ', dz)
 
         if dx > security_thr or dy > security_thr or dz > 2 * security_thr:
@@ -1305,9 +1305,9 @@ class Backend(QtCore.QObject):
             
             #print("self.z: ",self.z, " nm.")
             #print("dz: ",dz, " µm.")
-            targetXposition = currentXposition + dx  
-            targetYposition = currentYposition + dy
-            targetZposition = currentZposition + dz  # in µm
+            targetXposition = currentXposition - dx  
+            targetYposition = currentYposition - dy
+            targetZposition = currentZposition - dz  # in µm
             
             if mode == 'continous':
                 #Le mando al actuador las posiciones x,y,z
@@ -1466,16 +1466,16 @@ class Backend(QtCore.QObject):
         
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
-        currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX') #Duda con esto! 8/4/2024
+        #currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX') #Duda con esto! 8/4/2024
         #por qué no debo colocar una linea similar para current z_position
     
         x_f = tools.convert(currentXposition, 'XtoU')
         y_f = tools.convert(currentYposition, 'XtoU')
-        z_f = tools.convert(currentZposition, 'XtoU')
+        #z_f = tools.convert(currentZposition, 'XtoU')
         
         # set-up actuator initial param
     
-        #z_f = tools.convert(10, 'XtoU') #no estoy segura de esta linea #Añado para z, focus.py
+        z_f = tools.convert(10, 'XtoU') #no estoy segura de esta linea #Añado para z, focus.py
         
         self.adw.Set_FPar(40, x_f)
         self.adw.Set_FPar(41, y_f)
