@@ -583,8 +583,8 @@ class Backend(QtCore.QObject):
         print(datetime.now(), ' [focus] got px size', self.pxSize, ' nm')
         
     def set_actuator_param(self, pixeltime=1000):
-
-        print("Inside set_actuator_param")
+        if DEBUG:
+            print("Inside set_actuator_param")
 
         self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))
         
@@ -593,23 +593,19 @@ class Backend(QtCore.QObject):
         z_f = tools.convert(10, 'XtoU') # TO DO: make this more robust #Cómo es esto de 10um para que convierta a bits
         self.adw.Set_FPar(32, z_f)
         self.adw.Set_Par(30, 1) #en teoría (Andi) no estaría usando esto porque en actuator_z, está comentado
-        print("z_f in set_actuator_param", z_f, "bits")
+        #print("z_f in set_actuator_param", z_f, "bits")
         
     def actuator_z(self, z_f):
         if DEBUG:
             print("Inside actuator_z")
-        
-        z_f = tools.convert(z_f, 'XtoU') # XtoU' lenght  (um) to bits
-        #print("target_z es z_f in actuator z: ", z_f," bits")
-        if DEBUG:
-            print("z_f is self.target_z in actuator_z: ",z_f, "bits")
-          
+        print("target_z es z_f in actuator z: ", z_f," um")
+        z_f = tools.convert(z_f, 'XtoU') # XtoU' lenght  (um) to bits        
         self.adw.Set_FPar(32, z_f) # Index = 32 (to choose process 3), Value = z_f, le asigna a setpointz (en process 3) el valor z_f
         #Luego se asigna setpointz a currentz y ese valor se pasa al borne 6 de la ADwin
         #Luego ese valor currentz se asigna a fpar_72 y es el nuevo valor actual de z
         self.adw.Set_Par(30, 1) #en teoría (Andi) no estaría usando esto porque en actuator_z, está comentado
         actual_z = tools.convert(self.adw.Get_FPar(72), 'UtoX')
-        print("actual_z: ", actual_z, "um. Espero que este valor sea: ", self.initial_z, "um")
+        print("actual_z: ", actual_z, "um. Espero que este valor sea: ", self.target_z, "um") #No lo convierte exactamente, difieren en 0.0158nm, nada
         #Si en esta linea son iguales, listo, sino probar restando dz/1000 en self.target_z
         #En base a esto recién se puede cambiar o no el signo en dz en xyz_tracking
     @pyqtSlot(bool)
@@ -771,7 +767,6 @@ class Backend(QtCore.QObject):
         #self.center_of_mass() #Esto se ejecuta para sacar self.focusSignal activamente
         #comento la linea anterior, ver qué cambia
         #Esto es imagen 
-        
         dz = self.focusSignal * self.pxSize - self.setPoint #Este valor da positivo a veces y a veces negativo
         #[dz] = px*(nm/px) - nm =nm
         # print ("Image setpoint: ", self.setPoint, "nm")
@@ -781,22 +776,24 @@ class Backend(QtCore.QObject):
         
         threshold = 3 # in nm
         far_threshold = 16 # in nm
-        correct_factor = 0.6 #probar con valores mayores, puede ser que sea muy chico este valor porque en algunos casos veo que demora en corregir
+        correct_factor = 1 #probar con valores mayores, puede ser que sea muy chico este valor porque en algunos casos veo que demora en corregir
         security_thr = 200 # in nm
-        correction = 0.1
+        correction = 0.9
         
-        if np.abs(dz) > threshold: #Descomentar esto luego de probar en ofi
-            if np.abs(dz) < far_threshold:
-                dz = correct_factor * dz
+        # if np.abs(dz) > threshold: #Descomentar esto luego de probar en ofi
+        #     dz = correction * dz
+        #     if np.abs(dz) < far_threshold:
+        #        dz = correct_factor * dz
     
         if np.abs(dz) > security_thr:
             print(datetime.now(), '[focus] Correction movement larger than 200 nm, active correction turned OFF')
             
         else:
             #Esto es cuanto es el movimiento real de la platina
-            self.target_z = self.initial_z - dz/1000  # conversion to µm #Creo que aquí está corrigiendo bien, le puse el signo menos 
+            print("self.target_z initial in piezo: ", self.target_z, "µm.")
+            self.target_z = self.target_z - dz/1000  # conversion to µm #Creo que aquí está corrigiendo bien, le puse el signo menos 
             # [self.target_z] = µm + nm/1000 = µm
-            #print("self.target_z in piezo: ", self.target_z, "µm.")
+            print("self.target_z in piezo: ", self.target_z, "µm.")
                         
             if mode == 'continous':
                 
@@ -1118,7 +1115,7 @@ class Backend(QtCore.QObject):
                 
         self.ROIcoordinates = val.astype(int)
         #print("self.ROIcoordinates", self.ROIcoordinates)
-        #print("TYPE self.ROIcoordinates", type(self.ROIcoordinates))
+        print("TYPE self.ROIcoordinates", type(self.ROIcoordinates))
         if DEBUG:
             print(datetime.now(), '[focus] got ROI coordinates')
             
