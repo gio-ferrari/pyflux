@@ -6,7 +6,6 @@ Created on Tue Jun 26 10:51:13 2023
 Luciano Masullo
 Modified to work with new stabilization in p-MINFLUX, IDS_U3 cam and ADwin by
 Florencia D. Choque
-Based on xyz_tracking by Luciano Masullo
 """
 import os
 import numpy as np
@@ -81,7 +80,6 @@ class Frontend(QtGui.QFrame):
          To: [backend] stop
     - saveDataSignal:
          To: [backend] get_save_data_state
-
     """
 
     def __init__(self, *args, **kwargs):
@@ -90,11 +88,11 @@ class Frontend(QtGui.QFrame):
         self.ROInumber = 0  # siguiente ROIs xy a actualizar
         # Una lista en la que se guardarán los objetos ROI a graficar
         self.roilist: list[viewbox_tools.ROI2] = []
-        self.roi = None
+        self.roi_z: viewbox_tools.ROI2 = None
         # lista de graficos de desplazamientos
         self.xCurve: list[pg.PlotDataItem] = None
         self.yCurve: list[pg.PlotDataItem] = None
-        self.roi_z: viewbox_tools.ROI2 = None
+
         self.setup_gui()
 
     def craete_roi(self, roi_type: str):
@@ -235,15 +233,12 @@ class Frontend(QtGui.QFrame):
         for i in range(N_NP):
             self.xCurve[i].setData(tData, xData[:, i])
         self.xmeanCurve.setData(tData, np.mean(xData, axis=1))
-
         # y data
         for i in range(N_NP):
             self.yCurve[i].setData(tData, yData[:, i])
         self.ymeanCurve.setData(tData, np.mean(yData, axis=1))
-
         # z data
         self.zCurve.setData(tData, zData)
-
         # avg intensity data
         self.avgIntCurve.setData(avgIntData)
 
@@ -309,6 +304,7 @@ class Frontend(QtGui.QFrame):
     # Chequear si necesito esto, cf xyz
     @pyqtSlot(bool, bool, bool)
     def get_backend_states(self, tracking, feedback, savedata):
+        """Actualizar el frontend de acuerdo al estado del backend"""
         self.trackingBeadsBox.setChecked(tracking)
         self.feedbackLoopBox.setChecked(feedback)
         self.saveDataBox.setChecked(savedata)
@@ -608,7 +604,7 @@ class Backend(QtCore.QObject):
     changedImage = pyqtSignal(np.ndarray)
     changedData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, np.ndarray,
                              np.ndarray)
-    #no se usa en xyz_tracking
+    # no se usa en xyz_tracking
     updateGUIcheckboxSignal = pyqtSignal(bool, bool, bool)
     # changedSetPoint = pyqtSignal(float) #Debería añadir esta señal??? de focus.py
     xyIsDone = pyqtSignal(bool, float, float)  # signal to emit new piezo position after drift correction
@@ -1361,10 +1357,10 @@ class Backend(QtCore.QObject):
         self.time = np.zeros(self.npoints)
         self.ptr = 0  # Posición en los buffers de graficación
         self.startTime = time.time()
-        # -----------
-        self.max_dev = 0  # Sale de focus.py se usa en update_stats
-        self.std = 0
-        self.n = 1
+        # ----------- Salen de focus.py se usan en update_stats
+        # self.max_dev = 0  
+        # self.std = 0
+        # self.n = 1
         # -----------
         self.changedData.emit(self.time, self.xData, self.yData, self.zData,
                               self.avgIntData)
@@ -1378,8 +1374,8 @@ class Backend(QtCore.QObject):
         self.y_array = np.zeros((self.buffersize,
                                  len(self.roi_coordinates_list)),
                                 dtype=np.float16)
-        self.z_array = []  # TODO: hacer consistente
-        self.j = 0  # iterator on the data array
+        self.z_array = []  # TODO: hacer consistente con xy. z no se graba
+        self.j = 0  # iterator on the data arrays
 
     # Está en xy y en focus. Creo que no está conectado a nada (A PSF, Andi)
     @pyqtSlot(bool)
@@ -1469,10 +1465,11 @@ class Backend(QtCore.QObject):
 
     @pyqtSlot()
     def get_lock_signal(self): #Dejo esta funcion como está
-        '''
+        """Activa tracking. No es muy claro qué función cumple.
+
         Connection: [minflux] xyzStartSignal
         Description: activates tracking and feedback
-        '''
+        """
         if not self.camON:
             self.liveviewSignal.emit(True)
         self.toggle_tracking(True)
@@ -1482,7 +1479,6 @@ class Backend(QtCore.QObject):
         self.updateGUIcheckboxSignal.emit(self.tracking_value,
                                           self.feedback_active,
                                           self.save_data_state)
-
         if DEBUG:
             print(datetime.now(), '[xy_tracking] System xy locked')
 
@@ -1646,7 +1642,8 @@ if __name__ == '__main__':
     worker.moveToThread(xyThread)
     worker.viewtimer.moveToThread(xyThread)
     # TODO: si este connect no se pasa al interior, no va a funcionar con otros
-    # modulos
+    # modulos. Yo haría una única función que mueva al worker y a todos sus
+    # timers a un thread dado
     worker.viewtimer.timeout.connect(worker.update)
     xyThread.start()
 
