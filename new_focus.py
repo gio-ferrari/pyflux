@@ -31,18 +31,18 @@ import drivers.ids_cam as ids_cam
 # ids_peak.Library.Initialize()
 
 DEBUG = False
+START_PIXEL_SIZE = 20  # el fit exacto es 13 y algo
 
-# Estos parámetros no se corresponden con lo que hay en el .BAS
 def actuatorParameters(adwin, z_f, n_pixels_z=50, pixeltime=1000):
     if DEBUG:
         print("Inside actuatorParameters")
     z_f = tools.convert(z_f, 'XtoU')
 
-    adwin.Set_Par(33, n_pixels_z)
-    adwin.Set_FPar(35, z_f)
+    # adwin.Set_Par(33, n_pixels_z)
+    adwin.Set_FPar(32, z_f)
     adwin.Set_FPar(36, tools.timeToADwin(pixeltime))
 
-
+# Creo que se puede borrar
 def zMoveTo(adwin, z_f):
     if DEBUG:
         print("Inside zMoveto")
@@ -307,7 +307,7 @@ class Frontend(QtGui.QFrame):
         self.clearDataButton = QtGui.QPushButton('Clear data')
 
         self.pxSizeLabel = QtGui.QLabel('Pixel size (nm)')
-        self.pxSizeEdit = QtGui.QLineEdit('20')  # Original: 10nm en focus.py
+        self.pxSizeEdit = QtGui.QLineEdit(str(START_PIXEL_SIZE))  # Original: 10nm en focus.py
         self.focusPropertiesDisplay = QtGui.QLabel(' st_dev = 0  max_dev = 0')
 
         # gui connections
@@ -463,7 +463,7 @@ class Backend(QtCore.QObject):
         self.npoints = 400  # Nro de puntos para graficar
 
         # Relacion entre pixel que se corre la señal y nm en z
-        self.pxSize = 20  # TODO: check correspondence with GUI
+        self.pxSize = START_PIXEL_SIZE  # TODO: check correspondence with GUI
         self.focusSignal = 0.  # pixel x del CM en el ROI (fraccionario)
         self.setPoint = 0  # nm del CM (focssig * pxsize)
 
@@ -819,7 +819,7 @@ class Backend(QtCore.QObject):
     def calibrate(self):
         if DEBUG:
             print("Inside calibrate")
-        # TO DO: fix calibration function
+        # TODO: fix calibration function  HECHO!
         self.focusTimer.stop()
         time.sleep(0.100)
 
@@ -830,17 +830,23 @@ class Backend(QtCore.QObject):
         calibData = np.zeros(nsteps)
         zData = np.linspace(zmin, zmax, nsteps)
 
-        zMoveTo(self.adw, zmin)
-
+        # zMoveTo(self.adw, zmin)
+        self.adw.Start_Process(3)
         time.sleep(0.100)
         for i, z in enumerate(zData):
-            zMoveTo(self.adw, z)
+            # zMoveTo(self.adw, z)
+            self.actuator_z(z)
+            time.sleep(.125)
             self.update()
             calibData[i] = self.focusSignal
+        #     np.save(f'C:\\Data\\img_{i}-{int(z*1000)}pm.npy', self.image)
+        # np.save('C:\\Data\\zData.npy', np.array(zData))
+        # np.save('C:\\Data\\calib.npy', np.array(calibData))
         print("Calibración")
-        print("x =", zData)
-        print("cm =", calibData)
-        # plt.plot(zData, calibData, 'o')
+        print("z\tcm")
+        for z, cm in zip(zData, calibData):
+            print(f"{z}\t{cm}")
+        self.adw.Stop_Process(3)
         time.sleep(0.200)
         self.focusTimer.start(self.focusTime)
 
