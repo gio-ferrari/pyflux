@@ -8,7 +8,6 @@ import numpy as np
 import time
 
 import scipy.ndimage as ndi
-import matplotlib.pyplot as plt
 from datetime import date, datetime
 import os
 
@@ -17,15 +16,13 @@ from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph.ptime as ptime
 import qdarkstyle  # see https://stackoverflow.com/questions/48256772/dark-theme-for-in-qt-widgets
 
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
-from PyQt5.QtWidgets import QGroupBox
+from PyQt5.QtCore import pyqtSignal, pyqtSlot
+# from PyQt5.QtWidgets import QGroupBox
 # import sys
 # sys.path.append('C:\Program Files\Thorlabs\Scientific Imaging\ThorCam')
 # install from https://instrumental-lib.readthedocs.io/en/stable/install.html
 import tools.viewbox_tools as viewbox_tools
 import tools.tools as tools
-import tools.PSF as PSF
-from scipy import optimize as opt
 
 import scan
 import drivers.ADwin as ADwin
@@ -35,7 +32,7 @@ import drivers.ids_cam as ids_cam
 
 DEBUG = False
 
-
+# Estos parámetros no se corresponden con lo que hay en el .BAS
 def actuatorParameters(adwin, z_f, n_pixels_z=50, pixeltime=1000):
     if DEBUG:
         print("Inside actuatorParameters")
@@ -310,7 +307,7 @@ class Frontend(QtGui.QFrame):
         self.clearDataButton = QtGui.QPushButton('Clear data')
 
         self.pxSizeLabel = QtGui.QLabel('Pixel size (nm)')
-        self.pxSizeEdit = QtGui.QLineEdit('50')  # Original: 10nm en focus.py
+        self.pxSizeEdit = QtGui.QLineEdit('20')  # Original: 10nm en focus.py
         self.focusPropertiesDisplay = QtGui.QLabel(' st_dev = 0  max_dev = 0')
 
         # gui connections
@@ -466,7 +463,7 @@ class Backend(QtCore.QObject):
         self.npoints = 400  # Nro de puntos para graficar
 
         # Relacion entre pixel que se corre la señal y nm en z
-        self.pxSize = 50  # original 10nm FC  # in nm, TODO: check correspondence with GUI
+        self.pxSize = 20  # TODO: check correspondence with GUI
         self.focusSignal = 0.  # pixel x del CM en el ROI (fraccionario)
         self.setPoint = 0  # nm del CM (focssig * pxsize)
 
