@@ -620,8 +620,9 @@ class Frontend(QtGui.QFrame):
 
         # set up histogram for the liveview image
         self.hist = pg.HistogramLUTItem(image=self.img)
-        lut = viewbox_tools.generatePgColormap(cmaps.parula)
-        self.hist.gradient.setColorMap(lut)
+        # lut = viewbox_tools.generatePgColormap(cmaps.parula)
+        # self.hist.gradient.setColorMap(lut)
+        self.hist.gradient.loadPreset('viridis')
         self.hist.vb.setLimits(yMin=0, yMax=10000)
 
         for tick in self.hist.gradient.ticks:
@@ -1318,7 +1319,6 @@ class Backend(QtCore.QObject):
         self.adw.Set_Par(21, n_pixels_x)
         self.adw.Set_Par(22, n_pixels_y)
         self.adw.Set_Par(23, n_pixels_z)
-
         self.adw.Set_FPar(23, x_f)
         self.adw.Set_FPar(24, y_f)
         self.adw.Set_FPar(25, z_f)
@@ -1683,7 +1683,7 @@ class Backend(QtCore.QObject):
         self.viewtimer.start(self.viewtimer_time)
 
     def liveview_stop(self):
-
+        """Finish liveview scan."""
         self.viewtimer.stop()
         time.sleep(.5)  # Not sure if neccesary, but let's wait
         self.moveTo(self.x_i + self.scanRange/2,
@@ -1692,7 +1692,7 @@ class Backend(QtCore.QObject):
                     )
 
     def update_view(self):
-             
+
         if self.i < self.NofPixels:
             if self.scantype == 'xy':
                 dy = tools.convert(self.dy, 'ΔXtoU')

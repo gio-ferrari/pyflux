@@ -35,40 +35,48 @@ def convert(x, key):
         
     else:
         
-        if key == 'VtoU':
+        if key == 'VtoU': # Volts to bits
             
             value = x * m_VtoU + q_VtoU
+            # [value] =  x * (bits/V) + bits = bits
             value = np.around(value, 0)
             
-        if key == 'UtoV':
+        if key == 'UtoV': # Bits to Volts
             
             value = (x - q_VtoU)/m_VtoU
+            # [value] =  (x - bits)/(bits/V) = V
             
-        if key == 'XtoU':
+        if key == 'XtoU': # lenght to bits
             
             value = ((x - q_VtoL)/m_VtoL) * m_VtoU + q_VtoU
+            # [value] =  (x - um)/(um/V) * (bits/V) + bits = bits
             value = np.around(value, 0)
             
-        if key == 'UtoX':
+        if key == 'UtoX': # bits to lenght
         
             value = ((x - q_VtoU)/m_VtoU) * m_VtoL + q_VtoL
+            # [value] =  (x - bits)/(bits/V) * (um/V) + um = um
             
-        if key == 'ΔXtoU':
+        if key == 'ΔXtoU': # lenght to bits
             
             value = (x/m_VtoL) * m_VtoU 
+            # [value] =  x/(um/V) * (um/V) = bits
             value = np.around(value, 0)
             
-        if key == 'ΔUtoX':
+        if key == 'ΔUtoX': # bits to lenght
             
             value = (x/m_VtoU) * m_VtoL
+            # [value] =  x/(bits/V) * (um/V) = um
             
-        if key == 'ΔVtoX':
+        if key == 'ΔVtoX': # Volts to lenght
         
             value = x * m_VtoL
+            # [value] =  x* (um/V) = um
             
-        if key == 'VtoX':
+        if key == 'VtoX': # Volts to lenght
             
             value = x * m_VtoL + q_VtoL
+            # [value] =  x*um/V) + um = um
 
         return value
         

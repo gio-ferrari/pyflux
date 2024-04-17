@@ -40,8 +40,8 @@ DEBUG = True
 DEBUG1 = True
 VIDEO = False
 #to commit
-PX_SIZE = 33.5 #px size of camera in nm #antes 80.0 para Andor
-PX_Z = 100 # 202 nm/px for z in nm //Thorcam px size 25nm // IDS px size 50nm 
+PX_SIZE = 33.5 #px size of camera in nm #antes 80.0 para Andor #33.5
+PX_Z = 50 # 202 nm/px for z in nm //Thorcam px size 25nm // IDS px size 50nm 
 
 def actuatorParameters(adwin, z_f, n_pixels_z=50, pixeltime=1000): #funciones necesarias para calibrate
 
@@ -976,8 +976,8 @@ class Backend(QtCore.QObject):
         
         if val is True:
             #self.reset() #Qué efecto tendría colocar esta función aquí? Esto es según focus.py
-            self.setup_feedback() #Añado esto por focus
-            #self.update() ##Qué efecto tendría colocar esta función aquí? Esto es según focus.py
+            #self.setup_feedback() #Añado esto por focus pero creo que aquí no debería ir porque esta función es track en este script
+            #self.update() #Qué efecto tendría colocar esta función aquí? Esto es según focus.py
             self.feedback_active = True
 
             # set up and start actuator process
@@ -1030,15 +1030,15 @@ class Backend(QtCore.QObject):
         
         # WARNING: extra rotation added to match the sensitive direction (hardware)
         
-        zimage = np.rot90(zimage, k=3)
+        #zimage = np.rot90(zimage, k=3)
         
         # calculate center of mass
         
         self.m_center = np.array(ndi.measurements.center_of_mass(zimage))
         
         # calculate z estimator
-        
-        self.currentz = np.sqrt(self.m_center[0]**2 + self.m_center[1]**2) #Chequear si aquí conviene poner signo menos
+        self.currentz = self.m_center[0]
+        #self.currentz = np.sqrt(self.m_center[0]**2 + self.m_center[1]**2) #Chequear si aquí conviene poner signo menos
         #Nota: self.currentz es self.focusSignal
         
     def gaussian_fit(self,roi_coordinates): #Le estoy agregando un parámetro (roi_coordinates) para que sea como en xyz_tracking
@@ -1241,7 +1241,7 @@ class Backend(QtCore.QObject):
             
             if self.initial_focus is True:
                 
-                self.initialz = self.currentz
+                self.initialz = self.currentz #Nota: self.currentz es self.focusSignal (en px) se obtiene en center_of_mass
                 
                 self.initial_focus = False
             
@@ -1253,61 +1253,49 @@ class Backend(QtCore.QObject):
         xmean = np.mean(self.x)
         ymean = np.mean(self.y)        
 
-        dx = 0
-        dy = 0
-        dz = 0 #comparar con update_feedback
+        #dx = 0
+        #dy = 0
+        #dz = 0 #comparar con update_feedback, entiendo que podría comentar esta linea
         
         threshold = 3 #antes era 5 con Andor
         z_threshold = 3
         far_threshold = 12 #ojo con estos parametros chequear focus
         correct_factor = 0.6
+        z_correct_factor = 1
         
         security_thr = 0.35 # in µm
-        
+                
         if np.abs(xmean) > threshold:
-            
             if dx < far_threshold: #TODO: double check this conditions (do they work?)
-                
                 dx = correct_factor * dx #TODO: double check this conditions (do they work?)
-            
-            dx = - (xmean)/1000 # conversion to µm
-              # print('TEST','dx', dx)
-            
+            dx = (xmean)/1000 # conversion to µm
+            #print('TEST','dx: ', dx)
+                    
         if np.abs(ymean) > threshold:
-            
             if dy < far_threshold:
-                
                 dy = correct_factor * dy
-            
-            dy = - (ymean)/1000 # conversion to µm
-            # print('TEST','dy', dy)
+            dy = (ymean)/1000 # conversion to µm
+            #print('TEST','dy: ', dy)
     
         if np.abs(self.z) > z_threshold:
-                            
-            dz = - (self.z)/1000 # conversion to µm
-                
             if dz < far_threshold:
-                    
-                dz = correct_factor * dz
-                
-#                print('dz', dz)
-        else:
-            dz = - (self.z)/1000
+                dz = z_correct_factor * dz
+            dz = (self.z)/1000 #Le saco el signo menos 8/4/24
+            #print('dz: ', dz)
 
         if dx > security_thr or dy > security_thr or dz > 2 * security_thr:
             
             print(datetime.now(), '[xyz_tracking] Correction movement larger than 200 nm, active correction turned OFF')
-            self.toggle_feedback(False)
-            
+            self.toggle_feedback(False)    
+        
         else:
-            
             # compensate for the mismatch between camera/piezo system of reference
             
-            theta = np.radians(-3.7)   # 86.3 (or 3.7) is the angle between camera and piezo (measured)
-            c, s = np.cos(theta), np.sin(theta)
-            R = np.array(((c,-s), (s, c)))
+            # theta = np.radians(-3.7)   # 86.3 (or 3.7) is the angle between camera and piezo (measured)
+            # c, s = np.cos(theta), np.sin(theta)
+            # R = np.array(((c,-s), (s, c)))
             
-            dy, dx = np.dot(R, np.asarray([dx, dy])) #ver si se puede arreglar esto añadiendo dz
+            # dy, dx = np.dot(R, np.asarray([dx, dy])) #ver si se puede arreglar esto añadiendo dz
             
             # add correction to piezo position
             
@@ -1317,9 +1305,9 @@ class Backend(QtCore.QObject):
             
             #print("self.z: ",self.z, " nm.")
             #print("dz: ",dz, " µm.")
-            targetXposition = currentXposition + dx  
-            targetYposition = currentYposition + dy
-            targetZposition = currentZposition + dz  # in µm
+            targetXposition = currentXposition - dx  
+            targetYposition = currentYposition - dy
+            targetZposition = currentZposition - dz  # in µm
             
             if mode == 'continous':
                 #Le mando al actuador las posiciones x,y,z
@@ -1327,9 +1315,7 @@ class Backend(QtCore.QObject):
                 
             if mode == 'discrete':
                 
-#                self.moveTo(targetXposition, targetYposition, 
-#                            currentZposition, pixeltime=10)
-                
+                #self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
                 self.target_x = targetXposition
                 self.target_y = targetYposition
                 self.target_z = targetZposition
@@ -1480,10 +1466,12 @@ class Backend(QtCore.QObject):
         
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
+        #currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX') #Duda con esto! 8/4/2024
         #por qué no debo colocar una linea similar para current z_position
     
         x_f = tools.convert(currentXposition, 'XtoU')
         y_f = tools.convert(currentYposition, 'XtoU')
+        #z_f = tools.convert(currentZposition, 'XtoU')
         
         # set-up actuator initial param
     
