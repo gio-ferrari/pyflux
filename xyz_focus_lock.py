@@ -37,10 +37,9 @@ DEBUG = True
 DEBUG1 = True
 VIDEO = False
 
-# to commit
-PX_SIZE = 33.5  # px size of camera in nm #antes 80.0 para Andor
-PX_Z = 50  # 202 nm/px for z in nm //Thorcam px size 25nm // IDS px size 50nm
 
+PX_SIZE = 33.5 #px size of camera in nm #antes 80.0 para Andor #33.5
+PX_Z = 20 # 202 nm/px for z in nm //Thorcam px size 25nm // IDS px size 50nm 
 
 # funciones necesarias para calibrate
 def actuatorParameters(adwin, z_f, n_pixels_z=50, pixeltime=1000):
@@ -160,20 +159,6 @@ class Frontend(QtGui.QFrame):
         if DEBUG1:
             print("roiInfoSignal.emit executed, signal from Frontend "
                   "(function:emit_roi_info, to Backend:get_roi info FC")
-
-# =============================================================================
-#     def delete_roi_z(self): #elimina todas las ROI de la lista, antes era delete_roi
-#     ############################################################
-#     ########################################chequear esto para que funcione eliminando el roi de z
-#         if DEBUG1:
-#             print("EStoy en delete_roi_z")
-#         for i in range(len(self.roi_z)):
-#             self.vb.removeItem(self.roi_z)
-#             self.roi_z.hide()
-#         self.roi_z = []
-#         self.delete_roi_zButton.setChecked(False)
-#         self.ROInumber = 0
-# =============================================================================
 
     def delete_roi(self):
         """Elimina la última ROI xy."""
@@ -915,12 +900,12 @@ class Backend(QtCore.QObject):
         zimage = self.image[xmin:xmax, ymin:ymax]
         # WARNING: extra rotation added to match the sensitive direction
         # (hardware)
-        zimage = np.rot90(zimage, k=3)
+        # zimage = np.rot90(zimage, k=3)
         # calculate center of mass
         self.m_center = np.array(ndi.measurements.center_of_mass(zimage))
         # calculate z estimator
-        # Chequear si aquí conviene poner signo menos
-        self.currentz = -np.sqrt(self.m_center[0]**2 + self.m_center[1]**2)
+        # TODO: copiar de new_focus
+        self.currentz = np.sqrt(self.m_center[0]**2 + self.m_center[1]**2)
         # Este estimador pierde información de la dirección: no puede estar
         # bien (Andi)
         # El estimador está en píxeles... fraccionarios
@@ -1083,6 +1068,7 @@ class Backend(QtCore.QObject):
 
         # Thresholds en unidades de self.x, self.y
         threshold = 3  # antes era 5 con Andor
+
         z_threshold = 3
         far_threshold = 12  # ojo con estos parametros chequear focus
         correct_factor = 0.6
@@ -1128,9 +1114,9 @@ class Backend(QtCore.QObject):
             currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX') #Get_FPar(self, Index): Retorna el valor de una variable global de tipo float.
             currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
             currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX') #¿Está bien que sea key='UtoX'? FPar keeps track of z position of the piezo
-
             # print("self.z: ",self.z, " nm.")
             # print("dz: ",dz, " µm.")
+            # TODO: chequear signos
             targetXposition = currentXposition + dx
             targetYposition = currentYposition + dy
             targetZposition = currentZposition + dz  # in µm
@@ -1265,7 +1251,10 @@ class Backend(QtCore.QObject):
         self.viewtimer.start(self.xyz_time)
 
     def set_actuator_param(self, pixeltime=1000):
-        """Inicializar los parámetros antes de arrancar los scripts."""
+        """Inicializar los parámetros antes de arrancar los scripts.
+
+        TODO: revisar para z y xy separados
+        """
         self.adw.Set_FPar(46, tools.timeToADwin(pixeltime))
         self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))  # Añado para z, focus.py
 
@@ -1273,6 +1262,7 @@ class Backend(QtCore.QObject):
         # MoveTo usa un script que actualiza estos valores, podemos confiar
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
+
         # Duda con esto! 8/4/2024
         currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         # por qué no debo colocar una linea similar para current z_position
