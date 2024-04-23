@@ -447,7 +447,6 @@ class Backend(QtCore.QObject):
         self.cropped = False
         self.standAlone = False
         self.camON = False
-        self.roi_area = np.zeros(4)
 
         # Coordenadas del ROI en pixeles (enteros)
         self.ROIcoordinates: np.ndarray = np.array([0, 0, 0, 0], dtype=int)
@@ -763,7 +762,7 @@ class Backend(QtCore.QObject):
         # This is a 2D array, (only R channel, to have other channel, or the
         # sum, go to ids_cam driver)
         self.image = self.camera.on_acquisition_timer()
-        self.image_to_save = self.image
+
         # This following lines are executed inside ids_cam driver, to change
         # this I should modify these lines there (depending on which one I prefer: R or R+G+B+A)
         # self.image = np.sum(raw_image, axis=2)  # sum the R, G, B images 
@@ -780,11 +779,10 @@ class Backend(QtCore.QObject):
         self.center_of_mass()  # Esto da focusSignal
 
     def center_of_mass(self):
-        """Actualizael centro de masa de la imagen guardada."""
+        """Actualiza el centro de masa de la imagen guardada."""
         xmin, xmax, ymin, ymax = self.ROIcoordinates
         zimage = self.image[xmin:xmax, ymin:ymax]
-        # WARNING: extra rotation added to match the sensitive direction (hardware)
-        # zimage = np.rot90(zimage, k=3)
+
         self.masscenter = np.array(ndi.measurements.center_of_mass(zimage))
 
         # calculate z estimator

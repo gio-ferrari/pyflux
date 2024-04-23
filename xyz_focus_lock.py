@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jun 26 10:51:13 2023
+Created on Tue Jun 26 10:51:13 2023.
 
 @author: Florencia D. Choque based on xyz_tracking for RASTMIN by
 Luciano Masullo
@@ -11,7 +11,6 @@ import os
 import numpy as np
 import time
 import scipy.ndimage as ndi
-import matplotlib.pyplot as plt
 from datetime import date, datetime
 
 from scipy import optimize as opt
@@ -33,29 +32,19 @@ import drivers.ADwin as ADwin
 # Is it necessary to modify expousure time and gain in driver ids_cam? FC
 import drivers.ids_cam as ids_cam
 
+import logging as _lgn
+
+_lgr = _lgn.getLogger(__name__)
+
 DEBUG = True
 DEBUG1 = True
 VIDEO = False
 
-
-PX_SIZE = 33.5 #px size of camera in nm #antes 80.0 para Andor #33.5
-PX_Z = 20 # 202 nm/px for z in nm //Thorcam px size 25nm // IDS px size 50nm 
-
-# funciones necesarias para calibrate
-def actuatorParameters(adwin, z_f, n_pixels_z=50, pixeltime=1000):
-
-    z_f = tools.convert(z_f, 'XtoU')
-
-    adwin.Set_Par(33, n_pixels_z)
-    adwin.Set_FPar(35, z_f)
-    adwin.Set_FPar(36, tools.timeToADwin(pixeltime))
+_ = customLog
 
 
-# funciones necesarias para calibrate
-def zMoveTo(adwin, z_f):
-
-    actuatorParameters(adwin, z_f)
-    adwin.Start_Process(3)
+PX_SIZE = 33.5  # px size of camera in nm #antes 80.0 para Andor #33.5
+PX_Z = 20  # 20 nm/px for z in nm
 
 
 class Frontend(QtGui.QFrame):
@@ -64,9 +53,6 @@ class Frontend(QtGui.QFrame):
     # antes era (int, np.ndarray) cf xy_tracking Ver cómo afecta esto al
     # procesamiento, porque parece estar bien al ser como en xyz_tracking
     roiInfoSignal = pyqtSignal(str, int, list)
-    # Borré esta señal porque era equivalente a roiInfo pero el str variaba de
-    # 'xy' a 'z' (ANDI)
-    # z_roiInfoSignal = pyqtSignal(str, int, list) #señal, contrastar con focus.py
     closeSignal = pyqtSignal()
     saveDataSignal = pyqtSignal(bool)
     """
@@ -88,17 +74,14 @@ class Frontend(QtGui.QFrame):
         # Una lista en la que se guardarán los objetos ROI a graficar
         self.roilist: list[viewbox_tools.ROI2] = []
         self.roi_z: viewbox_tools.ROI2 = None
-        # lista de graficos de desplazamientos
+        # lista de graficos de desplazamientos de cada fiduciaria
         self.xCurve: list[pg.PlotDataItem] = None
         self.yCurve: list[pg.PlotDataItem] = None
 
         self.setup_gui()
 
-    def craete_roi(self, roi_type: str):
+    def create_roi(self, roi_type: str):
         """Add a new roi ('xy' or 'z')."""
-        if DEBUG1:
-            print("Estoy en create_roi")
-
         if roi_type == 'xy':
             ROIpen = pg.mkPen(color='r')
             ROIpos = (512 - 64, 512 - 64)
@@ -120,14 +103,12 @@ class Frontend(QtGui.QFrame):
                                             translateSnap=True,
                                             # self.ROInumber) test Andi
                                             pen=ROIpen, number='z')
-            self.zROIButton.setChecked(False)
+            self.zROIButton.setEnabled(False)
         else:
             print("Unknown ROI type asked:", roi_type)
 
     def emit_roi_info(self, roi_type):
         """Informar los valores de los ROI del tipo solicitado existentes."""
-        if DEBUG1:
-            print("Estoy en emit_roi_info")
         if roi_type == 'xy':
             roinumber = len(self.roilist)
             if roinumber == 0:
@@ -141,8 +122,6 @@ class Frontend(QtGui.QFrame):
                     coordinates = np.array([xmin, xmax, ymin, ymax])
                     coordinates_list.append(coordinates)
                 self.roiInfoSignal.emit('xy', roinumber, coordinates_list)
-                if DEBUG1:
-                    print("Coordenadas xy: ", coordinates_list)
         elif roi_type == 'z':
             xmin, ymin = self.roi_z.pos()
             xmax, ymax = self.roi_z.pos() + self.roi_z.size()
@@ -151,21 +130,13 @@ class Frontend(QtGui.QFrame):
 
             # Andi changed 0 to 1, creo que no pasa nada
             self.roiInfoSignal.emit('z', 1, coordinates_list)
-            if DEBUG1:
-                print("Coordenadas z: ", coordinates_list)
         else:
-            print("Unknown ROI type asked:", roi_type)
-
-        if DEBUG1:
-            print("roiInfoSignal.emit executed, signal from Frontend "
-                  "(function:emit_roi_info, to Backend:get_roi info FC")
+            _lgr.error("Unknown ROI type asked: %s", roi_type)
 
     def delete_roi(self):
         """Elimina la última ROI xy."""
-        if DEBUG1:
-            print("EStoy en delete_roi")
         if not self.roilist:
-            print("No hay ROI que borrar")  # TODO: borrar esto
+            _lgr.info("No hay ROI que borrar")
             return
         roi = self.roilist.pop()
         self.vb.removeItem(roi)
@@ -173,31 +144,27 @@ class Frontend(QtGui.QFrame):
         del roi
         self.ROInumber -= 1
 
-    @pyqtSlot(bool)  # no toco esta función FC
+    @pyqtSlot(bool)
     def toggle_liveview(self, on):
-        if DEBUG1:
-            print("EStoy en toggle_liveview")
+        """Cambia el estado del botón al elegirlo.
 
+        No realiza ninguna acción real: el mismo evento está conectado al
+        backend.
+        """
         if on:
             self.liveviewButton.setChecked(True)
             print(datetime.now(), '[xy_tracking] Live view started')
         else:
             self.liveviewButton.setChecked(False)
-            self.emit_roi_info('xy')
-            self.img.setImage(np.zeros((512, 512)), autoLevels=False)
+            # self.emit_roi_info('xy')
+            # self.emit_roi_info('z')
+            # TODO: poner marca al agua para avisar que está OFF
+            self.img.setImage(np.zeros((1200, 1920)), autoLevels=False)
             print(datetime.now(), '[xy_tracking] Live view stopped')
-
-    # @pyqtSlot()   # Esta función no existe en xyz, chequear
-    # def get_roi_request(self):
-    #     if DEBUG1:
-    #         print("Estoy en get_roi_request")
-    #     print(datetime.now(), '[xy_tracking] got ROI request')
-    #     self.emit_roi_info('xy')
 
     @pyqtSlot(np.ndarray)
     def get_image(self, img):
-        # if DEBUG:
-        #     print(datetime.now(), '[xy_tracking-frontend] got image signal')
+        """Recibe la imagen del back."""
         self.img.setImage(img, autoLevels=False)
         self.xaxis.setScale(scale=PX_SIZE/1000)  # scale to µm
         self.yaxis.setScale(scale=PX_SIZE/1000)  # scale to µm
@@ -207,12 +174,9 @@ class Frontend(QtGui.QFrame):
     @pyqtSlot(np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray)
     def get_data(self, tData, xData, yData, zData, avgIntData):
         """Recibir datos nuevos del backend."""
-        # print("xData: ",xData)
-        # print("yData: ",yData)
-        # print("zData: ",zData)
-
         N_NP = np.shape(xData)[1]
-        # print("N_NP: ",N_NP)
+        if N_NP != len(self.roilist):
+            _lgr.error("El número de ROIs y la info de xData no coinciden")
 
         # x data
         for i in range(N_NP):
@@ -232,23 +196,13 @@ class Frontend(QtGui.QFrame):
         # los cambios aquí tienen que verse reflejados en la gui, histogramas
         if len(xData) > 2:  # TODO: chequear esta parte
             self.plot_ellipse(xData, yData)
-
             hist, bin_edges = np.histogram(zData, bins=60)
             self.zHist.setOpts(x=bin_edges[:-1], height=hist)
-
             xstd = np.std(np.mean(xData, axis=1))
-            # print("mean x", np.mean(xData, axis=1))
-            # print("size xData", np.size(xData))
             self.xstd_value.setText(str(np.around(xstd, 2)))
-
             ystd = np.std(np.mean(yData, axis=1))
-            # print("mean y", np.mean(yData, axis=1))
-            # print("size yData", np.size(yData))
             self.ystd_value.setText(str(np.around(ystd, 2)))
-
             zstd = np.std(zData)
-            # print("size zData", np.size(zData))
-            # print("std values x y z",xstd," ",ystd," ",zstd)
             self.zstd_value.setText(str(np.around(zstd, 2)))
 
     def plot_ellipse(self, x_array, y_array):
@@ -273,7 +227,12 @@ class Frontend(QtGui.QFrame):
 
     @pyqtSlot(int, bool)
     def update_shutter(self, num, on):
-        '''
+        """Toma acciones con los shutters que lo involucran. DESACTIVADO.
+
+        Previamente el shutter 5 bloqueaba la señal z y el 6 la señal xy. Al
+        mudar el setup sacamos estos shutters, así que esta función no hace
+        nada (hoy por hoy)
+
         setting of num-value:
             0 - signal send by scan-gui-button --> change state of all minflux
                 shutters
@@ -282,14 +241,14 @@ class Frontend(QtGui.QFrame):
             7 - set all minflux shutters according to on-variable
             8 - set all shutters according to on-variable
         for handling of shutters 1-5 see [scan] and [focus]
-        '''
-        if (num == 6) or (num == 8):
+        """
+        if (num == 5) or (num == 6) or (num == 8):
             self.shutterCheckbox.setChecked(on)
 
-    # Chequear si necesito esto, cf xyz
+    # TODO: Chequear si necesito esto, cf xyz
     @pyqtSlot(bool, bool, bool)
     def get_backend_states(self, tracking, feedback, savedata):
-        """Actualizar el frontend de acuerdo al estado del backend"""
+        """Actualizar el frontend de acuerdo al estado del backend."""
         self.trackingBeadsBox.setChecked(tracking)
         self.feedbackLoopBox.setChecked(feedback)
         self.saveDataBox.setChecked(savedata)
@@ -298,7 +257,6 @@ class Frontend(QtGui.QFrame):
         """Informa al backend si hay que grabar data xy o no."""
         if self.saveDataBox.isChecked():
             self.saveDataSignal.emit(True)
-            self.emit_roi_info()
         else:
             self.saveDataSignal.emit(False)
 
@@ -308,7 +266,6 @@ class Frontend(QtGui.QFrame):
         backend.updateGUIcheckboxSignal.connect(self.get_backend_states)
         backend.shuttermodeSignal.connect(self.update_shutter)
         backend.liveviewSignal.connect(self.toggle_liveview)
-        print("liveviewSignal connected to toggle liveview - line 351")
 
     def setup_gui(self):
         # GUI layout
@@ -442,18 +399,18 @@ class Frontend(QtGui.QFrame):
 
         # LiveView Button
         self.liveviewButton = QtGui.QPushButton('Camera LIVEVIEW')
-        self.liveviewButton.setCheckable(True)
+        self.liveviewButton.setEnabled(True)
 
         # create xy ROI button
         self.xyROIButton = QtGui.QPushButton('xy ROI')
-        self.xyROIButton.setCheckable(True)
+        self.xyROIButton.setEnabled(True)
         self.xyROIButton.clicked.connect(
-            lambda: self.craete_roi(roi_type='xy'))
+            lambda: self.create_roi(roi_type='xy'))
 
         # create z ROI button
         self.zROIButton = QtGui.QPushButton('z ROI')
-        self.zROIButton.setCheckable(True)
-        self.zROIButton.clicked.connect(lambda: self.craete_roi(roi_type='z'))
+        self.zROIButton.setEnabled(True)
+        self.zROIButton.clicked.connect(lambda: self.create_roi(roi_type='z'))
 
         # select xy ROI
         self.selectxyROIbutton = QtGui.QPushButton('Select xy ROI')
@@ -561,27 +518,31 @@ class Frontend(QtGui.QFrame):
     # aquí debería ir esta función de ser necesario, pruebo descomentando para
     # saber si debe ir o no
     def setup_data_curves(self):
-        """Borra las curvas si hace falta."""
+        """Crear o borrar las curvas si hace falta.
+
+        TODO: arreglar esta forma fea de hacer las cosas
+        """
         if self.trackingBeadsBox.isChecked():
             if self.xCurve is not None:
                 for i in range(len(self.roilist)):  # remove previous curves
                     self.xyzGraph.xPlot.removeItem(self.xCurve[i])
                     self.xyzGraph.yPlot.removeItem(self.yCurve[i])
-            self.xCurve = [0] * len(self.roilist)
+                    # TODO: Promedio, z e AvgInt???
+            # self.xCurve = [0] * len(self.roilist)
             for i in range(len(self.roilist)):
                 self.xCurve[i] = self.xyzGraph.xPlot.plot(pen='w', alpha=0.3)
                 self.xCurve[i].setAlpha(0.3, auto=False)
-            self.yCurve = [0] * len(self.roilist)
+            # self.yCurve = [0] * len(self.roilist)
             for i in range(len(self.roilist)):
                 self.yCurve[i] = self.xyzGraph.yPlot.plot(pen='r', alpha=0.3)
                 self.yCurve[i].setAlpha(0.3, auto=False)
-        else:
-            pass
 
     def closeEvent(self, *args, **kwargs):
-        print('close in frontend')
+        _lgr.info('Close in frontend')
         self.closeSignal.emit()
         super().closeEvent(*args, **kwargs)
+        # TODO: ESTO ES MUY FEO
+        # TODO: Ver thread del backend
         app.quit()
 
 
@@ -630,38 +591,40 @@ class Backend(QtCore.QObject):
         root = 'C:\\Data\\'
         folder = root + today
         print("Name of folder: ", folder)
-        filename = r'\xydata'
+        filename = '\\xydata'
         self.filename = os.path.join(folder, filename)
         # Se llama viewTimer pero es el unico para todo, no sólo para view
         # Ojo: aquí coloqué viewtimer porque es el que se usa a lo largo del
         # código, pero en xyz_tracking se usa view_timer
         self.viewtimer = QtCore.QTimer()
-        # self.viewtimer.timeout.connect(self.update) # Línea original (para mi estaba OK acá, ANDI)
+        # TODO: overload de movetothread para que se mueva con sus timers
+        # self.viewtimer.timeout.connect(self.update)
         self.xyz_time = 200  # 200 ms per acquisition + fit + correction
 
-        self.tracking_value = False
+        self.tracking_value = False  # Si trackear (NO si corregir)
         self.save_data_state = False
-        self.feedback_active = False
+        self.feedback_active = False  # Si corregir (implica trackear)
         self.camON = False
-        self.roi_area = np.zeros(4)  # Esta línea para qué?
 
         self.npoints = 1200  # número de puntos a graficar
         self.buffersize = 30000  # tamano buffer correcciones xy
 
-        # posicion actual de la marca en cada ROI
+        # posicion actual del centro en cada ROI
         self.currentx: np.ndarray = np.zeros((1,))
         self.currenty: np.ndarray = np.zeros((1,))
 
-        self.reset()  # comwnté FC -> descomente AZ
-        # self.reset_data_arrays() #comenté FC
+        # Los llamamos en toggle_tracking
+        self.reset()
+        self.reset_data_arrays()
 
-        self.counter = 0
+        self.counter = 0  # Se usa para generar un patrón. Es cuántas veces se llamó a update
 
         # saves displacement when offsetting setpoint for feedbackloop
-        self.displacement = np.array([0.0, 0.0])
+        # Estos son sólo para hacer un pattern de test
+        self.displacement = np.array([0.0, 0.0])  # Solo para test pattern
         self.pattern = False
-        self.previous_image = None
-        self.focusSignal = 0
+        self.previous_image = None  # para chequear que la imagen cambie
+        self.currentz = 0.0  # Valor en pixeles dentro del roi del z
 
         if self.camera.open_device():
             self.camera.set_roi(16, 16, 1920, 1200)
@@ -672,18 +635,27 @@ class Backend(QtCore.QObject):
                 print("Exception", str(e))
         else:
             self.camera.destroy_all()
+            raise Exception("No pude abrir la cámara")
 
     @pyqtSlot(int, bool)
     def toggle_tracking_shutter(self, num, val):
+        """Toma acciones con los shutters que lo involucran. DESACTIVADO.
+
+        Previamente el shutter 5 bloqueaba la señal z y el 6 la señal xy. Al
+        mudar el setup sacamos estos shutters, así que esta función no hace
+        nada (hoy por hoy)
+        """
         # TODO: change code to also update checkboxes in case of minflux
         # measurement
-        if (num == 6) or (num == 8):
-            if val:
-                tools.toggle_shutter(self.adw, 6, True)
-                print(datetime.now(), '[xy_tracking] Tracking shutter opened')
-            else:
-                tools.toggle_shutter(self.adw, 6, False)
-                print(datetime.now(), '[xy_tracking] Tracking shutter closed')
+        if num == 8:
+            to_update = (5, 6,)
+        elif (num == 5) or (num == 6):
+            to_update = (num,)
+        else:
+            to_update = tuple()
+        for num in to_update:
+            tools.toggle_shutter(self.adw, num, bool(val))
+            _lgr.info('Tracking shutter %s %s', num, "opened" if val else "closed")
 
     @pyqtSlot(int, bool)
     def shutter_handler(self, num, on):
@@ -691,21 +663,18 @@ class Backend(QtCore.QObject):
 
     @pyqtSlot(bool)
     def liveview(self, value):
-        '''
+        """
         Connection: [frontend] liveviewSignal
         Description: toggles start/stop the liveview of the camera.
-        '''
+        """
         if value:
             self.camON = True
             self.liveview_start()
-
         else:
             self.liveview_stop()
             self.camON = False
 
     def liveview_start(self):
-        if DEBUG:
-            print("Inside Liveview-start")
         if self.camON:
             self.viewtimer.stop()
             self.camON = False
@@ -713,19 +682,9 @@ class Backend(QtCore.QObject):
         self.viewtimer.start(self.xyz_time)
 
     def liveview_stop(self):
-        if DEBUG:
-            print("Inside Liveview-stop")
         self.viewtimer.stop()
         print("cameraTimer: stopped")
         self.camON = False
-        # x0 = 0
-        # y0 = 0
-        # x1 = 1200
-        # y1 = 1920
-
-        # val = np.array([x0, y0, x1, y1])
-        # self.get_new_roi(val) #¿debo comentar esta línea como se hizo en xyz_tracking.py?
-        # SI, Aquì no existe la función get_new_roi como en focus.py
 
     def update(self):
         """General update method.
@@ -764,15 +723,14 @@ class Backend(QtCore.QObject):
         self.counter += 1
 
     def update_view(self):
-        """ Image update while in Liveview mode """
+        """Image/data update while in Liveview mode."""
         # acquire image
         # This is a 2D array, (only R channel)
         self.image = self.camera.on_acquisition_timer()
         # WARNING: fix to match camera orientation with piezo orientation
-        self.image = np.rot90(self.image, k=3)  # Comment by FC
+        self.image = np.rot90(self.image, k=3)  # Este es nuestro estandar
         if np.all(self.previous_image == self.image):
-            print('WARNING: latest_frame equal to previous frame')
-
+            _lgr.error('Latest_frame equal to previous frame')
         self.previous_image = self.image
 
         if (VIDEO and self.save_data_state):
@@ -787,7 +745,7 @@ class Backend(QtCore.QObject):
         if self.ptr < self.npoints:
             self.xData[self.ptr, :] = self.x + self.displacement[0]
             self.yData[self.ptr, :] = self.y + self.displacement[1]
-            self.zData[self.ptr] = self.z  # Aparentemente es focusSignal
+            self.zData[self.ptr] = self.z  # Es el delta z en nm respecto al inicial
             self.avgIntData[self.ptr] = self.avgInt
             self.time[self.ptr] = self.currentTime
 
@@ -813,7 +771,7 @@ class Backend(QtCore.QObject):
         self.ptr += 1
 
     # esta función es igual a la de xyz_tracking porque es para xy únicamente
-    # Como z no es una lista, no hay nada especial ac'a
+    # Como z no es una lista, no hay nada especial acá
     @pyqtSlot(bool)
     def toggle_tracking(self, val):
         """Inicia el tracking de las marcas (sin corregir).
@@ -835,11 +793,12 @@ class Backend(QtCore.QObject):
 
             self.currentx = np.zeros(size)
             self.currenty = np.zeros(size)
+            # self.currentz = 0
 
             self.x = np.zeros(size)  # Deltas respecto a posicion inicial
             self.y = np.zeros(size)
 
-            if self.initial is True:
+            if self.initial is True:  # Obvio porque reser lo pone en True
                 self.initialx = np.zeros(size)
                 self.initialy = np.zeros(size)
 
@@ -850,16 +809,19 @@ class Backend(QtCore.QObject):
     # para drift xy
     @pyqtSlot(bool)
     def toggle_feedback(self, val, mode='continous'):
-        """Inicia y para los procesos de estabilizacion de la ADwin
+        """Inicia y detiene los procesos de estabilizacion de la ADwin.
 
         Connection: [frontend] feedbackLoopBox.stateChanged
         Description: toggles ON/OFF feedback for either continous (TCSPC)
         or discrete (scan imaging) correction
         """
         if val is True:
-            # self.reset() #Qué efecto tendría colocar esta función aquí? Esto es según focus.py
-            # self.setup_feedback() #Añado esto por focus pero creo que aquí no debería ir porque esta función es track en este script
-            # self.update() #Qué efecto tendría colocar esta función aquí? Esto es según focus.py
+            # Qué efecto tendría colocar esta función aquí? Esto es según focus.py
+            # self.reset() 
+            # self.update()
+            if not self.tracking_value:
+                print("NO activaste el tracking!!!!!")
+                self.toggle_tracking(True)
             self.feedback_active = True
 
             # set up and start actuator process
@@ -888,9 +850,9 @@ class Backend(QtCore.QObject):
         else:
             print("Deberías pasar un booleano, no:", val)
 
-#        self.updateGUIcheckboxSignal.emit(self.tracking_value,
-#                                          self.feedback_active,
-#                                          self.save_data_state)
+        self.updateGUIcheckboxSignal.emit(self.tracking_value,
+                                          self.feedback_active,
+                                          self.save_data_state)
 
     def center_of_mass(self):
         """Calculate z image center of mass."""
@@ -898,19 +860,13 @@ class Backend(QtCore.QObject):
         xmin, xmax, ymin, ymax = self.zROIcoordinates
         # select the data of the image corresponding to the ROI
         zimage = self.image[xmin:xmax, ymin:ymax]
-        # WARNING: extra rotation added to match the sensitive direction
-        # (hardware)
-        # zimage = np.rot90(zimage, k=3)
         # calculate center of mass
         self.m_center = np.array(ndi.measurements.center_of_mass(zimage))
         # calculate z estimator
         # TODO: copiar de new_focus
-        self.currentz = np.sqrt(self.m_center[0]**2 + self.m_center[1]**2)
-        # Este estimador pierde información de la dirección: no puede estar
-        # bien (Andi)
-        # El estimador está en píxeles... fraccionarios
+        self.currentz = self.m_center[0]
 
-        # Nota: self.currentz es self.focusSignal
+        # El estimador está en píxeles... fraccionarios
 
     # Le estoy agregando un parámetro (roi_coordinates) para que sea como en
     # xyz_tracking
@@ -920,7 +876,7 @@ class Backend(QtCore.QObject):
         TODO: Creo que hay un ida y vuelta ridiculo entre nm y px
         """
         # set main reference frame
-        roi_coordinates = np.array(roi_coordinates, dtype=np.int)
+        roi_coordinates = np.array(roi_coordinates, dtype=np.int32)
         xmin, xmax, ymin, ymax = roi_coordinates
         xmin_nm, xmax_nm, ymin_nm, ymax_nm = roi_coordinates * PX_SIZE
 
@@ -983,22 +939,6 @@ class Backend(QtCore.QObject):
         currentx = x
         currenty = y
 
-# ALERTA comento esta parte porque creo que hay incompatibilidad entre los nombres self.currentx y currentx y lo mismo para y
-# Ver si en un futuro puedo implementar esto para que tenga en cuenta este caso
-#        # if to avoid (probably) false localizations #notar que esta parte no se usa en xyz_tracking
-#        maxdist = 200 # in nm
-#        if self.initial is False:
-#            if np.abs(x - self.currentx) < maxdist and np.abs(y - self.currenty) < maxdist:
-#                self.currentx = x
-#                self.currenty = y
-#                print(datetime.now(), '[xy_tracking] normal')
-#            else:
-#                pass
-#                print(datetime.now(), '[xy_tracking] max dist exceeded')
-#        else:
-#            self.currentx = x
-#            self.currenty = y
-#            print(datetime.now(), '[xy_tracking] else')
         return currentx, currenty
 
     def track(self, track_type):  # Añado parámetro para trabajar en xy y z
@@ -1016,23 +956,29 @@ class Backend(QtCore.QObject):
         # xy track routine of N=size fiducial AuNP
         if track_type == 'xy':
             for i, roi in enumerate(self.roi_coordinates_list):
-                # try:
-                #     roi = self.roi_coordinates_list[i]
-                #     self.currentx[i], self.currenty[i] = self.gaussian_fit(roi)
-                # except(RuntimeError, ValueError):
-                #     print(datetime.now(), '[xy_tracking] Gaussian fit did not work')
-                #     self.toggle_feedback(False)
                 roi = self.roi_coordinates_list[i]
-                print("roi:", roi, "type roi", type(roi))
-                self.currentx[i], self.currenty[i] = self.gaussian_fit(roi)
-                print("ejecutado con exito")
+                try:
+                    self.currentx[i], self.currenty[i] = self.gaussian_fit(roi)
+                except Exception as e:
+                    self.currentx[i] = self.initialx[i]
+                    self.currenty[i] = self.initialy[i]
+                    print("Error en Gaussian_fit:", e)
+                if self.initial is False:
+                    # Chequeo para malas localizaciones
+                    maxdist = 200  # in nm
+                    if (np.abs(self.initialx[i] - self.currentx[i]) > maxdist
+                        or np.abs(self.initialy[i] - self.currenty[i]) > maxdist):
+                        print(datetime.now(), '[xy_tracking] max dist exceeded')
+                        self.currentx[i] = self.initialx[i]
+                        self.currenty[i] = self.initialy[i]
             if self.initial is True:
                 for i, roi in enumerate(self.roi_coordinates_list):
                     self.initialx[i] = self.currentx[i]
                     self.initialy[i] = self.currenty[i]
                 self.initial = False
+             # self.x, y and z are relative to initial positions
             for i, roi in enumerate(self.roi_coordinates_list):
-                self.x[i] = self.currentx[i] - self.initialx[i]  # self.x is relative to initial pos
+                self.x[i] = self.currentx[i] - self.initialx[i]
                 self.y[i] = self.currenty[i] - self.initialy[i]
                 self.currentTime = time.time() - self.startTime
 
@@ -1051,53 +997,42 @@ class Backend(QtCore.QObject):
         if track_type == 'z':
             self.center_of_mass()
             if self.initial_focus is True:
-                self.initialz = self.currentz  # Nota: self.currentz es self.focusSignal (en px) se obtiene en center_of_mass
+                self.initialz = self.currentz
                 self.initial_focus = False
             self.z = (self.currentz - self.initialz) * PX_Z  # self.z in nm
-            print("self.z in track: ", self.z, " nm")
 
-    def correct(self, mode='continous'):
+    def correct_xy(self, mode='continous'):
         """Corrige todos los ejes."""
-        # TODO: hay que separar xy y z para tracking
+        # TODO: implementar PI
+        # TODO: implementar Discreto para PSF (para single correction)
+
         xmean = np.mean(self.x)
         ymean = np.mean(self.y)
 
         dx = 0
         dy = 0
-        dz = 0 #  comparar con update_feedback, entiendo que podría comentar esta linea
 
-        # Thresholds en unidades de self.x, self.y
-        threshold = 3  # antes era 5 con Andor
-
-        z_threshold = 3
-        far_threshold = 12  # ojo con estos parametros chequear focus
-        correct_factor = 0.6
-        z_correct_factor = 1
+        # Thresholds en unidades de self.x, self.y (nm)
+        threshold = 3
+        xy_far_threshold = 12
+        xy_correct_factor = 0.6
 
         security_thr = 0.35  # in µm
 
+        # TODO: chequear signos con platina
         if np.abs(xmean) > threshold:
             dx = -xmean / 1000  # conversion to µm
-            if abs(dx) < far_threshold:
-                dx *= correct_factor
-            # print('TEST','dx: ', dx)
+            if abs(dx) < xy_far_threshold:
+                dx *= xy_correct_factor
 
         if np.abs(ymean) > threshold:
             dy = -ymean / 1000  # conversion to µm
-            if abs(dy) < far_threshold:
-                dy *= correct_factor
-            # print('TEST','dy: ', dy)
+            if abs(dy) < xy_far_threshold:
+                dy *= xy_correct_factor
 
-        if np.abs(self.z) > z_threshold:
-            dz = -self.z / 1000
-            if abs(dz) < far_threshold:
-                dz *= z_correct_factor
-            # print('dz: ', dz)
-
-        if (abs(dx) > security_thr or abs(dy) > security_thr or
-                abs(dz) > 2 * security_thr):
+        if (abs(dx) > security_thr or abs(dy) > security_thr):
             print(datetime.now(),
-                  '[xyz_tracking] Correction movement larger than 200 nm,'
+                  '[xyz_tracking] xy Correction movement larger than 200 nm,'
                   ' active correction turned OFF')
             self.toggle_feedback(False)
         else:
@@ -1110,27 +1045,62 @@ class Backend(QtCore.QObject):
             # dy, dx = np.dot(R, np.asarray([dx, dy])) #ver si se puede arreglar esto añadiendo dz
 
             # add correction to piezo position
-
-            currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX') #Get_FPar(self, Index): Retorna el valor de una variable global de tipo float.
+            currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
             currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
-            currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX') #¿Está bien que sea key='UtoX'? FPar keeps track of z position of the piezo
-            # print("self.z: ",self.z, " nm.")
-            # print("dz: ",dz, " µm.")
-            # TODO: chequear signos
+            # Sólo xy
+            targetZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
+
+            # TODO: chequear signos acá o arriba
             targetXposition = currentXposition + dx
             targetYposition = currentYposition + dy
-            targetZposition = currentZposition + dz  # in µm
 
             if mode == 'continous':
                 # Le mando al actuador las posiciones x,y,z
-                # TODO: cambiar esto para tracking sólo z
                 self.actuator_xyz(targetXposition, targetYposition,
                                   targetZposition)
-
             if mode == 'discrete':
                 #self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
                 self.target_x = targetXposition
                 self.target_y = targetYposition
+
+    def correct_z(self, mode='continous'):
+        """Corrige todos los ejes."""
+        # TODO: implementar PI
+        # TODO: implementar Discreto para PSF (para single correction)
+        dz = 0
+
+        # Thresholds en unidades de self.z (nm)
+        z_threshold = 3
+        z_far_threshold = 12
+        z_correct_factor = 1
+
+        security_thr = 0.35  # in µm
+
+        if np.abs(self.z) > z_threshold:
+            dz = -self.z / 1000
+            if abs(dz) < z_far_threshold:
+                dz *= z_correct_factor
+
+        if abs(dz) > 2 * security_thr:
+            print(datetime.now(),
+                  '[xyz_tracking] Z Correction movement larger than 200 nm,'
+                  ' active correction turned OFF')
+            self.toggle_feedback(False)
+        else:
+            # add correction to piezo position
+            targetXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
+            targetYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
+            currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
+
+            # TODO: chequear signos acá o arriba
+            targetZposition = currentZposition + dz  # in µm
+
+            if mode == 'continous':
+                # Le mando al actuador las posiciones x,y,z
+                self.actuator_xyz(targetXposition, targetYposition,
+                                  targetZposition)
+            if mode == 'discrete':
+                #self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
                 self.target_z = targetZposition
 
     @pyqtSlot(bool, bool)
@@ -1150,103 +1120,83 @@ class Backend(QtCore.QObject):
         if not self.camON:
             print(datetime.now(), 'liveview started')
             self.camON = True
-            # TODO: aseguraarse de que la c'amara est'a prendida
-            # self.camera.start_live_video(framerate='20 Hz') # Check how to do this part with new camera
-            # Creo que aqui deberia ir algo así:
-        # if self.camera.open_device():
-        #     self.camera.set_roi(16, 16, 1920, 1200)
-        #     try:
-        #         self.camera.alloc_and_announce_buffers()
-        #         self.camera.start_acquisition()
-        #     except Exception as e:
-        #         print("Exception", str(e))
-        # else:
-        #     self.camera.destroy_all()
-        # La idea creo que es iniciar la adquisicion
-            time.sleep(0.200)
+            # if self.camera.open_device():
+            #     self.camera.set_roi(16, 16, 1920, 1200)
+            #     try:
+            #         self.camera.alloc_and_announce_buffers()
+            #         self.camera.start_acquisition()
+            #     except Exception as e:
+            #         print("Exception", str(e))
+            # else:
+            #     self.camera.destroy_all()
 
         time.sleep(0.200)
         print("Estoy dentro de single_xy_correction")
-        self.image = self.camera.on_acquisition_timer()
-        self.changedImage.emit(self.image)
-
-        self.camera.stop_acquisition() #???? Chequear esto lo estoy poniendo rapido como bosquejo
+        self.update_view()
+        # self.image = self.camera.on_acquisition_timer()
+        # self.changedImage.emit(self.image) Hecho por update_view
         self.camON = False
 
         self.track('xy')
         self.update_graph_data()
-        self.correct(mode='discrete')
-
+        self.correct_xy(mode='discrete')
         target_x = np.round(self.target_x, 3)
         target_y = np.round(self.target_y, 3)
-
         print(datetime.now(), '[xy_tracking] discrete correction to',
               target_x, target_y)
-
         self.xyIsDone.emit(True, target_x, target_y)
-
         if DEBUG:
             print(datetime.now(), '[xy_tracking] single xy correction ended')
 
-    # TODO: revisar y hacer m'as parecida a single xy
-    # Esto esta mal
     @pyqtSlot(bool, bool)
-    def single_z_correction(self, feedback_val, initial): #revisar los parámetros de esta funcion, la saqué de focus.py para que emita señal a psf
+    def single_z_correction(self, feedback_val, initial):
         if initial:
             if not self.camON:
                 self.camON = True
-        #         self.camera.start_live_video(framerate='20 Hz')
-        #Pensar esta parte, cómo sería para que funcionen de forma independiente
-        # if self.camera.open_device():
-        #     self.camera.set_roi(16, 16, 1920, 1200)
-        #     try:
-        #         self.camera.alloc_and_announce_buffers()
-        #         self.camera.start_acquisition()
-        #     except Exception as e:
-        #         print("Exception", str(e))
-        # else:
-        #     self.camera.destroy_all()
-                time.sleep(0.200)
-            # y0 = int(640-150)
-            # x0 = int(512-150)
-            # y1 = int(640+150)
-            # x1 = int(512+150)
-            # value = np.array([y0, x0, y1, x1])
-            # self.camera._set_AOI(*value)
-            self.reset()
-            self.reset_data_arrays()
-            time.sleep(0.200)
-        self.acquire_data()  # No está definida aquí
+            # self.reset()
+            # self.reset_data_arrays()
+        self.update_view()
         self.update_graph_data()
-
         if initial:
-            self.setup_feedback()
-        else:
-            self.update_feedback(mode='discrete')
+            self.initial_focus = True
+            self.track('z')
+        self.correct_z(mode='discrete')
         if self.save_data_state:
             self.time_array.append(self.currentTime)
-            self.z_array.append(self.focusSignal) # z_array lo agregué a reset_data_arrays. Aquí falta ver quien es focus signal en este caso, ver focus.py
+            self.z_array.append(self.currentz)
         self.zIsDone.emit(True, self.target_z)
 
-    # Esta funci'on creo que nunca se us'o
-    def calibrate(self):
-        # TO DO: fix calibration function
+    def calibrate_z(self):
         self.viewtimer.stop()
         time.sleep(0.100)
         nsteps = 40
-        xmin = 9.5  # in µm
-        xmax = 10.5   # in µm
-        xrange = xmax - xmin
-        calibData = np.zeros(40)
-        xData = np.arange(xmin, xmax, xrange/nsteps)  # aquí xData es una variable muda, se usa solo dos veces
-        zMoveTo(self.actuator, xmin)  # no entiendo de dónde sale este actuator
+        zrange = 0.4  # en µm
+        old_z_param = self.adw.Get_FPar(72)
+        old_z = tools.convert(old_z_param, 'UtoX')
+        calibData = np.zeros(nsteps)
+        zData = np.linspace(old_z - zrange/2, old_z + zrange/2, nsteps)
 
+        was_running = self.adw.Process_Status(3)
+        if not was_running:
+            self.adw.Start_Process(3)
         time.sleep(0.100)
-        for i in range(nsteps):
-            zMoveTo(self.actuator, xmin + (i * 1/nsteps) * xrange)
+        for i, z in enumerate(zData):
+            z_f = tools.convert(z, 'XtoU')
+            self.adw.Set_FPar(32, z_f)
+            time.sleep(.125)  # Ojo con este parámetro
             self.update()
-            calibData[i] = self.focusSignal  # quien es focus signal?
-        plt.plot(xData, calibData, 'o')
+            calibData[i] = self.currentz
+        #     np.save(f'C:\\Data\\img_{i}-{int(z*1000)}pm.npy', self.image)
+        # np.save('C:\\Data\\zData.npy', np.array(zData))
+        # np.save('C:\\Data\\calib.npy', np.array(calibData))
+        print("Calibración")
+        print("z\tcm")
+        for z, cm in zip(zData, calibData):
+            print(f"{z}\t{cm}")
+        self.adw.Set_FPar(32, old_z_param)
+        time.sleep(0.500)
+        if not was_running:
+            self.adw.Stop_Process(3)
         time.sleep(0.200)
         self.viewtimer.start(self.xyz_time)
 
@@ -1256,16 +1206,13 @@ class Backend(QtCore.QObject):
         TODO: revisar para z y xy separados
         """
         self.adw.Set_FPar(46, tools.timeToADwin(pixeltime))
-        self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))  # Añado para z, focus.py
+        self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))
 
         # set-up actuator initial param script
         # MoveTo usa un script que actualiza estos valores, podemos confiar
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
-
-        # Duda con esto! 8/4/2024
         currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
-        # por qué no debo colocar una linea similar para current z_position
 
         x_f = tools.convert(currentXposition, 'XtoU')
         y_f = tools.convert(currentYposition, 'XtoU')
@@ -1274,31 +1221,34 @@ class Backend(QtCore.QObject):
         # set-up actuator initial params
         self.adw.Set_FPar(40, x_f)
         self.adw.Set_FPar(41, y_f)
-        self.adw.Set_FPar(32, z_f)  # Añado para z, focus.py
+        self.adw.Set_FPar(32, z_f)
+
+        # Para mi es igual a hacer esto:
+        # self.adw.Set_FPar(40, self.adw.Get_FPar(70))
+        # self.adw.Set_FPar(41, self.adw.Get_FPar(71))
+        # self.adw.Set_FPar(32, self.adw.Get_FPar(72))
 
         # Comento porque son cosas viejas (Andi)
-        # self.adw.Set_Par(40, 1) #Set_Par(self, Index, Value): Establece una variable global de tipo long con el valor especificado.
-        # self.adw.Set_Par(30, 1) #Añado para z, focus.py
+        # self.adw.Set_Par(40, 1)
+        # self.adw.Set_Par(30, 1)
 
     def actuator_xyz(self, x_f, y_f, z_f):
         """Setear los parámetros de tracking de la adwin mientras corre.
 
         Estos parámetros son usados por los procesos:
-            actuator_z.bas:
+            actuator_z.bas: (Proceso 3)
                 FPar_32 es el setpoint z
-            actuator_xy.bas:
+            actuator_xy.bas: (Proceso 4)
                 FPar_40 es el setpoint x
                 FPar_41 es el setpoint y
         """
-#        print(datetime.now(), '[xy_tracking] actuator x, y =', x_f, y_f)
-
         x_f = tools.convert(x_f, 'XtoU')
         y_f = tools.convert(y_f, 'XtoU')
-        z_f = tools.convert(z_f, 'XtoU')  # Añado para z, focus.py
+        z_f = tools.convert(z_f, 'XtoU')
 
         self.adw.Set_FPar(40, x_f)
         self.adw.Set_FPar(41, y_f)
-        self.adw.Set_FPar(32, z_f)  # Añado para z, focus.py
+        self.adw.Set_FPar(32, z_f)
 
         # Estas dos líneas son de los scripts viejos (ver .bas y .bak)
         # self.adw.Set_Par(40, 1)
@@ -1306,7 +1256,10 @@ class Backend(QtCore.QObject):
 
     def set_moveTo_param(self, x_f, y_f, z_f, n_pixels_x=128, n_pixels_y=128,
                          n_pixels_z=128, pixeltime=2000):
-        # Esta funcion se repite en xy_tracking y focus
+        """Setea los parámatros para mover a una posición x,y,z.
+
+        Ver moveTo y proceso 2 de ADwin.
+        """
         x_f = tools.convert(x_f, 'XtoU')
         y_f = tools.convert(y_f, 'XtoU')
         z_f = tools.convert(z_f, 'XtoU')
@@ -1322,8 +1275,7 @@ class Backend(QtCore.QObject):
         self.adw.Set_FPar(26, tools.timeToADwin(pixeltime))
 
     def moveTo(self, x_f, y_f, z_f):
-        """Moves to specified position."""
-        # Esta funcion se repite en xy_tracking y focus
+        """Move to specified position."""
         self.set_moveTo_param(x_f, y_f, z_f)
         self.adw.Start_Process(2)
 
@@ -1382,14 +1334,17 @@ class Backend(QtCore.QObject):
         self.reset()
         self.reset_data_arrays()
 
-        # TO DO: sync this with GUI checkboxes (Lantz typedfeat?)
+        # TODO: sync this with GUI checkboxes (Lantz typedfeat?)
         self.save_data_state = True
 
         if not stoplive:
             self.liveviewSignal.emit(False)
 
     def export_data(self):
-        """Export t and x, y for each Roi data into a .txt file"""
+        """Export t and x, y for each Roi data into a .txt file.
+
+        TODO: ver info z
+        """
         fname = self.folder + '/xy_data'
         # case distinction to prevent wrong filenaming when starting minflux
         # or psf measurement
@@ -1412,7 +1367,8 @@ class Backend(QtCore.QObject):
         print(datetime.now(), '[xy_tracking] xy data exported to', filename)
         print('Exported data shape', np.shape(savedData))
 
-        self.export_image()
+        # TODO: guardar frame final
+        # self.export_image()
 
         # if VIDEO:
         #     tifffile.imwrite(fname + 'video' + '.tif', np.array(self.video))
@@ -1427,31 +1383,32 @@ class Backend(QtCore.QObject):
         False -> don't save
         """
         self.save_data_state = val
-        if DEBUG:
-            print(datetime.now(), '[xy_tracking] save_data_state = {}'.format(
-                val))
+        _lgr.debug('[xy_tracking] save_data_state = %s', val)
 
     # antes se usaba roi_coordinates_array que se convertía a int en
     # ROIcoordinates
     @pyqtSlot(str, int, list)
-    def get_roi_info(self, roi_type, N, coordinates_list):
-        '''Toma la informacion del ROI que viene de emit_roi_info en el frontend
+    def get_roi_info(self, roi_type: str,
+                     N: int,
+                     coordinates_list: list[np.ndarray]):
+        """Toma la informacion del ROI que viene de emit_roi_info en el frontend.
+
+        Parameters
+        ----------
+            roi_type: str
+                'xy' o 'z'
+            N: int
+                Número de ROIs en la lista. Al pp.
+            coordinates_list: list of np.ndarray[4]
+                Lista de (xmin, xmax, ymin, ymax) de cada ROI en pixeles
+
         Connection: [frontend] roiInfoSignal
         Description: gets coordinates of the ROI in the GUI
-        '''
-        if DEBUG1:
-            print(datetime.now(), 'Estoy en get_roi_info')
+        """
         if roi_type == 'xy':
             self.roi_coordinates_list = coordinates_list  # LISTA
-            if DEBUG1:
-                print(datetime.now(), 'roi_coordinates_list: ',
-                      self.roi_coordinates_list)
-            if DEBUG:
-                print(datetime.now(), '[xy_tracking] got ROI coordinates list')
         elif roi_type == 'z':
-            self.zROIcoordinates = coordinates_list[0].astype(int) #ENTERO. coordinates_list en el caso de z se convierte a int poeque sólo tiene un valor
-            if DEBUG1:
-                print(datetime.now(), 'zROIcoordinates: ',self.zROIcoordinates)
+            self.zROIcoordinates = coordinates_list[0].astype(int)
 
     @pyqtSlot()
     def get_lock_signal(self): #Dejo esta funcion como está
@@ -1474,31 +1431,36 @@ class Backend(QtCore.QObject):
 
     @pyqtSlot(np.ndarray, np.ndarray)
     def get_move_signal(self, r, r_rel):
+        """Recibe de módulo Minflux para hacer patterns.
+
+        TODO: entender qué bien qué hacer. Parece que recibe posicione a las
+        que moverse.
+        TODO: si FPar_72 no está bien seteado esto se va a cualquier posición
+        """
         self.toggle_feedback(False)
-#        self.toggle_tracking(True)
+        # self.toggle_tracking(True)
         self.updateGUIcheckboxSignal.emit(self.tracking_value,
                                           self.feedback_active,
                                           self.save_data_state)
-        x_f, y_f, z_f = r
+        x_f, y_f = r
+        z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         self.actuator_xyz(x_f, y_f, z_f)
-        if DEBUG:
-            print(datetime.now(), '[xy_tracking] Moved to', r)
-#        # Lock again
-#        print(datetime.now(), '[xy_tracking] initial x and y', self.initialx, self.initialy)
-#        print(datetime.now(), '[xy_tracking] dx, dy', r_rel)
-##        self.initial = True # to lock at a new position, TO DO: fix relative position tracking
-#        self.initialx = self.currentx - r_rel[0] * 1000 # r_rel to nm
-#        self.initialy = self.currenty - r_rel[1] * 1000 # r_rel to nm
-#        print(datetime.now(), '[xy_tracking] initial x and y', self.initialx, self.initialy)
-#        self.toggle_feedback(True) # TO DO: fix each position lock
 
     def start_tracking_pattern(self):
-        # TODO: Ver que hace esto
+        """Se prepara para hacer un patrón.
+
+        Ver módulo Minflux
+
+        TODO: Terminar de entender
+        """
         self.pattern = True
         self.initcounter = self.counter
 
     def make_tracking_pattern(self, step):
-        """Poner las posiciones de referencia en un cuadrado."""
+        """Poner las posiciones de referencia en un cuadrado.
+
+        TODO: Ver cómo se concilia con start_tracking_pattern.
+        """
         if (step < 2) or (step > 5):
             return
         elif step == 2:
@@ -1518,7 +1480,7 @@ class Backend(QtCore.QObject):
 
     @pyqtSlot(str)
     def get_end_measurement_signal(self, fname):
-        """Procesa un pedido de fin de medida
+        """Procesa un pedido de fin de medida.
 
         Description: at the end of the measurement exports the xy data
         Signals
@@ -1535,25 +1497,31 @@ class Backend(QtCore.QObject):
         self.reset()
         self.reset_data_arrays()
         # comparar con la funcion de focus: algo que ver con focusTimer
+        if self.camON:
+            self.viewtimer.stop()
+            self.liveviewSignal.emit(False)
 
     @pyqtSlot(float)
     def get_focuslockposition(self, position):
+        """Actualiza en otro módulo la posición de lock de z.
+
+        Conectado con módulo SCAN. Sólo para registrar en el archivo de datos.
+        """
         if position == -9999:
-            position = self.setPoint
+            # Lo mas parecido es z
+            position = self.initialz * PX_Z
         else:
-            position = self.focusSignal  # Quien es focus signal
+            position = self.currentz
         self.focuslockpositionSignal.emit(position)
 
     def make_connection(self, frontend):
-        if DEBUG:
-            print("Connecting backend to frontend")
         frontend.roiInfoSignal.connect(self.get_roi_info)
-        # frontend.z_roiInfoSignal.connect(self.get_roi_info)
         frontend.closeSignal.connect(self.stop)
         frontend.saveDataSignal.connect(self.get_save_data_state)
         frontend.exportDataButton.clicked.connect(self.export_data)
         frontend.clearDataButton.clicked.connect(self.reset)
         frontend.clearDataButton.clicked.connect(self.reset_data_arrays)
+        # Falta botón de Calibrate con calibrate_z
         frontend.trackingBeadsBox.stateChanged.connect(
             lambda: self.toggle_tracking(frontend.trackingBeadsBox.isChecked())
             )
@@ -1565,9 +1533,12 @@ class Backend(QtCore.QObject):
             lambda: self.toggle_feedback(frontend.feedbackLoopBox.isChecked()))
         frontend.xyPatternButton.clicked.connect(
             lambda: self.make_tracking_pattern(1)
-            ) #duda con esto, comparar con línea análoga en xyz_tracking
+            )  # duda con esto, comparar con línea análoga en xyz_tracking
 
-        #La función toggle_feedback se utiliza como un slot de PyQt y se conecta al evento stateChanged de un cuadro de verificación llamado feedbackLoopBox. Su propósito es activar o desactivar el feedback (retroalimentación) para la corrección continua en el modo especificado.
+        # La función toggle_feedback se utiliza como un slot de PyQt y se
+        # conecta al evento stateChanged de un cuadro de verificación llamado
+        # feedbackLoopBox. Su propósito es activar o desactivar el feedback
+        # (retroalimentación) para la corrección continua en el modo especificado.
 
         # TO DO: clean-up checkbox create continous and discrete feedback loop
 
@@ -1576,34 +1547,31 @@ class Backend(QtCore.QObject):
         # (checked <-> active, not checked <-> inactive)
 
     @pyqtSlot()
-    def stop(self):  # se repite en xy y focus
+    def stop(self):
+        """Cierra TODO antes de terminar el programa.
+
+        viene del front.
+        """
         self.toggle_tracking_shutter(8, False)
         time.sleep(1)
         self.viewtimer.stop()
-        # prevent system to throw weird errors when not being able to close the camera, see uc480.py --> close()
-        self.reset()
-
         # Go back to 0 position
         x_0 = 0
         y_0 = 0
         z_0 = 0
         self.moveTo(x_0, y_0, z_0)
         self.camera.destroy_all()
-        print(datetime.now(), '[xyz_tracking] IDS camera shut down')
+        _lgr.info('[xyz_tracking] IDS camera shut down')
 
 
 if __name__ == '__main__':
-
     if not QtGui.QApplication.instance():
         app = QtGui.QApplication([])
     else:
         app = QtGui.QApplication.instance()
-
-    # app.setStyle(QtGui.QStyleFactory.create('fusion'))
     app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
 
     # initialize devices
-
     DEVICENUMBER = 0x1
     adw = ADwin.ADwin(DEVICENUMBER, 1)
     scan.setupDevice(adw)
@@ -1612,35 +1580,27 @@ if __name__ == '__main__':
     try:
         camera = ids_cam.IDS_U3()
     except Exception:
-        pass
+        print("Excepcion inicializando la cámara... seguimos")
 
     gui = Frontend()
-
-    if DEBUG:
-        print("gui class Frontend instanced, FC")
-
     worker = Backend(camera, adw)
 
-    print("connection 1")
     gui.make_connection(worker)
-    print("connection 2")
     worker.make_connection(gui)
 
     # Creamos un Thread y movemos el worker ahi, junto con sus timer, ahi
     # realizamos la conexión
-    xyThread = QtCore.QThread()
-    worker.moveToThread(xyThread)
-    worker.viewtimer.moveToThread(xyThread)
+    xyzThread = QtCore.QThread()
+    worker.moveToThread(xyzThread)
+    worker.viewtimer.moveToThread(xyzThread)
     # TODO: si este connect no se pasa al interior, no va a funcionar con otros
     # modulos. Yo haría una única función que mueva al worker y a todos sus
     # timers a un thread dado
     worker.viewtimer.timeout.connect(worker.update)
-    xyThread.start()
+    xyzThread.start()
 
     # initialize fpar_70, fpar_71, fpar_72 ADwin position parameters
-
     pos_zero = tools.convert(0, 'XtoU')
-
     worker.adw.Set_FPar(70, pos_zero)
     worker.adw.Set_FPar(71, pos_zero)
     worker.adw.Set_FPar(72, pos_zero)
