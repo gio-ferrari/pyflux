@@ -40,11 +40,11 @@ DEBUG = True
 DEBUG1 = True
 VIDEO = False
 
-_ = customLog
+_ = customLog  # Sólo para acallar warnings
 
 
-PX_SIZE = 33.5  # px size of camera in nm #antes 80.0 para Andor #33.5
-PX_Z = 20  # 20 nm/px for z in nm
+PX_SIZE = 23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
+PX_Z = 17  # 20 nm/px for z in nm
 
 
 class Frontend(QtGui.QFrame):
@@ -72,11 +72,11 @@ class Frontend(QtGui.QFrame):
         # initial ROI parameters
         self.ROInumber = 0  # siguiente ROIs xy a actualizar
         # Una lista en la que se guardarán los objetos ROI a graficar
-        self.roilist: list[viewbox_tools.ROI2] = []
+        self.roilist: list = []  # list[viewbox_tools.ROI2]
         self.roi_z: viewbox_tools.ROI2 = None
         # lista de graficos de desplazamientos de cada fiduciaria
-        self.xCurve: list[pg.PlotDataItem] = None
-        self.yCurve: list[pg.PlotDataItem] = None
+        self.xCurve: list = None  # list[pg.PlotDataItem]
+        self.yCurve: list = None  # list[pg.PlotDataItem]
 
         self.setup_gui()
 
@@ -400,6 +400,7 @@ class Frontend(QtGui.QFrame):
         # LiveView Button
         self.liveviewButton = QtGui.QPushButton('Camera LIVEVIEW')
         self.liveviewButton.setEnabled(True)
+        self.liveviewButton.setCheckable(True)
 
         # create xy ROI button
         self.xyROIButton = QtGui.QPushButton('xy ROI')
@@ -528,11 +529,11 @@ class Frontend(QtGui.QFrame):
                     self.xyzGraph.xPlot.removeItem(self.xCurve[i])
                     self.xyzGraph.yPlot.removeItem(self.yCurve[i])
                     # TODO: Promedio, z e AvgInt???
-            # self.xCurve = [0] * len(self.roilist)
+            self.xCurve = [0] * len(self.roilist)
             for i in range(len(self.roilist)):
                 self.xCurve[i] = self.xyzGraph.xPlot.plot(pen='w', alpha=0.3)
                 self.xCurve[i].setAlpha(0.3, auto=False)
-            # self.yCurve = [0] * len(self.roilist)
+            self.yCurve = [0] * len(self.roilist)
             for i in range(len(self.roilist)):
                 self.yCurve[i] = self.xyzGraph.yPlot.plot(pen='r', alpha=0.3)
                 self.yCurve[i].setAlpha(0.3, auto=False)
@@ -576,7 +577,7 @@ class Backend(QtCore.QObject):
     - focuslockpositionSignal:
         To: [scan] get current focus lock position
     """
-    roi_coordinates_list: list[np.ndarray] = []  # lista de tetradas de ROIs xy
+    roi_coordinates_list: list = []  # list[np.ndarray] lista de tetradas de ROIs xy
     zROIcoordinates: np.ndarray = np.ndarray([0, 0, 0, 0], dtype=int)
 
     def __init__(self, camera, adw, *args, **kwargs):
@@ -709,7 +710,8 @@ class Backend(QtCore.QObject):
 
             if self.feedback_active:
                 t0 = time.time()
-                self.correct()
+                self.correct_xy()
+                self.correct_z()
                 t1 = time.time()
                 print('correct took', (t1-t0)*1000, 'ms')
 
@@ -1019,9 +1021,9 @@ class Backend(QtCore.QObject):
 
         security_thr = 0.35  # in µm
 
-        # TODO: chequear signos con platina
+        # HINT: los signos están acorde a la platina y la rotación de la imagen
         if np.abs(xmean) > threshold:
-            dx = -xmean / 1000  # conversion to µm
+            dx = xmean / 1000  # conversion to µm
             if abs(dx) < xy_far_threshold:
                 dx *= xy_correct_factor
 
@@ -1072,7 +1074,7 @@ class Backend(QtCore.QObject):
         # Thresholds en unidades de self.z (nm)
         z_threshold = 3
         z_far_threshold = 12
-        z_correct_factor = 1
+        z_correct_factor = .6
 
         security_thr = 0.35  # in µm
 
@@ -1390,7 +1392,7 @@ class Backend(QtCore.QObject):
     @pyqtSlot(str, int, list)
     def get_roi_info(self, roi_type: str,
                      N: int,
-                     coordinates_list: list[np.ndarray]):
+                     coordinates_list: list):  # coordinates_list: list[np.ndarray]
         """Toma la informacion del ROI que viene de emit_roi_info en el frontend.
 
         Parameters
