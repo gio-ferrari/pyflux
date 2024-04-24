@@ -590,10 +590,18 @@ class Backend(QtCore.QObject):
         # TODO: change to get folder from microscope
         today = str(date.today()).replace('-', '')
         root = 'C:\\Data\\'
-        folder = root + today
-        print("Name of folder: ", folder)
+        self.folder = root + today
+        print("Name of folder: ", self.folder)
+        try:
+            os.mkdir(self.folder)
+        except FileExistsError:
+            _lgr.info("The directory already existed: %s", self.folder)
+        except Exception:
+            _lgr.error("Creation of the directory %s failed", self.folder)
+        else:
+            _lgr.info("Successfully created the directory: %s", self.folder)
         filename = '\\xydata'
-        self.filename = os.path.join(folder, filename)
+        self.filename = os.path.join(self.folder, filename)
         # Se llama viewTimer pero es el unico para todo, no sólo para view
         # Ojo: aquí coloqué viewtimer porque es el que se usa a lo largo del
         # código, pero en xyz_tracking se usa view_timer
