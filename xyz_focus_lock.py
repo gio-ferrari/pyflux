@@ -128,10 +128,10 @@ class Frontend(QtGui.QFrame):
             coordinates = np.array([xmin, xmax, ymin, ymax])
             coordinates_list = [coordinates]
 
-            # Andi changed 0 to 1, creo que no pasa nada
             self.roiInfoSignal.emit('z', 1, coordinates_list)
         else:
             _lgr.error("Unknown ROI type asked: %s", roi_type)
+            # Se llega acá cuando se apaga el tracking... hay un emit_roi info sin param
 
     def delete_roi(self):
         """Elimina la última ROI xy."""
@@ -441,7 +441,7 @@ class Frontend(QtGui.QFrame):
         self.trackingBeadsBox = QtGui.QCheckBox('Track xy fiducials')
         self.trackingBeadsBox.stateChanged.connect(
             self.setup_data_curves) #agrego esta lìnea porque el tracking no funciona
-        self.trackingBeadsBox.stateChanged.connect(self.emit_roi_info)
+        self.trackingBeadsBox.stateChanged.connect(self.emit_roi_info)  # 'xy'?
 
         # En xyz_tracking está la función def setup_data_curves en frontend
         # aquí no, está relacionada con piezo? o es necesaria aquí?

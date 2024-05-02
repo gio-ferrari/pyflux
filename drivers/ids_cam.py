@@ -17,11 +17,13 @@ When running in stand alone mode device.work() gives a camera photo
 
 import sys
 from ids_peak import ids_peak
-from ids_peak_ipl import ids_peak_ipl 
+from ids_peak_ipl import ids_peak_ipl
 import matplotlib.pyplot as plt
 from ids_peak import ids_peak_ipl_extension
-import numpy as np
 import time
+import logging as _lgn
+
+_lgr = _lgn.getLogger(__name__)
 
 FPS_LIMIT = 30
 
@@ -95,9 +97,9 @@ class IDS_U3:
                 self.__nodemap_remote_device.FindNode("UserSetLoad").WaitUntilDone()
             except ids_peak.Exception:
                 # Userset is not available
+                _lgr.debug("UserSet not available")
                 pass
-            #Setting exposure time
-            
+            # Setting exposure time
             min_exposure_time = 0
             max_exposure_time = 0
             exposure_time_value = 50000.0 #us
@@ -105,28 +107,37 @@ class IDS_U3:
             # Get exposure range. All values in microseconds
             min_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Minimum()
             max_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Maximum()
-            #print("Min_exposure_time: ", min_exposure_time, "us.") #Min_exposure_time:  28.527027027027028 us
-            #print("Max exposure time: ", max_exposure_time, "us.") # Max exposure time:  2000001.6351351351 us = 2000 ms = 2 s
+            _lgr.debug("Min_exposure_time: %s µs", min_exposure_time) #Min_exposure_time:  28.527027027027028 us
+            _lgr.debug("Max exposure time: %s µs", max_exposure_time) # Max exposure time:  2000001.6351351351 us = 2000 ms = 2 s
             # if self.__nodemap_remote_device.FindNode("ExposureTime").HasConstantIncrement():
             #      inc_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Increment()
             # else:
             #     # If there is no increment, it might be useful to choose a suitable increment for a GUI control element (e.g. a slider)
             #      inc_exposure_time = 1000
- 
-            # Get the current exposure time
-            exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Value() #This is a default value
-            #print("Current exposure time: ", exposure_time, "us.", type(exposure_time)) #Current exposure time:  14998.45945945946 us = 15ms
-            # Set exposure time to exposure_time_value
+
+             # Set exposure time to exposure_time_value
             self.__nodemap_remote_device.FindNode("ExposureTime").SetValue(exposure_time_value)
             exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Value() #This is a default value
             print("NEW Current exposure time: ", exposure_time/1000.0, "ms.")
+            try:
+                _lgr.debug("Modo buffering camara actual: %s",
+                           self.__nodemap_remote_device.FindNode("StreamBufferHandlingMode").CurrentEntry().SymbolicValue())
+                # Sólo para debug inicial, borrar luego
+                allEntries = self.__nodemap_remote_device.FindNode("StreamBufferHandlingMode").Entries()
+                availableEntries = []
+                for entry in allEntries:
+                    if (entry.AccessStatus() != ids_peak.NodeAccessStatus_NotAvailable
+                            and entry.AccessStatus() != ids_peak.NodeAccessStatus_NotImplemented):
+                        availableEntries.append(entry.SymbolicValue())
+                _lgr.debug("Modos disponibles: %s". availableEntries)
+                self.__nodemap_remote_device.FindNode("StreamBufferHandlingMode").SetCurrentEntry("NewestOnly")
+            except Exception as e:
+                _lgr.error("Error seteando modo de buffering de la cámara: %s", e)
             return True
-        
         except ids_peak.Exception as e:
             print( "Exception", str(e))
-
             return False
-        
+
     def set_roi(self,x, y, width, height):
         try:
             # Get the minimum ROI and set it. After that there are no size restrictions anymore
