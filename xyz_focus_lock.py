@@ -726,7 +726,7 @@ class Backend(QtCore.QObject):
         # De acá para abajo es para hacer un patrón para algún test
         if self.pattern:
             val = (self.counter - self.initcounter)
-            reprate = 50  # Antes era 10 para andor
+            reprate = 10  # Antes era 10 para andor
             if (val % reprate == 0):
                 self.make_tracking_pattern(val//reprate)
         # counter to check how many times this function is executed
@@ -1465,13 +1465,14 @@ class Backend(QtCore.QObject):
         """
         self.pattern = True
         self.initcounter = self.counter
+        self.save_data_state = True
 
     def make_tracking_pattern(self, step):
         """Poner las posiciones de referencia en un cuadrado.
 
         TODO: Ver cómo se concilia con start_tracking_pattern.
         """
-        if (step < 2) or (step > 5):
+        if step < 2:
             return
         elif step == 2:
             dist = np.array([0.0, 20.0])
@@ -1481,6 +1482,9 @@ class Backend(QtCore.QObject):
             dist = np.array([0.0, -20.0])
         elif step == 5:
             dist = np.array([-20.0, 0.0])
+        else:
+            self.pattern = False
+            return
 
         self.initialx = self.initialx + dist[0]
         self.initialy = self.initialy + dist[1]
@@ -1542,7 +1546,7 @@ class Backend(QtCore.QObject):
         frontend.feedbackLoopBox.stateChanged.connect(
             lambda: self.toggle_feedback(frontend.feedbackLoopBox.isChecked()))
         frontend.xyPatternButton.clicked.connect(
-            lambda: self.make_tracking_pattern(1)
+            lambda: self.start_tracking_pattern
             )  # duda con esto, comparar con línea análoga en xyz_tracking
 
         # La función toggle_feedback se utiliza como un slot de PyQt y se
