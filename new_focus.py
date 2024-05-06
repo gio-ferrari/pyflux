@@ -450,12 +450,21 @@ class Backend(QtCore.QObject):
 
         # Coordenadas del ROI en pixeles (enteros)
         self.ROIcoordinates: np.ndarray = np.array([0, 0, 0, 0], dtype=int)
+        
+        #Directorio para trabajar
         today = str(date.today()).replace('-', '') # TO DO: change to get folder from microscope
         root = 'C:\\Data\\'
         folder = root + today
+        print("folder:", folder)
+        subfolder = 'focus_mode'
+        folder_with_subfolder = os.path.join(folder, subfolder)
+        if not os.path.exists(folder_with_subfolder):
+            os.makedirs(folder_with_subfolder)
+        print("folder:", folder_with_subfolder)
 
-        filename = r'zdata.txt'
-        self.filename = os.path.join(folder, filename)
+        filename = r'focus'
+        self.filename = os.path.join(folder_with_subfolder, filename)
+        print("filename: ", self.filename)
 
         self.save_data_state = False
 
@@ -493,7 +502,7 @@ class Backend(QtCore.QObject):
         self.pxSize = params['pxSize']
         print(datetime.now(), ' [focus] got px size', self.pxSize, ' nm')
 
-    def set_actuator_param(self, pixeltime=1000):
+    def set_actuator_param(self, pixeltime=1000): #pixeltime in µs 
         """Manda a la adwin la posición buscada en z."""
         if DEBUG:
             print("Inside set_actuator_param")
@@ -818,15 +827,29 @@ class Backend(QtCore.QObject):
         if DEBUG:
             print("Inside calibrate")
         # TODO: fix calibration function  HECHO!
+        fname = self.filename
+
+        if fname[0] == '!':
+            filename = fname[1:]
+        else:
+            filename = tools.getUniqueName(fname)
+        filename = filename + '_calib_data.txt'
+        print("archivo nombre: ", filename)
+        
+        self.z_calib_array = []
+        self.cm_calib_array = []
+        
         self.focusTimer.stop()
         time.sleep(0.100)
 
         nsteps = 40
-        zmin = 9.5  # in µm
-        zmax = 10.5   # in µm
-
+        savedData = np.zeros((2, nsteps))
+        zrange = .5  # in µm
+        
+        old_z_param = self.adw.Get_FPar(72)
+        old_z = tools.convert(old_z_param, 'UtoX')
         calibData = np.zeros(nsteps)
-        zData = np.linspace(zmin, zmax, nsteps)
+        zData = np.linspace(old_z - zrange/2, old_z + zrange/2, nsteps)
 
         # zMoveTo(self.adw, zmin)
         self.adw.Start_Process(3)
@@ -837,17 +860,25 @@ class Backend(QtCore.QObject):
             time.sleep(.125)
             self.update()
             calibData[i] = self.focusSignal
-        #     np.save(f'C:\\Data\\img_{i}-{int(z*1000)}pm.npy', self.image)
-        # np.save('C:\\Data\\zData.npy', np.array(zData))
-        # np.save('C:\\Data\\calib.npy', np.array(calibData))
-        print("Calibración")
-        print("z\tcm")
+            np.save(f'C:\\Data\\20240426\\calib_closed_imagenes\\calib_1um_roi_chico\\img_{i}-{int(z*1000)}pm.npy', self.image)
+        np.save('C:\\Data\\20240426\\calib_closed_imagenes\\calib_1um_roi_chico\\zData.npy', np.array(zData))
+        np.save('C:\\Data\\20240426\\calib_closed_imagenes\\calib_1um_roi_chico\\calib.npy', np.array(calibData))
         for z, cm in zip(zData, calibData):
-            print(f"{z}\t{cm}")
-        self.adw.Stop_Process(3)
+            self.z_calib_array.append(z)
+            self.cm_calib_array.append(cm)
+            
+        self.adw.Set_FPar(32, old_z_param)
         time.sleep(0.200)
+        self.adw.Stop_Process(3)
         self.focusTimer.start(self.focusTime)
 
+        savedData[0, :] = np.array(self.z_calib_array)
+        savedData[1, :] = np.array(self.cm_calib_array)
+
+        np.savetxt(filename, savedData.T, header='z (px), cm (px)')
+
+        print(datetime.now(), '[focus] Calibration z data exported to', filename)
+        
     def reset(self):
         """Resetear información para graficar."""
         if DEBUG:

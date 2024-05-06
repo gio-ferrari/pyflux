@@ -23,6 +23,9 @@ from ids_peak import ids_peak_ipl_extension
 import time
 import logging as _lgn
 
+_lgn.basicConfig(level=_lgn.INFO,
+                 format='%(asctime)s:%(name)s:%(levelname)s:%(message)s',
+                 )
 _lgr = _lgn.getLogger(__name__)
 
 FPS_LIMIT = 30
@@ -97,7 +100,7 @@ class IDS_U3:
                 self.__nodemap_remote_device.FindNode("UserSetLoad").WaitUntilDone()
             except ids_peak.Exception:
                 # Userset is not available
-                _lgr.debug("UserSet not available")
+                _lgr.info("UserSet not available")
                 pass
             # Setting exposure time
             min_exposure_time = 0
@@ -107,8 +110,8 @@ class IDS_U3:
             # Get exposure range. All values in microseconds
             min_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Minimum()
             max_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Maximum()
-            _lgr.debug("Min_exposure_time: %s µs", min_exposure_time) #Min_exposure_time:  28.527027027027028 us
-            _lgr.debug("Max exposure time: %s µs", max_exposure_time) # Max exposure time:  2000001.6351351351 us = 2000 ms = 2 s
+            _lgr.info("Min_exposure_time: %s µs", min_exposure_time) #Min_exposure_time:  28.527027027027028 us
+            _lgr.info("Max exposure time: %s µs", max_exposure_time) # Max exposure time:  2000001.6351351351 us = 2000 ms = 2 s
             # if self.__nodemap_remote_device.FindNode("ExposureTime").HasConstantIncrement():
             #      inc_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Increment()
             # else:
@@ -120,17 +123,19 @@ class IDS_U3:
             exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Value() #This is a default value
             print("NEW Current exposure time: ", exposure_time/1000.0, "ms.")
             try:
-                _lgr.debug("Modo buffering camara actual: %s",
-                           self.__nodemap_remote_device.FindNode("StreamBufferHandlingMode").CurrentEntry().SymbolicValue())
+                ds = self.__datastream.NodeMaps()
+                ds = ds[0]
+                _lgr.info("Modo buffering camara actual: %s",
+                           ds.FindNode("StreamBufferHandlingMode").CurrentEntry().SymbolicValue())
                 # Sólo para debug inicial, borrar luego
-                allEntries = self.__nodemap_remote_device.FindNode("StreamBufferHandlingMode").Entries()
+                allEntries = ds.FindNode("StreamBufferHandlingMode").Entries()
                 availableEntries = []
                 for entry in allEntries:
                     if (entry.AccessStatus() != ids_peak.NodeAccessStatus_NotAvailable
                             and entry.AccessStatus() != ids_peak.NodeAccessStatus_NotImplemented):
                         availableEntries.append(entry.SymbolicValue())
-                _lgr.debug("Modos disponibles: %s". availableEntries)
-                self.__nodemap_remote_device.FindNode("StreamBufferHandlingMode").SetCurrentEntry("NewestOnly")
+                _lgr.info("Modos disponibles: %s", availableEntries)
+                ds.FindNode("StreamBufferHandlingMode").SetCurrentEntry("NewestOnly")
             except Exception as e:
                 _lgr.error("Error seteando modo de buffering de la cámara: %s", e)
             return True

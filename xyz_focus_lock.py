@@ -44,7 +44,7 @@ _ = customLog  # Sólo para acallar warnings
 
 
 PX_SIZE = 23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
-PX_Z = 17  # 20 nm/px for z in nm
+PX_Z = 16  # 20 nm/px for z in nm
 
 
 class Frontend(QtGui.QFrame):
@@ -514,7 +514,6 @@ class Frontend(QtGui.QFrame):
 
         self.liveviewButton.clicked.connect(
             lambda: self.toggle_liveview(self.liveviewButton.isChecked()))
-        print("liveviewButton connected to toggle liveview - line 431")
 
     # aquí debería ir esta función de ser necesario, pruebo descomentando para
     # saber si debe ir o no
@@ -706,22 +705,22 @@ class Backend(QtCore.QObject):
             t0 = time.time()
             self.track('xy')
             t1 = time.time()
-            print('track xy took', (t1-t0)*1000, 'ms')
+            # print('track xy took', (t1-t0)*1000, 'ms')
             t0 = time.time()
             self.track('z')
             t1 = time.time()
-            print('track z took', (t1-t0)*1000, 'ms')
+            # print('track z took', (t1-t0)*1000, 'ms')
             t0 = time.time()
             self.update_graph_data()
             t1 = time.time()
-            print('update graph data took', (t1-t0)*1000, 'ms')
+            # print('update graph data took', (t1-t0)*1000, 'ms')
 
             if self.feedback_active:
                 t0 = time.time()
                 self.correct_xy()
                 self.correct_z()
                 t1 = time.time()
-                print('correct took', (t1-t0)*1000, 'ms')
+                # print('correct took', (t1-t0)*1000, 'ms')
 
         # De acá para abajo es para hacer un patrón para algún test
         if self.pattern:
@@ -938,7 +937,7 @@ class Backend(QtCore.QObject):
         poptG, pcovG = opt.curve_fit(PSF.gaussian2D, (Mx_sub, My_sub),
                                      array_sub.ravel(), p0=initial_guess_G)
         perr = np.sqrt(np.diag(pcovG))
-        print('perr', perr)
+        # print('perr', perr)
 
         # retrieve results
         poptG = np.around(poptG, 2)
@@ -961,7 +960,7 @@ class Backend(QtCore.QObject):
         """
         # Calculate average intensity in the image to check laser fluctuations
         self.avgInt = np.mean(self.image)
-        print('Average intensity', self.avgInt)
+        # print('Average intensity', self.avgInt)
 
         # xy track routine of N=size fiducial AuNP
         if track_type == 'xy':
