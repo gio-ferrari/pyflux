@@ -599,8 +599,10 @@ class Backend(QtCore.QObject):
             _lgr.error("Creation of the directory %s failed", self.folder)
         else:
             _lgr.info("Successfully created the directory: %s", self.folder)
-        filename = '\\xydata'
-        self.filename = os.path.join(self.folder, filename)
+        xy_filename = '\\xy_data'
+        self.xy_filename = os.path.join(self.folder, xy_filename)
+        z_filename = '\\z_data'
+        self.z_filename = os.path.join(self.folder, z_filename)
         # Se llama viewTimer pero es el unico para todo, no sólo para view
         # Ojo: aquí coloqué viewtimer porque es el que se usa a lo largo del
         # código, pero en xyz_tracking se usa view_timer
@@ -789,7 +791,7 @@ class Backend(QtCore.QObject):
         Description: toggles ON/OFF tracking of fiducial fluorescent beads.
         Drift correction feedback loop is not automatically started.
         """
-        self.startTime = time.time()
+        self.startTime_xy = self.startTime_z = time.time()
         if val is True:
             self.reset()
             self.reset_data_arrays()
@@ -989,17 +991,13 @@ class Backend(QtCore.QObject):
             for i, roi in enumerate(self.roi_coordinates_list):
                 self.x[i] = self.currentx[i] - self.initialx[i]
                 self.y[i] = self.currenty[i] - self.initialy[i]
-                self.currentTime = time.time() - self.startTime
+                self.currentTime = time.time() - self.startTime_xy
 
             if self.save_data_state:
                 self.time_array[self.j] = self.currentTime
                 self.x_array[self.j, :] = self.x + self.displacement[0]
                 self.y_array[self.j, :] = self.y + self.displacement[1]
                 self.j += 1
-
-                if self.j >= (self.buffersize):
-                    self.export_data()
-                    self.reset_data_arrays()
 
         # z track of the reflected IR beam
         # Revisar esto del trackeo en z, no puedo correlacionar con focus.py
@@ -1009,6 +1007,15 @@ class Backend(QtCore.QObject):
                 self.initialz = self.currentz
                 self.initial_focus = False
             self.z = (self.currentz - self.initialz) * PX_Z  # self.z in nm
+            if self.save_data_state:
+                self.z_time_array[self.j_z] = time.time() - self.startTime_z
+                self.z_array[self.j_z] = self.currentz
+                self.j_z += 1
+
+        if self.j >= self.buffersize or self.j_z >= (self.buffersize):
+            self.export_data()
+            self.reset_data_arrays()
+
 
     def correct_xy(self, mode='continous'):
         """Corrige todos los ejes."""
@@ -1170,9 +1177,10 @@ class Backend(QtCore.QObject):
             self.initial_focus = True
             self.track('z')
         self.correct_z(mode='discrete')
-        if self.save_data_state:
-            self.time_array.append(self.currentTime)
-            self.z_array.append(self.currentz)
+        # if self.save_data_state:
+        #     self.time_array.append(self.currentTime)
+        #     self.z_array[self.j_z] = self.currentz
+        #     self.j_z += 1
         self.zIsDone.emit(True, self.target_z)
 
     def calibrate_z(self):
@@ -1307,7 +1315,7 @@ class Backend(QtCore.QObject):
         self.avgIntData = np.zeros(self.npoints)
         self.time = np.zeros(self.npoints)
         self.ptr = 0  # Posición en los buffers de graficación
-        self.startTime = time.time()
+        self.startTime_xy = self.startTime_z = time.time()
         # ----------- Salen de focus.py se usan en update_stats
         # self.max_dev = 0  
         # self.std = 0
@@ -1325,8 +1333,10 @@ class Backend(QtCore.QObject):
         self.y_array = np.zeros((self.buffersize,
                                  len(self.roi_coordinates_list)),
                                 dtype=np.float16)
-        self.z_array = []  # TODO: hacer consistente con xy. z no se graba
+        # self.z_array = []  # TODO: hacer consistente con xy. z no se graba
+        self.z_array = np.zeros((self.buffersize,), dtype=np.float16)
         self.j = 0  # iterator on the data arrays
+        self.j_z = 0
 
     # Está en xy y en focus. Creo que no está conectado a nada (A PSF, Andi)
     @pyqtSlot(bool)
@@ -1354,14 +1364,14 @@ class Backend(QtCore.QObject):
 
         TODO: ver info z
         """
-        fname = self.folder + '/xy_data'
+        fname = self.xy_filename
         # case distinction to prevent wrong filenaming when starting minflux
         # or psf measurement
         if fname[0] == '!':
-            filename = fname[1:]
+            basefilename = fname[1:]
         else:
-            filename = tools.getUniqueName(fname)
-        filename = filename + '.txt'
+            basefilename = tools.getUniqueName(fname)
+        filename = basefilename + '.txt'
 
         size = self.j
         N_NP = len(self.roi_coordinates_list)
@@ -1381,6 +1391,18 @@ class Backend(QtCore.QObject):
 
         # if VIDEO:
         #     tifffile.imwrite(fname + 'video' + '.tif', np.array(self.video))
+        
+        filename = self.z_filename + '_zdata.txt'
+
+        size = self.j_z
+        savedData = np.zeros((2, size))
+
+        savedData[0, :] = np.array(self.time_array)
+        savedData[1, :] = self.z_array[0: self.j_z]
+        
+        np.savetxt(filename, savedData.T, header='t (s), z (px)')
+        
+        print(datetime.now(), '[focus] z data exported to', filename)
 
     # Dejo esta funcion como está, se repite en xy y en focus.py
     @pyqtSlot(bool)
@@ -1420,7 +1442,7 @@ class Backend(QtCore.QObject):
             self.zROIcoordinates = coordinates_list[0].astype(int)
 
     @pyqtSlot()
-    def get_lock_signal(self): #Dejo esta funcion como está
+    def get_lock_signal(self):  # Dejo esta funcion como está
         """Activa tracking. No es muy claro qué función cumple.
 
         Connection: [minflux] xyzStartSignal
@@ -1500,7 +1522,7 @@ class Backend(QtCore.QObject):
         -------
             From: [minflux] xyzEndSignal or [psf] endSignal
         """
-        self.filename = fname
+        self.xy_filename = fname
         self.export_data()
         # TODO: decide whether I want feedback ON/OFF at the end of measurement
         self.toggle_feedback(False)
