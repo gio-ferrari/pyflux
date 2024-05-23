@@ -829,8 +829,8 @@ class Backend(QtCore.QObject):
             # self.reset() 
             # self.update()
             if not self.tracking_value:
-                print("NO activaste el tracking!!!!!")
-                self.toggle_tracking(True)
+                print("NO activaste el tracking!!!!! (Yo tampoco)")
+                # self.toggle_tracking(True)
             self.feedback_active = True
 
             # set up and start actuator process
@@ -847,7 +847,7 @@ class Backend(QtCore.QObject):
                 print(datetime.now(), ' [focus] Feedback loop ON')
         elif val is False:
             self.feedback_active = False
-            if mode == 'continous':
+            if True:  #  mode == 'continous':
                 self.adw.Stop_Process(4)
                 self.adw.Stop_Process(3)
                 print(datetime.now(), '[xy_tracking] Process 4 stopped')
@@ -1043,7 +1043,7 @@ class Backend(QtCore.QObject):
             print(datetime.now(),
                   '[xyz_tracking] xy Correction movement larger than 200 nm,'
                   ' active correction turned OFF')
-            self.toggle_feedback(False)
+            self.toggle_feedback(False, mode)
         else:
             # compensate for the mismatch between camera/piezo system of
             # reference
@@ -1094,7 +1094,7 @@ class Backend(QtCore.QObject):
             print(datetime.now(),
                   '[xyz_tracking] Z Correction movement larger than 200 nm,'
                   ' active correction turned OFF')
-            self.toggle_feedback(False)
+            self.toggle_feedback(False, mode)
         else:
             # add correction to piezo position
             targetXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
@@ -1415,7 +1415,7 @@ class Backend(QtCore.QObject):
         Description: gets coordinates of the ROI in the GUI
         """
         if roi_type == 'xy':
-            self.roi_coordinates_list = coordinates_list  # LISTA
+            self.roi_coordinates_list = coordinates_list[:]  # LISTA
         elif roi_type == 'z':
             self.zROIcoordinates = coordinates_list[0].astype(int)
 
