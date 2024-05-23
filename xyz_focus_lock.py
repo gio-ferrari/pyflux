@@ -911,10 +911,10 @@ class Backend(QtCore.QObject):
         # en el código original era 10, pero lo cambié porque así está en xyz_tracking
         xrange = 15  # in px
         yrange = 15  # in px
-        xmin_id = int(x_center_id-xrange)
-        xmax_id = int(x_center_id+xrange)
-        ymin_id = int(y_center_id-yrange)
-        ymax_id = int(y_center_id+yrange)
+        xmin_id = max(0, int(x_center_id - xrange))
+        xmax_id = min(int(x_center_id + xrange), xmax-xmin)
+        ymin_id = max(int(y_center_id - yrange), 0)
+        ymax_id = min(int(y_center_id + yrange), ymax-ymin)
 
         array_sub = array[xmin_id:xmax_id, ymin_id:ymax_id]
         xsubsize = 2 * xrange
