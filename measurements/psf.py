@@ -18,6 +18,10 @@ from tkinter import Tk, filedialog
 
 import tools.tools as tools
 import imageio as iio 
+from tools import customLog
+import logging as _lgn
+
+_lgr = _lgn.getLogger(__name__)
 
 π = np.pi
 
@@ -280,25 +284,23 @@ class Backend(QtCore.QObject):
         
         self.shutterSignal.emit(7, False)
         self.shutterSignal.emit(11, False)
-        
-        print(datetime.now(), '[psf] PSF measurement started')
-          
+
+        _lgr.info('PSF measurement started')
+
         self.xyStopSignal.emit(True)
         self.zStopSignal.emit()
-        
-        #open IR and tracking shutter
+
+        # open IR and tracking shutter
         self.shutterSignal.emit(5, True)
         self.shutterSignal.emit(6, True)
-        
         self.moveToInitialSignal.emit()
 
-        
         self.data = np.zeros((self.totalFrameNum, self.nPixels, self.nPixels))
-        print(datetime.now(), '[psf] Data shape is', np.shape(self.data))
+        _lgr.debug('Data shape is %s', np.shape(self.data))
         self.xy_flag = True
         self.z_flag = True
         self.scan_flag = True
-    
+
         self.measTimer.start(0)
         
     def stop(self):
@@ -320,78 +322,57 @@ class Backend(QtCore.QObject):
         print(datetime.now(), '[psf] PSF measurement ended')
         
     def loop(self):
-        
+
         if self.i == 0:
             initial = True
         else:
             initial = False
-      
+
         if self.xy_flag:
-            
             self.xySignal.emit(True, initial)
             self.xy_flag = False
-            
-            if DEBUG:
-                print(datetime.now(), '[psf] xy signal emitted ({})'.format(self.i))
-            
+            _lgr.debug(' xy signal emitted (%s)', self.i)
         if self.xyIsDone:
-            
             if self.z_flag:
-                      
                 self.zSignal.emit(True, initial)
                 self.z_flag = False
-                
-                if DEBUG:
-                    print(datetime.now(), '[psf] z signal emitted ({})'.format(self.i))
+                _lgr.debug('z signal emitted (%s)', self.i)
 
             if self.zIsDone:
-                
                 shutternum = self.i // self.nFrames + 1
-    
                 if self.scan_flag:
-                    
                     if not self.alignMode:
                         self.shutterSignal.emit(shutternum, True)
-                        
-                    initialPos = np.array([self.target_x, self.target_y, 
+                    initialPos = np.array([self.target_x, self.target_y,
                                            self.target_z], dtype=np.float64)
-                      
                     self.scanSignal.emit(True, 'frame', initialPos)
                     self.scan_flag = False
-                    
-                    if DEBUG:
-                        print(datetime.now(), 
-                              '[psf] scan signal emitted ({})'.format(self.i))
-                        
+                    _lgr.debug('scan signal emitted (%s)', self.i)
+
                 if self.scanIsDone:
-                   
                     if not self.alignMode:
                         self.shutterSignal.emit(shutternum, False)
-                    
                     completed = ((self.i+1)/self.totalFrameNum) * 100
                     self.progressSignal.emit(completed)
-                                    
+
                     self.xy_flag = True
                     self.z_flag = True
                     self.scan_flag = True
                     self.xyIsDone = False
                     self.zIsDone = False
                     self.scanIsDone = False
-                    
+
                     self.data[self.i, :, :] = self.currentFrame
-                    
+
                     print(datetime.now(), 
                           '[psf] PSF {} of {}'.format(self.i+1, 
                                                       self.totalFrameNum))
-                                        
+
                     if self.i < self.totalFrameNum-1:
-                    
                         self.i += 1
-                    
                     else:
-                        
                         self.stop()
-                                            
+
     def export_data(self):
   
         fname = self.filename

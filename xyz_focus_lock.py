@@ -599,9 +599,9 @@ class Backend(QtCore.QObject):
             _lgr.error("Creation of the directory %s failed", self.folder)
         else:
             _lgr.info("Successfully created the directory: %s", self.folder)
-        xy_filename = '\\xy_data'
+        xy_filename = 'xy_data'
         self.xy_filename = os.path.join(self.folder, xy_filename)
-        z_filename = '\\z_data'
+        z_filename = 'z_data'
         self.z_filename = os.path.join(self.folder, z_filename)
         # Se llama viewTimer pero es el unico para todo, no sólo para view
         # Ojo: aquí coloqué viewtimer porque es el que se usa a lo largo del
@@ -831,8 +831,8 @@ class Backend(QtCore.QObject):
             # self.reset() 
             # self.update()
             if not self.tracking_value:
-                print("NO activaste el tracking!!!!! (Yo tampoco)")
-                # self.toggle_tracking(True)
+                print("NO activaste el tracking!!!!!")
+                self.toggle_tracking(True)
             self.feedback_active = True
 
             # set up and start actuator process
@@ -1327,6 +1327,7 @@ class Backend(QtCore.QObject):
     def reset_data_arrays(self):
         """Reset/create buffers holding measured positions vs time."""
         self.time_array = np.zeros(self.buffersize, dtype=np.float16)
+        self.z_time_array = np.zeros(self.buffersize, dtype=np.float16)
         self.x_array = np.zeros((self.buffersize,
                                  len(self.roi_coordinates_list)),
                                 dtype=np.float16)
@@ -1347,6 +1348,7 @@ class Backend(QtCore.QObject):
         Description: stops liveview, tracking, feedback if they where running
         to start the psf measurement with discrete xy - z corrections
         """
+        _lgr.debug("Got stop signal with value %s", stoplive)
         self.toggle_feedback(False)
         self.toggle_tracking(False)
 
@@ -1382,9 +1384,11 @@ class Backend(QtCore.QObject):
         savedData[:, 1:N_NP+1] = self.x_array[0:self.j, :]
         savedData[:, N_NP+1:2*N_NP+1] = self.y_array[0:self.j, :]
 
-        np.savetxt(filename, savedData,  header='t (s), x (nm), y(nm)')
-        print(datetime.now(), '[xy_tracking] xy data exported to', filename)
-        print('Exported data shape', np.shape(savedData))
+        np.savetxt(filename, savedData,  header="t(s) " +
+                   " ".join(f"x{_}(nm)" for _ in range(N_NP)) +
+                   " ".join(f"y{_}(nm)" for _ in range(N_NP)))
+        _lgr.info('xy data exported to %s', filename)
+        _lgr.debug('Exported data shape: %s', np.shape(savedData))
 
         # TODO: guardar frame final
         # self.export_image()
@@ -1392,12 +1396,12 @@ class Backend(QtCore.QObject):
         # if VIDEO:
         #     tifffile.imwrite(fname + 'video' + '.tif', np.array(self.video))
         
-        filename = self.z_filename + '_zdata.txt'
+        filename = self.z_filename + '.txt'
 
         size = self.j_z
         savedData = np.zeros((2, size))
 
-        savedData[0, :] = np.array(self.time_array)
+        savedData[0, :] = self.z_time_array[0: self.j_z]
         savedData[1, :] = self.z_array[0: self.j_z]
         
         np.savetxt(filename, savedData.T, header='t (s), z (px)')
@@ -1414,7 +1418,7 @@ class Backend(QtCore.QObject):
         False -> don't save
         """
         self.save_data_state = val
-        _lgr.debug('[xy_tracking] save_data_state = %s', val)
+        _lgr.debug('save_data_state = %s', val)
 
     # antes se usaba roi_coordinates_array que se convertía a int en
     # ROIcoordinates

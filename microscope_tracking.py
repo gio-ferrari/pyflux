@@ -190,6 +190,7 @@ class Backend(QtCore.QObject):
        
         self.minfluxWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
         self.minfluxWorker.xyzEndSignal.connect(self.xyzWorker.get_end_measurement_signal)
+        # TODO: check before use
         self.minfluxWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
 
     def setup_psf_connections(self):
@@ -198,7 +199,7 @@ class Backend(QtCore.QObject):
         self.psfWorker.xySignal.connect(self.xyzWorker.single_xy_correction)
         self.psfWorker.zSignal.connect(self.xyzWorker.single_z_correction)
         self.psfWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
-        self.psfWorker.zStopSignal.connect(self.xyzWorker.get_stop_signal)
+        # self.psfWorker.zStopSignal.connect(self.xyzWorker.get_stop_signal)
         self.psfWorker.moveToInitialSignal.connect(self.scanWorker.get_moveTo_initial_signal)
        
         self.psfWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
