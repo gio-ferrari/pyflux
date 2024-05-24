@@ -194,7 +194,6 @@ class Backend(QtCore.QObject):
         self.minfluxWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
 
     def setup_psf_connections(self):
-        
         self.psfWorker.scanSignal.connect(self.scanWorker.get_scan_signal)
         self.psfWorker.xySignal.connect(self.xyzWorker.single_xy_correction)
         self.psfWorker.zSignal.connect(self.xyzWorker.single_z_correction)

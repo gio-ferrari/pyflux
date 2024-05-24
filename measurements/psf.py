@@ -158,63 +158,63 @@ class Frontend(QtGui.QFrame):
         root = r'C:\\Data\\'
         folder = root + today
         self.initialDir = folder
-        
-        try:  
+
+        try:
             os.mkdir(folder)
-        except OSError:  
+        except OSError:
             print(datetime.now(), '[tcspc] Directory {} already exists'.format(folder))
-        else:  
+        else:
             print(datetime.now(), '[tcspc] Successfully created the directory {}'.format(folder))
 
         self.folderLabel = QtGui.QLabel('Folder')
         self.folderEdit = QtGui.QLineEdit(folder)
         self.browseFolderButton = QtGui.QPushButton('Browse')
         self.browseFolderButton.setCheckable(True)
-        
+
         grid.addWidget(self.fileWidget, 0, 1, 1, 1)
-        
+
         file_subgrid = QtGui.QGridLayout()
         self.fileWidget.setLayout(file_subgrid)
-        
+
         file_subgrid.addWidget(self.filenameLabel, 0, 0, 1, 2)
         file_subgrid.addWidget(self.filenameEdit, 1, 0, 1, 2)
         file_subgrid.addWidget(self.folderLabel, 2, 0, 1, 2)
         file_subgrid.addWidget(self.folderEdit, 3, 0, 1, 2)
         file_subgrid.addWidget(self.browseFolderButton, 4, 0)
-        
-        #setup alignment mode widget
-        self.alignWidget = QGroupBox('Alignment mode')  
+
+        # setup alignment mode widget
+        self.alignWidget = QGroupBox('Alignment mode')
         self.alignWidget.setFixedHeight(110)
         self.alignWidget.setFixedWidth(150)
-        
+
         grid.addWidget(self.alignWidget, 1, 1, 1, 1)
-        
+
         align_subgrid = QtGui.QGridLayout()
         self.alignWidget.setLayout(align_subgrid)
-        
+
         self.activateModeCheckbox = QtGui.QCheckBox('Mode Activated')
         self.shutter1Checkbox = QtGui.QCheckBox('1')
         self.shutter2Checkbox = QtGui.QCheckBox('2')
         self.shutter3Checkbox = QtGui.QCheckBox('3')
         self.shutter4Checkbox = QtGui.QCheckBox('4')
-        
+
         self.checkboxGroup = QtGui.QButtonGroup(self)
         self.checkboxGroup.addButton(self.shutter1Checkbox)
         self.checkboxGroup.addButton(self.shutter2Checkbox)
         self.checkboxGroup.addButton(self.shutter3Checkbox)
         self.checkboxGroup.addButton(self.shutter4Checkbox)
-        
+
         self.shutter1Checkbox.setEnabled(False)
         self.shutter2Checkbox.setEnabled(False)
         self.shutter3Checkbox.setEnabled(False)
         self.shutter4Checkbox.setEnabled(False)
-        
+
         align_subgrid.addWidget(self.activateModeCheckbox, 0, 0, 1, 2)
         align_subgrid.addWidget(self.shutter1Checkbox, 1, 0)
         align_subgrid.addWidget(self.shutter2Checkbox, 2, 0)
         align_subgrid.addWidget(self.shutter3Checkbox, 1, 1)
         align_subgrid.addWidget(self.shutter4Checkbox, 2, 1)
-        
+
         # connections
         
         self.startButton.clicked.connect(self.emit_param)
@@ -225,70 +225,59 @@ class Frontend(QtGui.QFrame):
         self.activateModeCheckbox.clicked.connect(lambda: self.activate_alignmentmode(self.activateModeCheckbox.isChecked()))
 
     def make_connection(self, backend):
-    
         backend.progressSignal.connect(self.get_progress_signal)
-      
+
     def closeEvent(self, *args, **kwargs):
         self.progressBar.setValue(0)
         super().closeEvent(*args, **kwargs)
-            
+
 class Backend(QtCore.QObject):
-    
     xySignal = pyqtSignal(bool, bool) # bool 1: whether you feedback ON or OFF, bool 2: initial position
     xyStopSignal = pyqtSignal(bool)
-    
+
     zSignal = pyqtSignal(bool, bool)
-    zStopSignal = pyqtSignal()
-    
+    # zStopSignal = pyqtSignal(bool)  # Removed since now there is a single worker
+
     endSignal = pyqtSignal(str)
-    
+
     scanSignal = pyqtSignal(bool, str, np.ndarray)
     moveToInitialSignal = pyqtSignal()
-
     progressSignal = pyqtSignal(float)
-    
     shutterSignal = pyqtSignal(int, bool)
-    
     saveConfigSignal = pyqtSignal(str)
-    
+
     """
     Signals
     
     """
 
     def __init__(self, *args, **kwargs):
-    
         super().__init__(*args, **kwargs)
-        
+
         self.i = 0
-        
         self.xyIsDone = False
         self.zIsDone = False
         self.scanIsDone = False
-        
         self.measTimer = QtCore.QTimer()
         self.measTimer.timeout.connect(self.loop)
-        
+
         self.checkboxID_old = 7
         self.alignMode = False
 
     def start(self):
-        
         self.i = 0
-        
         self.xyIsDone = False
         self.zIsDone = False
         self.scanIsDone = False
-        
+
         self.progressSignal.emit(0)
-        
         self.shutterSignal.emit(7, False)
         self.shutterSignal.emit(11, False)
 
         _lgr.info('PSF measurement started')
 
         self.xyStopSignal.emit(True)
-        self.zStopSignal.emit()
+        # self.zStopSignal.emit(True)
 
         # open IR and tracking shutter
         self.shutterSignal.emit(5, True)
@@ -302,27 +291,30 @@ class Backend(QtCore.QObject):
         self.scan_flag = True
 
         self.measTimer.start(0)
-        
+
     def stop(self):
-        
+
         self.measTimer.stop()
-        self.progressSignal.emit(100) #changed from 0
+        self.progressSignal.emit(100)  # changed from 0
         self.shutterSignal.emit(8, False)
-        
-        #new filename indicating that getUniqueName() has already found filename
-        #rerunning would only cause errors in files being saved by focus and xy_tracking
+
+        # new filename indicating that getUniqueName() has already found filename
+        # rerunning would only cause errors in files being saved by focus and xy_tracking
         attention_filename = '!' + self.filename
         self.endSignal.emit(attention_filename)
-        
-        self.xyStopSignal.emit(False)
-        self.zStopSignal.emit()
-        
-        self.export_data()
-        
-        print(datetime.now(), '[psf] PSF measurement ended')
-        
-    def loop(self):
 
+        self.xyStopSignal.emit(False)
+        # self.zStopSignal.emit(False)
+
+        self.export_data()
+
+        print(datetime.now(), '[psf] PSF measurement ended')
+
+    def loop(self):
+        """Check status on each tick.
+
+        This would be best implemented using a state machine and no timer.
+        """
         if self.i == 0:
             initial = True
         else:
@@ -364,8 +356,8 @@ class Backend(QtCore.QObject):
 
                     self.data[self.i, :, :] = self.currentFrame
 
-                    print(datetime.now(), 
-                          '[psf] PSF {} of {}'.format(self.i+1, 
+                    print(datetime.now(),
+                          '[psf] PSF {} of {}'.format(self.i+1,
                                                       self.totalFrameNum))
 
                     if self.i < self.totalFrameNum-1:
@@ -374,31 +366,27 @@ class Backend(QtCore.QObject):
                         self.stop()
 
     def export_data(self):
-  
         fname = self.filename
         filename = tools.getUniqueName(fname)
 
         self.data = np.array(self.data, dtype=np.float32)
-        
         iio.mimwrite(filename + '.tiff', self.data)
-        
-        #make scan saving config file
+        # make scan saving config file
         self.saveConfigSignal.emit(filename)
-    
+
     @pyqtSlot(dict)
     def get_frontend_param(self, params):
-        
         self.label = params['label']
         self.nFrames = params['nframes']
         self.k = params['nDonuts']
-        
+
         today = str(date.today()).replace('-', '')
         self.filename = tools.getUniqueName(params['filename'] + '_' + today)
-         
+
         self.totalFrameNum = self.nFrames * self.k
-        
+
         self.alignMode = params['alignMode']
-                
+
     @pyqtSlot(bool, float, float) 
     def get_xy_is_done(self, val, x, y):
         
