@@ -614,7 +614,7 @@ class Backend(QtCore.QObject):
         self.tracking_value = False  # Si trackear (NO si corregir)
         self.save_data_state = False
         self.feedback_active = False  # Si corregir (implica trackear)
-        self.camON = False
+        self.camON = False  # Si la cámara está prendida, para cámaras on/off
 
         self.npoints = 1200  # número de puntos a graficar
         self.buffersize = 30000  # tamano buffer correcciones xy
@@ -917,8 +917,8 @@ class Backend(QtCore.QObject):
         ymax_id = min(int(y_center_id + yrange), ymax-ymin)
 
         array_sub = array[xmin_id:xmax_id, ymin_id:ymax_id]
-        xsubsize = 2 * xrange
-        ysubsize = 2 * yrange
+        xsubsize = xmax_id - xmin_id  # 2 * xrange
+        ysubsize = ymax_id - ymin_id  # 2 * yrange
 
         x_sub_nm = np.arange(0, xsubsize) * PX_SIZE
         y_sub_nm = np.arange(0, ysubsize) * PX_SIZE
@@ -1181,6 +1181,7 @@ class Backend(QtCore.QObject):
         #     self.time_array.append(self.currentTime)
         #     self.z_array[self.j_z] = self.currentz
         #     self.j_z += 1
+        self.camON = False
         self.zIsDone.emit(True, self.target_z)
 
     def calibrate_z(self):
