@@ -1817,107 +1817,76 @@ class Backend(QtCore.QObject):
                     )
 
     def update_view(self):
-
+        """Procesa click del timer."""
         if self.i < self.NofPixels:
-
             if self.scantype == 'xy':
-    
                 dy = tools.convert(self.dy, 'ΔXtoU')
                 self.y_offset = int(self.y_offset + dy)
                 self.adw.Set_FPar(2, self.y_offset)
-    
+
             if self.scantype == 'xz' or self.scantype == 'yz':
-    
                 dz = tools.convert(self.dz, 'ΔXtoU')
                 self.z_offset = int(self.z_offset + dz)
                 self.adw.Set_FPar(2, self.z_offset)
-    
             self.lineData = self.line_acquisition()
-    
+
             if self.full_scan is True:
-    
                 self.image[self.i, :] = self.lineData
-                
             elif self.FBaverage_scan is True:
-                
                 # display average of forward and backward image
-                
                 c0 = self.NofAuxPixels
                 c1 = self.NofPixels
-                
+
                 lineData_F = self.lineData[c0:c0+c1]
                 lineData_B = self.lineData[3*c0+c1:3*c0+2*c1]
-                
+
                 if self.i % 2 == 0:
-                
                     self.image[self.i, :] = lineData_F
-                
                 if self.i % 2 != 0:
-                    
                     self.image[self.i, :] = lineData_B[::-1]
-    
-            else: 
-    
+            else:
                 # displays only forward image
-                
                 c0 = self.NofAuxPixels
                 c1 = self.NofPixels
-    
+
                 lineData_F = self.lineData[c0:c0+c1]
                 lineData_B = self.lineData[3*c0+c1:3*c0+2*c1]
-                
+
                 self.imageF[self.i, :] = lineData_F
                 self.imageB[self.i, :] = lineData_B[::-1]
-                
+
                 self.image[self.i, :] = lineData_F
-    
             # display image after every scanned line
-                
             self.image_to_save = self.image
             self.imageF_copy = self.imageF     # TO DO: clean up with fit signal to avoid the copy image
             self.imageB_copy = self.imageB
     #        self.image_copy = self.image
-            
+
             self.imageSignal.emit(self.image)
     #        print(datetime.now(), '[scan] Image emitted to frontend')
 
             self.i = self.i + 1
-
         else:
-
             print(datetime.now(), '[scan] Frame ended')
-
             self.i = 0
             self.y_offset = 0
             self.z_offset = 0
-
             if self.scantype == 'xy':
-
                 self.moveTo(self.x_i, self.y_i, self.z_i)
-                    
             if self.scantype == 'xz':
-
                 self.moveTo(self.x_i, self.y_i + self.scanRange/2,
                             self.z_i - self.scanRange/2)
-
             if self.scantype == 'yz':
-
                 self.moveTo(self.x_i + self.scanRange/2, self.y_i,
                             self.z_i - self.scanRange/2)
-                
             if self.acquisitionMode == 'frame':
-                
                 self.liveview_stop()
                 self.frameIsDone.emit(True, self.image)
-                
-                
             if self.acquisitionMode == 'chechu':
-                
                 self.liveview_stop()
                 self.frameIsDoneChechu.emit(True, self.imageF_copy, self.imageB_copy)
-                
-            self.update_device_param()  
-   
+            self.update_device_param()
+
     @pyqtSlot(int, bool)
     def control_shutters(self, num, val):
         
