@@ -141,6 +141,7 @@ class Frontend(QtGui.QFrame):
         roi.hide()
         del roi
         self.ROInumber -= 1
+        self.emit_roi_info('xy')
 
     @pyqtSlot(bool)
     def toggle_liveview(self, on):
@@ -826,11 +827,10 @@ class Backend(QtCore.QObject):
             # Qué efecto tendría colocar esta función aquí? Esto es según focus.py
             # self.reset() 
             # self.update()
-            if not self.tracking_value:
+            if (mode == 'continous') and (not self.tracking_value):
                 _lgr.warning("NO activaste el tracking!!!!!. Yo me encargo")
                 self.toggle_tracking(True)
-            self.feedback_active = True
-
+               
             # set up and start actuator process
             if mode == 'continous':
                 self.set_actuator_param()
@@ -839,6 +839,7 @@ class Backend(QtCore.QObject):
                 _lgr.info('Process 4 started. Status: %s', self.adw.Process_Status(4))
                 _lgr.info('Process 3 started. Status: %s', self.adw.Process_Status(3))
                 _lgr.debug('Feedback loop ON')
+                self.feedback_active = True
         elif val is False:
             self.feedback_active = False
             if True:  #  mode == 'continous':
@@ -1161,7 +1162,7 @@ class Backend(QtCore.QObject):
         self.update_graph_data()
         if initial:
             self.initial_focus = True
-            self.track('z')
+        self.track('z')
         self.correct_z(mode='discrete')
         # if self.save_data_state:
         #     self.time_array.append(self.currentTime)
