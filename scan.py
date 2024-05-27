@@ -1274,7 +1274,6 @@ class Backend(QtCore.QObject):
             self.auxMoveSignal.emit()
       
     def calculate_derived_param(self):
-           
         #TODO: check whether we can delete this. 
         #caused saving zeros in some cases
 #        self.image_to_save = self.image
@@ -1283,9 +1282,8 @@ class Backend(QtCore.QObject):
         self.frameTime = self.NofPixels**2 * self.pxTime / 10**6
         self.maxCounts = int(self.APDmaxCounts/(1/(self.pxTime*10**-6)))
         self.linetime = (1/1000)*self.pxTime*self.NofPixels  # in ms
-        
-        #  aux scan parameters
 
+        #  aux scan parameters
         self.a_max = 4 * 10**-6  # in µm/µs^2
 
         if np.all(self.a_aux_coeff) <= 1:
@@ -1300,7 +1298,6 @@ class Backend(QtCore.QObject):
                            self.waiting_pixels)
 
         # create scan signal
-
         self.dy = self.pxSize
         self.dz = self.pxSize
 
@@ -1318,50 +1315,40 @@ class Backend(QtCore.QObject):
                                          self.waitingTime)
 
 #        self.viewtimer_time = (1/1000) * self.data_t[-1]    # in ms
-        
+
         self.viewtimer_time = 0  # timer will timeout as soon after it has executed all functions
 
         # Create blank image
         # full_scan = True --> size of the full scan including aux parts 
         # full_scan = False --> size of the forward part of the scan
-
         if self.full_scan is True:
-
             size = (self.tot_pixels, self.tot_pixels)
-            
         else:
-            
             size = (self.NofPixels, self.NofPixels)
 
 #        self.blankImage = np.zeros(size)
-        
         self.image = np.zeros(size)
         self.imageF = np.zeros(size)
         self.imageB = np.zeros(size)
-        
+
         self.i = 0
 
         # load the new parameters into the ADwin system
-        
         self.update_device_param()
 
         # emit calculated parameters
-
         self.emit_param()
-        
+
     def emit_param(self):
-        
         params = dict()
-        
         params['frameTime'] = self.frameTime
         params['pxSize'] = self.pxSize
         params['maxCounts'] = self.maxCounts
 #        params['initialPos'] = np.float64(self.initialPos)
-        
         self.paramSignal.emit(params)
-        
+
     def update_device_param(self):
-        
+
         if self.detector == 'APD':
             self.adw.Set_Par(3, 0)  # Digital input (APD)
 
@@ -1765,16 +1752,14 @@ class Backend(QtCore.QObject):
         
     @pyqtSlot(bool, str, np.ndarray)
     def get_scan_signal(self, lvbool, mode, initialPos):
-    
         """
         Connection: [psf] scanSignal
         Description: get drift-corrected initial position, calculates the
         derived parameters (and updates ADwin data)
         """
-        
         self.initialPos = initialPos
         self.calculate_derived_param()
-        
+
         self.liveview(lvbool, mode)
         
         
@@ -1796,14 +1781,10 @@ class Backend(QtCore.QObject):
    
     @pyqtSlot(bool, str)
     def liveview(self, lvbool, mode):
-        
         if lvbool:
-            
             self.acquisitionMode = mode # modes: 'liveview', 'frame'
             self.liveview_start()
-            
         else:
-            
             self.liveview_stop()
 
     def liveview_start(self):
