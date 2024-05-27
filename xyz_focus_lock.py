@@ -14,7 +14,7 @@ import scipy.ndimage as ndi
 from datetime import date, datetime
 
 from scipy import optimize as opt
-from tools import customLog  # Para inicializar el logging
+from tools import customLog  # NOQA Para inicializar el logging
 import tools.viewbox_tools as viewbox_tools
 import tools.PSF as PSF
 import tools.tools as tools
@@ -36,11 +36,7 @@ import logging as _lgn
 
 _lgr = _lgn.getLogger(__name__)
 
-DEBUG = True
-DEBUG1 = True
 VIDEO = False
-
-_ = customLog  # Sólo para acallar warnings
 
 
 PX_SIZE = 23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
@@ -105,7 +101,7 @@ class Frontend(QtGui.QFrame):
                                             pen=ROIpen, number='z')
             self.zROIButton.setEnabled(False)
         else:
-            print("Unknown ROI type asked:", roi_type)
+            _lgr.error("Unknown ROI type asked: %s", roi_type)
 
     def emit_roi_info(self, roi_type):
         """Informar los valores de los ROI del tipo solicitado existentes."""
@@ -123,6 +119,9 @@ class Frontend(QtGui.QFrame):
                     coordinates_list.append(coordinates)
                 self.roiInfoSignal.emit('xy', roinumber, coordinates_list)
         elif roi_type == 'z':
+            if self.roi_z is None:
+                print(datetime.now(), 'Please select a valid ROI for z tracking')
+                return
             xmin, ymin = self.roi_z.pos()
             xmax, ymax = self.roi_z.pos() + self.roi_z.size()
             coordinates = np.array([xmin, xmax, ymin, ymax])
@@ -131,7 +130,6 @@ class Frontend(QtGui.QFrame):
             self.roiInfoSignal.emit('z', 1, coordinates_list)
         else:
             _lgr.error("Unknown ROI type asked: %s", roi_type)
-            # Se llega acá cuando se apaga el tracking... hay un emit_roi info sin param
 
     def delete_roi(self):
         """Elimina la última ROI xy."""
@@ -153,14 +151,14 @@ class Frontend(QtGui.QFrame):
         """
         if on:
             self.liveviewButton.setChecked(True)
-            print(datetime.now(), '[xy_tracking] Live view started')
+            _lgr.info('Live view started')
         else:
             self.liveviewButton.setChecked(False)
             # self.emit_roi_info('xy')
             # self.emit_roi_info('z')
             # TODO: poner marca al agua para avisar que está OFF
             self.img.setImage(np.zeros((1200, 1920)), autoLevels=False)
-            print(datetime.now(), '[xy_tracking] Live view stopped')
+            _lgr.info('Live view stopped')
 
     @pyqtSlot(np.ndarray)
     def get_image(self, img):
@@ -417,15 +415,12 @@ class Frontend(QtGui.QFrame):
         self.selectxyROIbutton = QtGui.QPushButton('Select xy ROI')
         self.selectxyROIbutton.clicked.connect(
             lambda: self.emit_roi_info(roi_type='xy'))
-        if DEBUG1:
-            print("Conexiòn de xy con emit_roi_info existosa")
 
         # select z ROI
         self.selectzROIbutton = QtGui.QPushButton('Select z ROI')
         self.selectzROIbutton.clicked.connect(
             lambda: self.emit_roi_info(roi_type='z'))
-        if DEBUG1:
-            print("Conexiòn de z con emit_roi_info existosa")
+
         # delete ROI button
         self.delete_roiButton = QtGui.QPushButton('delete ROIs')
         self.delete_roiButton.clicked.connect(self.delete_roi)
@@ -440,8 +435,9 @@ class Frontend(QtGui.QFrame):
         # position tracking checkbox
         self.trackingBeadsBox = QtGui.QCheckBox('Track xy fiducials')
         self.trackingBeadsBox.stateChanged.connect(
-            self.setup_data_curves) #agrego esta lìnea porque el tracking no funciona
-        self.trackingBeadsBox.stateChanged.connect(self.emit_roi_info)  # 'xy'?
+            self.setup_data_curves) # agrego esta lìnea porque el tracking no funciona
+        self.trackingBeadsBox.stateChanged.connect(
+            lambda: self.emit_roi_info(roi_type='xy'))
 
         # En xyz_tracking está la función def setup_data_curves en frontend
         # aquí no, está relacionada con piezo? o es necesaria aquí?
@@ -590,7 +586,7 @@ class Backend(QtCore.QObject):
         today = str(date.today()).replace('-', '')
         root = 'C:\\Data\\'
         self.folder = root + today
-        print("Name of folder: ", self.folder)
+        _lgr.debug("Name of folder: %s", self.folder)
         try:
             os.mkdir(self.folder)
         except FileExistsError:
@@ -693,7 +689,7 @@ class Backend(QtCore.QObject):
 
     def liveview_stop(self):
         self.viewtimer.stop()
-        print("cameraTimer: stopped")
+        _lgr.debug("cameraTimer: stopped")
         self.camON = False
 
     def update(self):
@@ -831,7 +827,7 @@ class Backend(QtCore.QObject):
             # self.reset() 
             # self.update()
             if not self.tracking_value:
-                print("NO activaste el tracking!!!!!")
+                _lgr.warning("NO activaste el tracking!!!!!. Yo me encargo")
                 self.toggle_tracking(True)
             self.feedback_active = True
 
@@ -840,24 +836,18 @@ class Backend(QtCore.QObject):
                 self.set_actuator_param()
                 self.adw.Start_Process(4)  # proceso para xy
                 self.adw.Start_Process(3)  # proceso para z
-                print('process 4 status', self.adw.Process_Status(4))
-                print(datetime.now(), '[focus] Process 4 started')
-                print('process 3 status', self.adw.Process_Status(3))
-                print(datetime.now(), '[focus] Process 3 started')
-            if DEBUG:
-                print(datetime.now(), '[xy_tracking] Feedback loop ON')
-                print(datetime.now(), ' [focus] Feedback loop ON')
+                _lgr.info('Process 4 started. Status: %s', self.adw.Process_Status(4))
+                _lgr.info('Process 3 started. Status: %s', self.adw.Process_Status(3))
+                _lgr.debug('Feedback loop ON')
         elif val is False:
             self.feedback_active = False
             if True:  #  mode == 'continous':
                 self.adw.Stop_Process(4)
                 self.adw.Stop_Process(3)
-                print(datetime.now(), '[xy_tracking] Process 4 stopped')
-                print(datetime.now(), '[focus] Process 3 stopped')
+                _lgr.info('Process 4 stopped. Status: %s', self.adw.Process_Status(4))
+                _lgr.info('Process 3 stopped. Status: %s', self.adw.Process_Status(3))
                 self.displacement = np.array([0.0, 0.0])
-            if DEBUG:
-                print(datetime.now(), '[xy_tracking] Feedback loop OFF')
-                print(datetime.now(), ' [focus] Feedback loop OFF')
+                _lgr.debug('Feedback loop Off')
         else:
             print("Deberías pasar un booleano, no:", val)
 
@@ -979,7 +969,7 @@ class Backend(QtCore.QObject):
                     maxdist = 200  # in nm
                     if (np.abs(self.initialx[i] - self.currentx[i]) > maxdist
                         or np.abs(self.initialy[i] - self.currenty[i]) > maxdist):
-                        print(datetime.now(), '[xy_tracking] max dist exceeded')
+                        _lgr.warning('Max dist exceeded in xy ROI #%s', i)
                         self.currentx[i] = self.initialx[i]
                         self.currenty[i] = self.initialy[i]
             if self.initial is True:
@@ -1018,7 +1008,7 @@ class Backend(QtCore.QObject):
 
 
     def correct_xy(self, mode='continous'):
-        """Corrige todos los ejes."""
+        """Corregir posicion xy."""
         # TODO: implementar PI
         # TODO: implementar Discreto para PSF (para single correction)
 
@@ -1080,7 +1070,7 @@ class Backend(QtCore.QObject):
                 self.target_y = targetYposition
 
     def correct_z(self, mode='continous'):
-        """Corrige todos los ejes."""
+        """Corregir posicion z."""
         # TODO: implementar PI
         # TODO: implementar Discreto para PSF (para single correction)
         dz = 0
@@ -1126,15 +1116,13 @@ class Backend(QtCore.QObject):
         Description: Starts acquisition of the camera and makes one single xy
         track and, if feedback_val is True, corrects for the drift
         """
-        if DEBUG:
-            print(datetime.now(),
-                  '[xy_tracking] Feedback {}'.format(feedback_val))
+        _lgr.debug('Feedback %s', feedback_val)
         if initial:
             self.toggle_feedback(True, mode='discrete')
             self.initial = initial
             print(datetime.now(), '[xy_tracking] initial', initial)
         if not self.camON:
-            print(datetime.now(), 'liveview started')
+            print(datetime.now(), 'singlexy liveview started')
             self.camON = True
             # if self.camera.open_device():
             #     self.camera.set_roi(16, 16, 1920, 1200)
@@ -1158,11 +1146,9 @@ class Backend(QtCore.QObject):
         self.correct_xy(mode='discrete')
         target_x = np.round(self.target_x, 3)
         target_y = np.round(self.target_y, 3)
-        print(datetime.now(), '[xy_tracking] discrete correction to',
-              target_x, target_y)
+        _lgr.info('Discrete correction to (%s, %s)', target_x, target_y)
         self.xyIsDone.emit(True, target_x, target_y)
-        if DEBUG:
-            print(datetime.now(), '[xy_tracking] single xy correction ended')
+        _lgr.debug('Single xy correction ended')
 
     @pyqtSlot(bool, bool)
     def single_z_correction(self, feedback_val, initial):
@@ -1404,10 +1390,8 @@ class Backend(QtCore.QObject):
 
         savedData[0, :] = self.z_time_array[0: self.j_z]
         savedData[1, :] = self.z_array[0: self.j_z]
-        
         np.savetxt(filename, savedData.T, header='t (s), z (px)')
-        
-        print(datetime.now(), '[focus] z data exported to', filename)
+        _lgr.info('z data exported to %s', filename)
 
     # Dejo esta funcion como está, se repite en xy y en focus.py
     @pyqtSlot(bool)
@@ -1462,8 +1446,7 @@ class Backend(QtCore.QObject):
         self.updateGUIcheckboxSignal.emit(self.tracking_value,
                                           self.feedback_active,
                                           self.save_data_state)
-        if DEBUG:
-            print(datetime.now(), '[xy_tracking] System xy locked')
+        _lgr.debug('System xy locked')
 
     @pyqtSlot(np.ndarray, np.ndarray)
     def get_move_signal(self, r, r_rel):
@@ -1516,7 +1499,7 @@ class Backend(QtCore.QObject):
         self.initialy = self.initialy + dist[1]
         self.displacement = self.displacement + dist
 
-        print(datetime.now(), '[xy_tracking] Moved setpoint by', dist)
+        _lgr.info('Moved setpoint by %s', dist)
 
     @pyqtSlot(str)
     def get_end_measurement_signal(self, fname):

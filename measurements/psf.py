@@ -17,8 +17,9 @@ from PyQt5.QtWidgets import QGroupBox
 from tkinter import Tk, filedialog
 
 import tools.tools as tools
-import imageio as iio 
-from tools import customLog
+import imageio as iio
+from tools import customLog  # NOQA
+
 import logging as _lgn
 
 _lgr = _lgn.getLogger(__name__)
@@ -27,26 +28,21 @@ _lgr = _lgn.getLogger(__name__)
 
 DEBUG = True
 
+
 class Frontend(QtGui.QFrame):
-    
+
     paramSignal = pyqtSignal(dict)
-    
     """
     Signals
-    
     """
-     
-    def __init__(self, *args, **kwargs):
 
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
         self.setup_gui()
-        
+
     def emit_param(self):
-        
         filename = os.path.join(self.folderEdit.text(),
                                 self.filenameEdit.text())
-        
         params = dict()
         params['label'] = self.doughnutLabel.text()
         params['nframes'] = self.NframesEdit.value() #!!! now making up number of frames per doughnut position,
@@ -55,11 +51,10 @@ class Frontend(QtGui.QFrame):
         params['folder'] = self.folderEdit.text()
         params['nDonuts'] = self.donutSpinBox.value()
         params['alignMode'] = self.activateModeCheckbox.isChecked()
-        
-        self.paramSignal.emit(params)
-        
-    def load_folder(self):
 
+        self.paramSignal.emit(params)
+
+    def load_folder(self):
         try:
             root = Tk()
             root.withdraw()
@@ -70,36 +65,32 @@ class Frontend(QtGui.QFrame):
                 self.folderEdit.setText(folder)
         except OSError:
             pass
-            
+
     @pyqtSlot(float)
     def get_progress_signal(self, completed):
-        
+
         self.progressBar.setValue(completed)
-        
         if completed == 100:
             self.stopButton.setEnabled(False)
             self.startButton.setEnabled(True)
-            
+
     def activate_alignmentmode(self, on):
         if on:
             self.shutter1Checkbox.setEnabled(True)
             self.shutter2Checkbox.setEnabled(True)
             self.shutter3Checkbox.setEnabled(True)
             self.shutter4Checkbox.setEnabled(True)
-            print(datetime.now(), '[psf] Alignment mode activated')
+            _lgr.info('Alignment mode activated')
         else:
             self.shutter1Checkbox.setEnabled(False)
             self.shutter2Checkbox.setEnabled(False)
             self.shutter3Checkbox.setEnabled(False)
             self.shutter4Checkbox.setEnabled(False)
-            print(datetime.now(), '[psf] Alignment mode deactivated')
-            
-        
-    
+            _lgr.info('Alignment mode deactivated')
+
     def setup_gui(self):
-        
         self.setWindowTitle('PSF measurement')
-        
+
         self.resize(230, 300)
 
         grid = QtGui.QGridLayout()
@@ -110,10 +101,10 @@ class Frontend(QtGui.QFrame):
         self.paramWidget.setFixedWidth(175)
 
         grid.addWidget(self.paramWidget, 0, 0, 2, 1)
-        
+
         subgrid = QtGui.QGridLayout()
         self.paramWidget.setLayout(subgrid)
-        
+
         self.NframesLabel = QtGui.QLabel('Frames per doughnut')
         self.NframesEdit = QtGui.QSpinBox()
         self.DonutNumLabel = QtGui.QLabel('Number of doughnuts')
@@ -126,14 +117,14 @@ class Frontend(QtGui.QFrame):
         self.stopButton = QtGui.QPushButton('Stop')
         self.stopButton.setEnabled(False)
         self.progressBar = QtGui.QProgressBar(self)
-        
+
         self.NframesEdit.setValue(5)
-        self.NframesEdit.setRange(1,99)
+        self.NframesEdit.setRange(1, 99)
         self.donutSpinBox.setValue(4)
         self.donutSpinBox.setMaximum(10)
-        
+
         subgrid.addWidget(self.DonutNumLabel, 0, 0)
-        subgrid.addWidget(self.donutSpinBox, 1, 0)       
+        subgrid.addWidget(self.donutSpinBox, 1, 0)
         subgrid.addWidget(self.NframesLabel, 2, 0)
         subgrid.addWidget(self.NframesEdit, 3, 0)
         subgrid.addWidget(self.doughnutLabel, 4, 0)
@@ -143,17 +134,17 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.progressBar, 8, 0)
         subgrid.addWidget(self.startButton, 9, 0)
         subgrid.addWidget(self.stopButton, 10, 0)
-        
+
         # file/folder widget
-        
-        self.fileWidget = QGroupBox('Save options')  
+
+        self.fileWidget = QGroupBox('Save options')
         self.fileWidget.setFixedHeight(155)
         self.fileWidget.setFixedWidth(150)
-        
+
         # folder
-        
+
         # TO DO: move this to backend
-        
+
         today = str(date.today()).replace('-', '')
         root = r'C:\\Data\\'
         folder = root + today
@@ -162,9 +153,9 @@ class Frontend(QtGui.QFrame):
         try:
             os.mkdir(folder)
         except OSError:
-            print(datetime.now(), '[tcspc] Directory {} already exists'.format(folder))
+            _lgr.info('Directory %s already exists', folder)
         else:
-            print(datetime.now(), '[tcspc] Successfully created the directory {}'.format(folder))
+            _lgr.info('Successfully created the directory %s', folder)
 
         self.folderLabel = QtGui.QLabel('Folder')
         self.folderEdit = QtGui.QLineEdit(folder)
@@ -222,7 +213,8 @@ class Frontend(QtGui.QFrame):
         self.startButton.clicked.connect(lambda: self.startButton.setEnabled(False))
         self.stopButton.clicked.connect(lambda: self.startButton.setEnabled(True))
         self.browseFolderButton.clicked.connect(self.load_folder)
-        self.activateModeCheckbox.clicked.connect(lambda: self.activate_alignmentmode(self.activateModeCheckbox.isChecked()))
+        self.activateModeCheckbox.clicked.connect(lambda: self.activate_alignmentmode(
+            self.activateModeCheckbox.isChecked()))
 
     def make_connection(self, backend):
         backend.progressSignal.connect(self.get_progress_signal)
@@ -230,6 +222,7 @@ class Frontend(QtGui.QFrame):
     def closeEvent(self, *args, **kwargs):
         self.progressBar.setValue(0)
         super().closeEvent(*args, **kwargs)
+
 
 class Backend(QtCore.QObject):
     xySignal = pyqtSignal(bool, bool) # bool 1: whether you feedback ON or OFF, bool 2: initial position
@@ -248,7 +241,6 @@ class Backend(QtCore.QObject):
 
     """
     Signals
-    
     """
 
     def __init__(self, *args, **kwargs):
@@ -293,7 +285,6 @@ class Backend(QtCore.QObject):
         self.measTimer.start(0)
 
     def stop(self):
-
         self.measTimer.stop()
         self.progressSignal.emit(100)  # changed from 0
         self.shutterSignal.emit(8, False)
@@ -308,7 +299,7 @@ class Backend(QtCore.QObject):
 
         self.export_data()
 
-        print(datetime.now(), '[psf] PSF measurement ended')
+        _lgr.debug('PSF measurement ended')
 
     def loop(self):
         """Check status on each tick.
@@ -356,9 +347,7 @@ class Backend(QtCore.QObject):
 
                     self.data[self.i, :, :] = self.currentFrame
 
-                    print(datetime.now(),
-                          '[psf] PSF {} of {}'.format(self.i+1,
-                                                      self.totalFrameNum))
+                    _lgr.debug('PSF %s of %s', self.i+1, self.totalFrameNum)
 
                     if self.i < self.totalFrameNum-1:
                         self.i += 1
@@ -387,73 +376,55 @@ class Backend(QtCore.QObject):
 
         self.alignMode = params['alignMode']
 
-    @pyqtSlot(bool, float, float) 
+    @pyqtSlot(bool, float, float)
     def get_xy_is_done(self, val, x, y):
-        
         """
         Connection: [xy_tracking] xyIsDone
-        
         """
         self.xyIsDone = True
         self.target_x = x
         self.target_y = y
-        
-    @pyqtSlot(bool, float) 
+
+    @pyqtSlot(bool, float)
     def get_z_is_done(self, val, z):
-        
         """
         Connection: [focus] zIsDone
-        
         """
-        
-        self.zIsDone = True     
+        self.zIsDone = True
         self.target_z = z
-        
-    @pyqtSlot(bool, np.ndarray) 
+
+    @pyqtSlot(bool, np.ndarray)
     def get_scan_is_done(self, val, image):
-        
         """
         Connection: [scan] scanIsDone
-        
         """
-        
         self.scanIsDone = True
         self.currentFrame = image
-               
-    @pyqtSlot(dict) 
+
+    @pyqtSlot(dict)
     def get_scan_parameters(self, params):
-        
         # TO DO: this function is connected to the scan frontend, it should
         # be connected to a proper funciton in the scan backend
-        
         self.nPixels = int(params['NofPixels'])
-                    
         # TO DO: build config file
-        
+
     # button_clicked slot
     @pyqtSlot(QtGui.QAbstractButton)
-    #@pyqtSlot(int)
+    # @pyqtSlot(int)
     def checkboxGroup_selection(self, button_or_id):
-        
         self.shutterSignal.emit(self.checkboxID_old, False)
-        
-        #if isinstance(button_or_id, QtGui.QAbstractButton):
+        # if isinstance(button_or_id, QtGui.QAbstractButton):
         checkboxID = int(button_or_id.text())
-        #print('Checkbox {} was selected'.format(checkboxID))
+        # print('Checkbox {} was selected'.format(checkboxID))
         self.shutterSignal.emit(checkboxID, True)
-        
-        self.checkboxID_old = checkboxID
-        #elif isinstance(button_or_id, int):
-#        print('"Id {}" was clicked'.format(button_or_id))
 
-        
+        self.checkboxID_old = checkboxID
+        # elif isinstance(button_or_id, int):
+        # print('"Id {}" was clicked'.format(button_or_id))
+
     def make_connection(self, frontend):
-        
         frontend.startButton.clicked.connect(self.start)
         frontend.stopButton.clicked.connect(self.stop)
         frontend.paramSignal.connect(self.get_frontend_param)
-        frontend.checkboxGroup.buttonClicked['QAbstractButton *'].connect(self.checkboxGroup_selection)    
-            
-            
-            
-        
+        frontend.checkboxGroup.buttonClicked['QAbstractButton *'].connect(
+            self.checkboxGroup_selection)
