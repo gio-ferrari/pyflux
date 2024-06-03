@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import QGroupBox
 from tkinter import Tk, filedialog
 
 import tools.tools as tools
+import tools.PSF_tools as psft
 import imageio as iio
 from tools import customLog  # NOQA
 
@@ -29,7 +30,8 @@ _lgr = _lgn.getLogger(__name__)
 
 DEBUG = True
 
-#Placeholder para encontrar fácil
+# Placeholder para encontrar fácil
+FIX_L = 100.  # en nm
 FIX_K = 4
 N_COLS = 2
 
@@ -39,8 +41,9 @@ class Frontend(QtGui.QFrame):
     Signals
     """
     _plots: list[_pg.PlotItem] = []  # plots de las donas
-    _images: list[np.ndarray] = [None, ] * FIX_K  # FIXME Debería ir con K
-    _centerplots: list = [None, ] * FIX_K
+    _images: list[np.ndarray] = [None, ] * FIX_K  # data
+    _centerplots: list = [None, ] * FIX_K  # Plots de los centros reales
+    _perfectplots: list = [None, ] * FIX_K  # Plots de los centros ideales
     _nframes = None
     _ndonuts = None
     _backend = None  # reference to backend
@@ -125,23 +128,29 @@ class Frontend(QtGui.QFrame):
         # cargar configuracion
         conf = tools.loadConfig(base_filename + ".txt")
         if not conf:
-            ...
+            _lgr.warning("Config file not found")
+            return
+        centros_OK = psft.centers_minflux(FIX_L, FIX_K)
         for nd in self._ndonuts:
             start = nd * self._nframes
             avg = np.average(self.backend.data[start: start + self._nframes], axis=0)
-            self.update_donut_image(nd, avg)
-            self._update_image_scale(conf, *avg.shape)
-        # Buscar centros
-        # Marcar diferencias en nm
+            img = self.update_donut_image(nd, avg)
+            self._update_image_scale(img, conf, *avg.shape)
+            centro = self._find_center(nd, conf)
+            _lgr.error("La dona %s se encuentra en %s y debería estar en %s",
+                       nd, centro, centros_OK[nd])
+            print(f"Correr la dona {nd} en {centro-centros_OK[nd]}")
+            # Marcar diferencias en nm
 
-    def _update_image_scale(self, conf: dict, extent_x: int, extent_y: int):
-        """Update scale of all images.
+    def _update_image_scale(self, img: _pg.ImageItem, conf: dict, extent_x: int, extent_y: int):
+        """Update scale of an image.
 
         Parameters
         ----------
         conf : dict
             Configuration data.
-        extents...
+        extent_x, extent_y: int
+            Size of the image in x and y (por ahora son siempre iguales)
 
         Returns
         -------
@@ -152,10 +161,47 @@ class Frontend(QtGui.QFrame):
         if abs(extent_x * conf['Pixel size (µm)'] - scale) > 1E3:
             _lgr.warning("Diferencias de escala de %s",
                          (extent_x * conf['Pixel size (µm)'] - scale))
-        for img in self._images:
-            tr = QtGui.QTransform()
-            img.setTransform(tr.scale(nmppx, nmppx).translate(-extent_x/2, -extent_y/2))
+        tr = QtGui.QTransform()
+        img.setTransform(tr.scale(nmppx, nmppx).translate(-extent_x/2, -extent_y/2))
 
+
+    def _find_center(self, n_donut: int, conf: dict, center: np.ndarray):
+        """find the center of a donut and update the image.
+
+        Parameters
+        ----------
+        n_donut: int
+            number of donut to analyze
+        conf: dict
+            Configuration data.
+        center: np.ndarray
+            best center for this donut
+
+        Returns
+        -------
+        Centro de la dona (x0, y0) en nm respecto a un 0 central
+        """
+        plot = self._plots[n_donut]
+        image = self._images[n_donut]
+        xc, yc = psft.find_center(image, trim=30)
+        if self._centerplots[n_donut] is not None:
+            try:
+                plot.removeItem[self._centerplots[n_donut]]
+                plot.removeItem[self._perfectplots[n_donut]]
+            except Exception as e:
+                _lgr.error("Error updating center %s: %s", n_donut, e)
+        sp = plot.plot([xc], [yc], pen=(200, 200, 200), symbolBrush=(255, 0, 0),
+                       symbolPen='w', )
+        self._centerplots[n_donut] = sp
+        np = plot.plot([xc], [yc], pen=(200, 200, 200), symbolBrush=(0, 255, 0),
+                       symbolPen='w', )
+        self._perfectplots[n_donut] = np
+        nmppx = conf['Pixel size (µm)'] * 1000
+        tr = QtGui.QTransform()
+        sp.setTransform(tr.scale(nmppx, nmppx).translate(*[-_/2 for _ in image.shape]))
+        np.setTransform(tr.scale(nmppx, nmppx).translate(*[-_/2 for _ in image.shape]))
+        # TODO: Fix si se independizan las resoluciones x e y
+        return (np.array((xc, yc,)) - np.array([-_/2 for _ in image.shape])) * nmppx
 
     def activate_alignmentmode(self, on):
         if on:
@@ -336,9 +382,13 @@ class Frontend(QtGui.QFrame):
         super().closeEvent(*args, **kwargs)
 
     def update_donut_image(self, donut_number: int, image: np.ndarray):
-        """Actualiza la imagen de la dona.
+        """Actualiza la la data e imagen de la dona.
 
         Zero-based indexing
+
+        Returns
+        -------
+           Created pyqtgraph.ImageItem
         """
         if donut_number > len(self._plots):
             _lgr.error("Invalid donut number: %s", donut_number)
@@ -348,6 +398,7 @@ class Frontend(QtGui.QFrame):
         img = _pg.ImageItem(image)
         plot.addItem(img)
         self._images[donut_number] = image
+        return img
 
 
 class Backend(QtCore.QObject):
