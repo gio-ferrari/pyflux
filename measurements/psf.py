@@ -11,6 +11,7 @@ from datetime import date, datetime
 import time
 
 from pyqtgraph.Qt import QtCore, QtGui
+import pyqtgraph as _pg
 
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QGroupBox
@@ -28,13 +29,21 @@ _lgr = _lgn.getLogger(__name__)
 
 DEBUG = True
 
+#Placeholder para encontrar fácil
+FIX_K = 4
+N_COLS = 2
 
 class Frontend(QtGui.QFrame):
-
     paramSignal = pyqtSignal(dict)
     """
     Signals
     """
+    _plots: list[_pg.PlotItem] = []  # plots de las donas
+    _images: list[np.ndarray] = [None, ] * FIX_K  # FIXME Debería ir con K
+    _centerplots: list = [None, ] * FIX_K
+    _nframes = None
+    _ndonuts = None
+    _backend = None  # reference to backend
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -51,7 +60,8 @@ class Frontend(QtGui.QFrame):
         params['folder'] = self.folderEdit.text()
         params['nDonuts'] = self.donutSpinBox.value()
         params['alignMode'] = self.activateModeCheckbox.isChecked()
-
+        self._nframes = self.NframesEdit.value()
+        self._ndonuts = self.donutSpinBox.value()
         self.paramSignal.emit(params)
 
     def load_folder(self):
@@ -66,13 +76,86 @@ class Frontend(QtGui.QFrame):
         except OSError:
             pass
 
-    @pyqtSlot(float)
-    def get_progress_signal(self, completed):
+    @pyqtSlot(float, np.ndarray, int)
+    def get_progress_signal(self, completed: float, image: np.ndarray, order: int):
+        """Actualiza el progreso.
 
+        Enviado por el back. Aprovechamos para actualizar los plots. Se recibe con %
+        de 0% al iniciar una medida y con 100% al terminarla. En ambos casos, image y
+        order pueden ser none
+
+        Parameters
+        ----------
+            completed: int
+                Porcentaje de avance
+            image: numpy:ndarray or None
+                Imagen recibida (si hay) o None si sólo hay que actualizar el %
+            order: int
+                Numero de medida. Va de 0 a nFrames * nDonuts -1
+        """
         self.progressBar.setValue(completed)
         if completed == 100:
             self.stopButton.setEnabled(False)
             self.startButton.setEnabled(True)
+            if (image is None) and (order is None):
+                # measurement finished: process file
+                self.process_measurement()
+        if not (self._ndonuts and self._nframes):
+            _lgr.error("No estan seteados numeros necesarios")
+            return
+        if image and order is not None:
+            n_img = order % self._nframes
+            n_donut = order // self._ndonuts
+            _lgr.debug("Actualizando imagen %s/%s de la dona %s", n_img, self._nframes,
+                       n_donut)
+            self.update_donut_image(n_donut, self.backend)
+
+    def process_measurement(self):
+        """Update and analyse the graphs."""
+        if not self._backend:
+            _lgr.error("No reference to backend")
+            raise ValueError("Backend not found")
+        base_filename = self._backend.lastFileName
+        if not base_filename:
+            _lgr.error("The backend does not know the filename")
+            raise ValueError("No filename")
+        if not self.backend.data or len(self.backend.data) != self._ndonuts * self._nframes:
+            _lgr.warning("These seems to be no data on the backend")
+            return
+        # cargar configuracion
+        conf = tools.loadConfig(base_filename + ".txt")
+        if not conf:
+            ...
+        for nd in self._ndonuts:
+            start = nd * self._nframes
+            avg = np.average(self.backend.data[start: start + self._nframes], axis=0)
+            self.update_donut_image(nd, avg)
+            self._update_image_scale(conf, *avg.shape)
+        # Buscar centros
+        # Marcar diferencias en nm
+
+    def _update_image_scale(self, conf: dict, extent_x: int, extent_y: int):
+        """Update scale of all images.
+
+        Parameters
+        ----------
+        conf : dict
+            Configuration data.
+        extents...
+
+        Returns
+        -------
+        None.
+        """
+        scale = conf['Scan range (µm)']
+        nmppx = conf['Pixel size (µm)'] * 1000
+        if abs(extent_x * conf['Pixel size (µm)'] - scale) > 1E3:
+            _lgr.warning("Diferencias de escala de %s",
+                         (extent_x * conf['Pixel size (µm)'] - scale))
+        for img in self._images:
+            tr = QtGui.QTransform()
+            img.setTransform(tr.scale(nmppx, nmppx).translate(-extent_x/2, -extent_y/2))
+
 
     def activate_alignmentmode(self, on):
         if on:
@@ -206,8 +289,35 @@ class Frontend(QtGui.QFrame):
         align_subgrid.addWidget(self.shutter3Checkbox, 1, 1)
         align_subgrid.addWidget(self.shutter4Checkbox, 2, 1)
 
+        # Donut show window (ver analysis.py)
+        try:
+            _lgr.debug("Iniciando ventana donas")
+            self.imageWidget = _pg.GraphicsLayoutWidget()
+            for i in range(FIX_K):  # Debería ser K
+                p = self.imageWidget.addPlot(title=f"Dona {i+1}")
+                self._plots.append(p)
+                p.setLabels(bottom='x/nm', left='y/nm')
+                if (i % N_COLS) == 0:  # es lo que hay
+                    self.imageWidget.nextRow()
+            # self.xaxis = _pg.AxisItem(orientation='bottom', maxTickLength=5)
+            # self.xaxis.showLabel(show=True)
+            # self.xaxis.setLabel('x [px]')  # Ver nm
+            # self.yaxis = _pg.AxisItem(orientation='left', maxTickLength=5)
+            # self.yaxis.showLabel(show=True)
+            # self.yaxis.setLabel('y [px]')  # ver nm
+            # image widget set-up and layout
+            # self.vb = self.imageWidget.addPlot(row=0, col=0, axisItems={
+            #     'bottom': self.xaxis, 'left': self.yaxis})
+            # img = _pg.ImageItem(self.img_array[image_number,:,:])
+            # self.vb.clear()
+            # self.vb.addItem(img)
+            # self.vb.setAspectLocked(True)
+            # self.hist = _pg.HistogramLUTItem(image=img)
+            grid.addWidget(self.imageWidget, 0, 2, 2, 2)
+        except Exception as e:
+            print("Excepción", e)
+
         # connections
-        
         self.startButton.clicked.connect(self.emit_param)
         self.startButton.clicked.connect(lambda: self.stopButton.setEnabled(True))
         self.startButton.clicked.connect(lambda: self.startButton.setEnabled(False))
@@ -217,28 +327,41 @@ class Frontend(QtGui.QFrame):
             self.activateModeCheckbox.isChecked()))
 
     def make_connection(self, backend):
+        """Connect slots to backend and save reference."""
         backend.progressSignal.connect(self.get_progress_signal)
+        self._backend = backend
 
     def closeEvent(self, *args, **kwargs):
         self.progressBar.setValue(0)
         super().closeEvent(*args, **kwargs)
 
+    def update_donut_image(self, donut_number: int, image: np.ndarray):
+        """Actualiza la imagen de la dona.
+
+        Zero-based indexing
+        """
+        if donut_number > len(self._plots):
+            _lgr.error("Invalid donut number: %s", donut_number)
+            return
+        plot = self._plots[donut_number]
+        plot.clear()
+        img = _pg.ImageItem(image)
+        plot.addItem(img)
+        self._images[donut_number] = image
+
 
 class Backend(QtCore.QObject):
-    xySignal = pyqtSignal(bool, bool) # bool 1: whether you feedback ON or OFF, bool 2: initial position
+    # bool 1: whether you feedback ON or OFF, bool 2: initial position
+    xySignal = pyqtSignal(bool, bool)
     xyStopSignal = pyqtSignal(bool)
-
     zSignal = pyqtSignal(bool, bool)
     # zStopSignal = pyqtSignal(bool)  # Removed since now there is a single worker
-
     endSignal = pyqtSignal(str)
-
     scanSignal = pyqtSignal(bool, str, np.ndarray)
     moveToInitialSignal = pyqtSignal()
-    progressSignal = pyqtSignal(float)
+    progressSignal = pyqtSignal(float, np.ndarray, int)
     shutterSignal = pyqtSignal(int, bool)
     saveConfigSignal = pyqtSignal(str)
-
     """
     Signals
     """
@@ -255,6 +378,8 @@ class Backend(QtCore.QObject):
 
         self.checkboxID_old = 7
         self.alignMode = False
+        self.lastFileName = None  # las filename used for saving
+        self.data: np.ndarray | None = None  # data
 
     def start(self):
         self.i = 0
@@ -262,7 +387,7 @@ class Backend(QtCore.QObject):
         self.zIsDone = False
         self.scanIsDone = False
 
-        self.progressSignal.emit(0)
+        self.progressSignal.emit(0, None, None)
         self.shutterSignal.emit(7, False)
         self.shutterSignal.emit(11, False)
 
@@ -286,7 +411,7 @@ class Backend(QtCore.QObject):
 
     def stop(self):
         self.measTimer.stop()
-        self.progressSignal.emit(100)  # changed from 0
+        self.progressSignal.emit(100, None, None)  # changed from 0
         self.shutterSignal.emit(8, False)
 
         # new filename indicating that getUniqueName() has already found filename
@@ -336,7 +461,6 @@ class Backend(QtCore.QObject):
                     if not self.alignMode:
                         self.shutterSignal.emit(shutternum, False)
                     completed = ((self.i+1)/self.totalFrameNum) * 100
-                    self.progressSignal.emit(completed)
 
                     self.xy_flag = True
                     self.z_flag = True
@@ -346,13 +470,13 @@ class Backend(QtCore.QObject):
                     self.scanIsDone = False
 
                     self.data[self.i, :, :] = self.currentFrame
-
+                    self.progressSignal.emit(completed, self.data[self.i, :, :], self.i)
                     _lgr.debug('PSF %s of %s', self.i+1, self.totalFrameNum)
 
                     if self.i < self.totalFrameNum-1:
                         self.i += 1
                     else:
-                        self.stop()
+                        self.stop()  # Incluye un progressSignal
 
     def export_data(self):
         fname = self.filename
@@ -361,6 +485,7 @@ class Backend(QtCore.QObject):
         self.data = np.array(self.data, dtype=np.float32)
         iio.mimwrite(filename + '.tiff', self.data)
         # make scan saving config file
+        self.lastFileName = filename
         self.saveConfigSignal.emit(filename)
 
     @pyqtSlot(dict)
