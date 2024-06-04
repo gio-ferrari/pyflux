@@ -609,12 +609,16 @@ class Backend(QtCore.QObject):
         self.xyz_time = 200  # 200 ms per acquisition + fit + correction
 
         self.tracking_value = False  # Si trackear (NO si corregir)
+        self.tracking_xy = False
+        self.tracking_z = False
         self.save_data_state = False
         self.feedback_active = False  # Si corregir (implica trackear)
+        self.feedback_xy = False
+        self.feedback_z = False
         self.camON = False  # Si la cámara está prendida, para cámaras on/off
 
         self.npoints = 1200  # número de puntos a graficar
-        self.buffersize = 30000  # tamano buffer correcciones xy
+        self.buffersize = 30000  # tamano buffer correcciones xy y z
 
         # posicion actual del centro en cada ROI
         self.currentx: np.ndarray = np.zeros((1,))
@@ -630,6 +634,7 @@ class Backend(QtCore.QObject):
         # Estos son sólo para hacer un pattern de test
         self.displacement = np.array([0.0, 0.0])  # Solo para test pattern
         self.pattern = False
+
         self.previous_image = None  # para chequear que la imagen cambie
         self.currentz = 0.0  # Valor en pixeles dentro del roi del z
 
@@ -700,23 +705,29 @@ class Backend(QtCore.QObject):
         """
         self.update_view()
 
-        if self.tracking_value:
+        if self.tracking_xy:
             t0 = time.time()
             self.track('xy')
             t1 = time.time()
             # print('track xy took', (t1-t0)*1000, 'ms')
+        if self.tracking_z:
             t0 = time.time()
             self.track('z')
             t1 = time.time()
             # print('track z took', (t1-t0)*1000, 'ms')
+        if self.tracking_xy or self.tracking_z:
             t0 = time.time()
+            # FIXME: Ver cómo separar los trackings
             self.update_graph_data()
             t1 = time.time()
             # print('update graph data took', (t1-t0)*1000, 'ms')
-
-            if self.feedback_active:
+            if self.feedback_xy:
                 t0 = time.time()
                 self.correct_xy()
+                t1 = time.time()
+                # print('correct took', (t1-t0)*1000, 'ms')
+            if self.feedback_z:
+                t0 = time.time()
                 self.correct_z()
                 t1 = time.time()
                 # print('correct took', (t1-t0)*1000, 'ms')
@@ -788,12 +799,15 @@ class Backend(QtCore.QObject):
         Description: toggles ON/OFF tracking of fiducial fluorescent beads.
         Drift correction feedback loop is not automatically started.
         """
+        # FIXME: split XY y Z
         self.startTime_xy = self.startTime_z = time.time()
         if val is True:
             self.reset()
             self.reset_data_arrays()
 
             self.tracking_value = True
+            self.tracking_xy = True
+            self.tracking_z = True
             self.counter = 0
 
             # initialize relevant xy-tracking arrays
@@ -806,12 +820,14 @@ class Backend(QtCore.QObject):
             self.x = np.zeros(size)  # Deltas respecto a posicion inicial
             self.y = np.zeros(size)
 
-            if self.initial is True:  # Obvio porque reser lo pone en True
+            if self.initial is True:  # Obvio porque reset lo pone en True
                 self.initialx = np.zeros(size)
                 self.initialy = np.zeros(size)
 
         if val is False:
             self.tracking_value = False
+            self.tracking_xy = False
+            self.tracking_z = False
 
     # Esta función es adecuada porque tiene en cuenta los procesos de de ADwin
     # para drift xy
@@ -823,6 +839,7 @@ class Backend(QtCore.QObject):
         Description: toggles ON/OFF feedback for either continous (TCSPC)
         or discrete (scan imaging) correction
         """
+        # FIXME: feedback split
         if val is True:
             # Qué efecto tendría colocar esta función aquí? Esto es según focus.py
             # self.reset() 
@@ -840,8 +857,12 @@ class Backend(QtCore.QObject):
                 _lgr.info('Process 3 started. Status: %s', self.adw.Process_Status(3))
                 _lgr.debug('Feedback loop ON')
                 self.feedback_active = True
+                self.feedback_xy = True
+                self.feedback_z = True
         elif val is False:
             self.feedback_active = False
+            self.feedback_xy = False
+            self.feedback_z = False
             if True:  #  mode == 'continous':
                 self.adw.Stop_Process(4)
                 self.adw.Stop_Process(3)
