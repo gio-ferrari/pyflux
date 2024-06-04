@@ -144,11 +144,11 @@ def saveConfig(main, dateandtime, name, filename=None):
     with open(filename + '.txt', 'w') as configfile:
         config.write(configfile)
 
-def loadConfig(filename):
+def loadConfig(filename) -> configparser.SectionProxy:
     """Load a config file and return just the parameters."""
     config = configparser.ConfigParser()
     config.read(filename)
-    return dict(config['Scanning parameters'])
+    return config['Scanning parameters']
 
 
 def getUniqueName(name):
