@@ -130,25 +130,31 @@ class Frontend(QtGui.QFrame):
         if not conf:
             _lgr.warning("Config file not found")
             return
+        scale = conf.getfloat('Scan range (µm)')
+        ps = conf.getfloat('Pixel size (µm)') * 1E3
+        if abs(self.backend.data.shape[1] * ps - scale) > 1E-3:
+            _lgr.warning("Diferencias de escala de %s",
+                         (self.backend.data.shape[1] * ps - scale))
         centros_OK = psft.centers_minflux(FIX_L, FIX_K)
         for nd in self._ndonuts:
             start = nd * self._nframes
             avg = np.average(self.backend.data[start: start + self._nframes], axis=0)
             img = self.update_donut_image(nd, avg)
             self._update_image_scale(img, conf, *avg.shape)
-            centro = self._find_center(nd, conf)
+            centro = self._find_center(nd, ps)
             _lgr.error("La dona %s se encuentra en %s y debería estar en %s",
                        nd, centro, centros_OK[nd])
             print(f"Correr la dona {nd} en {centro-centros_OK[nd]}")
             # Marcar diferencias en nm
 
-    def _update_image_scale(self, img: _pg.ImageItem, conf: dict, extent_x: int, extent_y: int):
+    def _update_image_scale(self, img: _pg.ImageItem, pixel_size: float,
+                            extent_x: int, extent_y: int):
         """Update scale of an image.
 
         Parameters
         ----------
-        conf : dict
-            Configuration data.
+        pixel_size : float
+            pixel size in nm
         extent_x, extent_y: int
             Size of the image in x and y (por ahora son siempre iguales)
 
@@ -156,24 +162,18 @@ class Frontend(QtGui.QFrame):
         -------
         None.
         """
-        scale = conf['Scan range (µm)']
-        nmppx = conf['Pixel size (µm)'] * 1000
-        if abs(extent_x * conf['Pixel size (µm)'] - scale) > 1E3:
-            _lgr.warning("Diferencias de escala de %s",
-                         (extent_x * conf['Pixel size (µm)'] - scale))
         tr = QtGui.QTransform()
-        img.setTransform(tr.scale(nmppx, nmppx).translate(-extent_x/2, -extent_y/2))
+        img.setTransform(tr.scale(pixel_size, pixel_size).translate(-extent_x/2, -extent_y/2))
 
-
-    def _find_center(self, n_donut: int, conf: dict, center: np.ndarray):
-        """find the center of a donut and update the image.
+    def _find_center(self, n_donut: int, pixel_size: float, center: np.ndarray):
+        """Find the center of a donut and update the image.
 
         Parameters
         ----------
         n_donut: int
             number of donut to analyze
-        conf: dict
-            Configuration data.
+        pixel_size: float
+            size of each pixel in nm
         center: np.ndarray
             best center for this donut
 
@@ -196,12 +196,12 @@ class Frontend(QtGui.QFrame):
         np = plot.plot([xc], [yc], pen=(200, 200, 200), symbolBrush=(0, 255, 0),
                        symbolPen='w', )
         self._perfectplots[n_donut] = np
-        nmppx = conf['Pixel size (µm)'] * 1000
         tr = QtGui.QTransform()
-        sp.setTransform(tr.scale(nmppx, nmppx).translate(*[-_/2 for _ in image.shape]))
-        np.setTransform(tr.scale(nmppx, nmppx).translate(*[-_/2 for _ in image.shape]))
+        shift = [-_/2 for _ in image.shape]
+        sp.setTransform(tr.scale(pixel_size, pixel_size).translate(*shift))
+        np.setTransform(tr.scale(pixel_size, pixel_size).translate(*shift))
         # TODO: Fix si se independizan las resoluciones x e y
-        return (np.array((xc, yc,)) - np.array([-_/2 for _ in image.shape])) * nmppx
+        return (np.array((xc, yc,)) - np.array([-_/2 for _ in image.shape])) * pixel_size
 
     def activate_alignmentmode(self, on):
         if on:
@@ -343,7 +343,7 @@ class Frontend(QtGui.QFrame):
                 p = self.imageWidget.addPlot(title=f"Dona {i+1}")
                 self._plots.append(p)
                 p.setLabels(bottom='x/nm', left='y/nm')
-                if (i % N_COLS) == 0:  # es lo que hay
+                if ((i+1) % N_COLS) == 0:  # es lo que hay
                     self.imageWidget.nextRow()
             # self.xaxis = _pg.AxisItem(orientation='bottom', maxTickLength=5)
             # self.xaxis.showLabel(show=True)

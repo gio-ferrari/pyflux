@@ -76,7 +76,6 @@ def centers_minflux(L: float, k: int = 4):
     i = _np.arange(k)
     ebp = _np.zeros((k, 2), dtype=_np.float64)
     angles = i[:-1] / (k-1) * 2 * _np.pi
-    print(angles/_np.pi * 180)
     ebp[1:][::-1, 0] = _np.sin(angles) * L / 2
     ebp[1:][::-1, 1] = _np.cos(angles) * L / 2
     return ebp
@@ -95,6 +94,21 @@ if __name__ == '__main__':
     # _lgr.debug("Images metadata: %s", data.meta)
 
     config = _cp.ConfigParser()
+    mdata = config.read(mdfilename, encoding="latin-1")
+    sr = 1
+    mpp = 1
+    if not mdata:
+        print("No pude cargar data")
+    else:
+        if 'Scanning parameters' not in config.sections():
+            raise ValueError("Bad config file")
+        sp = config['Scanning parameters']
+        # FIXME: a veces usan mayúscula al principio
+        sr = sp.getfloat('scan range (µm)')
+        mpp = sp.getfloat('pixel size (µm)')
+        print("Reported image side:", sp['number of pixels'], ", found: ", data[0].shape)
+        print("Reported pixel Size:", mpp, ", found: ", sr/data[0].shape[0])
+    
 
     _lgr.info("Promediando donas")
     reshaped = _np.reshape(data, (n_frames, K, data.shape[1], data.shape[2]))
@@ -112,14 +126,7 @@ if __name__ == '__main__':
     plt.figure("test")
     plt.scatter(cms[:,0],cms[:,1])
    
-    # mdata = config.read(mdfilename, encoding="latin-1")
-    # if not mdata:
-    #     print("No pude cargar data")
-    # else:
-    #     if 'Scanning parameters' not in config.sections():
-    #         raise ValueError("Bad config file")
-    #     sp = dict(config['Scanning parameters'])
-    #     print(sp)
+    
 
     # config['Scanning parameters'] = {
     #     'Date and time': dateandtime,
