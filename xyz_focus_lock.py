@@ -22,7 +22,7 @@ import tools.tools as tools
 import scan
 
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
-from PyQt5.QtWidgets import QGroupBox, QHBoxLayout
+from PyQt5.QtWidgets import QGroupBox, QHBoxLayout, QCheckBox
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
@@ -41,6 +41,27 @@ VIDEO = False
 
 PX_SIZE = 23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
 PX_Z = 16  # 20 nm/px for z in nm
+
+
+# Posiblemente debería ir a un toolbox
+class GroupedCheckBoxes:
+    """Manages grouped CheckBoxes states."""
+
+    def __init__(self, all_checkbox: QCheckBox, *other_checkboxes):
+        self.acb = all_checkbox
+        self.others = other_checkboxes
+        for _ in other_checkboxes:
+            _.stateChanged.connect(self.on_state)
+        all_checkbox.clicked.connect(self.on_click)
+
+    def on_state(self, state: int):
+        """Handle single items change."""
+        self.acb.setChecked(all([_.isChecked() for _ in self.others]))
+
+    def on_click(self, is_checked: bool):
+        """Handle 'All' checkbox click."""
+        for _ in self.others:
+            _.setChecked(is_checked)
 
 
 class Frontend(QtGui.QFrame):
@@ -436,8 +457,8 @@ class Frontend(QtGui.QFrame):
         self.trackAllBox = QtGui.QCheckBox('All')
         self.trackAllBox.stateChanged.connect(
             self.setup_data_curves) # agrego esta lìnea porque el tracking no funciona
-        self.trackAllBox.stateChanged.connect(
-            lambda: self.emit_roi_info(roi_type='xy'))
+        # self.trackAllBox.stateChanged.connect(
+            # lambda: self.emit_roi_info(roi_type='xy'))
         trackgb = QGroupBox("Tracking")
         trackLayout = QHBoxLayout()
         trackgb.setLayout(trackLayout)
@@ -447,13 +468,16 @@ class Frontend(QtGui.QFrame):
         trackLayout.addWidget(self.trackXYBox)
         trackLayout.addWidget(self.trackZBox)
 
-        # En xyz_tracking está la función def setup_data_curves en frontend
-        # aquí no, está relacionada con piezo? o es necesaria aquí?
+        self.trackManager = GroupedCheckBoxes(self.trackAllBox, self.trackXYBox,
+                                              self.trackZBox,
+                                              )
+        self.trackXY.stateChanged.connect(
+            lambda: self.emit_roi_info(roi_type='xy'))
+        self.trackZBox.stateChanged.connect(
+            lambda: self.emit_roi_info(roi_type='z'))
 
-        # position tracking checkbox
+        # Ver como manejar el setup data curves
 
-        # self.trackZbeamBox = QtGui.QCheckBox('Track z beam')
-        # self.trackZbeamBox.stateChanged.connect(self.emit_roi_info)
 
         # turn ON/OFF feedback loop
         self.feedbackLoopBox = QtGui.QCheckBox('Feedback loop')
@@ -801,41 +825,63 @@ class Backend(QtCore.QObject):
     # Como z no es una lista, no hay nada especial acá
     @pyqtSlot(bool)
     def toggle_tracking(self, val):
-        """Inicia el tracking de las marcas (sin corregir).
+        """Inicia el tracking de las marcas y de z (sin corregir).
 
         Connection: [frontend] trackingBeadsBox.stateChanged
         Description: toggles ON/OFF tracking of fiducial fluorescent beads.
         Drift correction feedback loop is not automatically started.
         """
-        # FIXME: split XY y Z
-        self.startTime_xy = self.startTime_z = time.time()
-        if val is True:
-            self.reset()
-            self.reset_data_arrays()
+        self.toggle_tracking_xy(val)
+        self.toggle_tracking_z(val)
+        self.tracking_value = val
 
-            self.tracking_value = True
+    @pyqtSlot(bool)
+    def toggle_tracking_xy(self, val):
+        """Inicia el tracking de las beads (sin corregir).
+
+        Drift correction feedback loop is not automatically started.
+        """
+        if val is True:
+            if not self.tracking_z:
+                self.reset()
+                self.reset_data_arrays()
+                self.startTime = time.time()
             self.tracking_xy = True
-            self.tracking_z = True
-            self.counter = 0
+            self.counter = 0  # Como es para partones lo pongo acá
 
             # initialize relevant xy-tracking arrays
             size = len(self.roi_coordinates_list)
 
             self.currentx = np.zeros(size)
             self.currenty = np.zeros(size)
-            # self.currentz = 0
-
             self.x = np.zeros(size)  # Deltas respecto a posicion inicial
             self.y = np.zeros(size)
-
             if self.initial is True:  # Obvio porque reset lo pone en True
                 self.initialx = np.zeros(size)
                 self.initialy = np.zeros(size)
-
-        if val is False:
-            self.tracking_value = False
+        elif val is False:
             self.tracking_xy = False
+        else:
+            _lgr.error("Valor inválido pasado a toggle_tracking_z: %s", val)
+
+    # @pyqtSlot(bool)
+    def toggle_tracking_z(self, val):
+        """Inicia el tracking del spot z (sin corregir).
+
+        Drift correction feedback loop is not automatically started.
+        """
+        
+        if val is True:
+            if not self.tracking_xy:
+                self.reset()
+                self.reset_data_arrays()
+                self.startTime = time.time()
+
+            self.tracking_z = True
+        elif val is False:
             self.tracking_z = False
+        else:
+            _lgr.error("Valor inválido pasado a toggle_tracking_z: %s", val)
 
     # Esta función es adecuada porque tiene en cuenta los procesos de de ADwin
     # para drift xy
@@ -1035,7 +1081,7 @@ class Backend(QtCore.QObject):
             for i, roi in enumerate(self.roi_coordinates_list):
                 self.x[i] = self.currentx[i] - self.initialx[i]
                 self.y[i] = self.currenty[i] - self.initialy[i]
-                self.currentTime = time.time() - self.startTime_xy
+                self.currentTime = time.time() - self.startTime
 
             if self.save_data_state:
                 self.time_array[self.j] = self.currentTime
@@ -1052,7 +1098,7 @@ class Backend(QtCore.QObject):
                 self.initial_focus = False
             self.z = (self.currentz - self.initialz) * PX_Z  # self.z in nm
             if self.save_data_state:
-                self.z_time_array[self.j_z] = time.time() - self.startTime_z
+                self.z_time_array[self.j_z] = time.time() - self.startTime
                 self.z_array[self.j_z] = self.currentz
                 self.j_z += 1
 
@@ -1352,7 +1398,7 @@ class Backend(QtCore.QObject):
         self.adw.Start_Process(2)
 
     def reset(self):
-        """Prepare graphs buffers for new measurement."""
+        """Prepare graphs buffers and internal data for new measurement."""
         self.initial = True
         self.initial_focus = True
 
@@ -1370,7 +1416,7 @@ class Backend(QtCore.QObject):
         self.avgIntData = np.zeros(self.npoints)
         self.time = np.zeros(self.npoints)
         self.ptr = 0  # Posición en los buffers de graficación
-        self.startTime_xy = self.startTime_z = time.time()
+        self.startTime = self.startTime = time.time()
         # ----------- Salen de focus.py se usan en update_stats
         # self.max_dev = 0  
         # self.std = 0
@@ -1520,7 +1566,7 @@ class Backend(QtCore.QObject):
     def get_move_signal(self, r, r_rel):
         """Recibe de módulo Minflux para hacer patterns.
 
-        TODO: entender qué bien qué hacer. Parece que recibe posicione a las
+        TODO: entender qué bien qué hacer. Parece que recibe posiciones a las
         que moverse.
         TODO: si FPar_72 no está bien seteado esto se va a cualquier posición
         """
