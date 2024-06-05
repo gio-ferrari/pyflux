@@ -97,7 +97,6 @@ class Frontend(QtGui.QFrame):
                                             handleCenter=(0, 1),
                                             scaleSnap=True,
                                             translateSnap=True,
-                                            # self.ROInumber) test Andi
                                             pen=ROIpen, number='z')
             self.zROIButton.setEnabled(False)
         else:
@@ -110,14 +109,14 @@ class Frontend(QtGui.QFrame):
             if roinumber == 0:
                 print(datetime.now(), '[xy_tracking] Please select a valid ROI'
                       ' for fiducial NPs tracking')
-            else:
-                coordinates_list = []
-                for i in range(len(self.roilist)):
-                    xmin, ymin = self.roilist[i].pos()
-                    xmax, ymax = self.roilist[i].pos() + self.roilist[i].size()
-                    coordinates = np.array([xmin, xmax, ymin, ymax])
-                    coordinates_list.append(coordinates)
-                self.roiInfoSignal.emit('xy', roinumber, coordinates_list)
+                return
+            coordinates_list = []
+            for i in range(len(self.roilist)):
+                xmin, ymin = self.roilist[i].pos()
+                xmax, ymax = self.roilist[i].pos() + self.roilist[i].size()
+                coordinates = np.array([xmin, xmax, ymin, ymax])
+                coordinates_list.append(coordinates)
+            self.roiInfoSignal.emit('xy', roinumber, coordinates_list)
         elif roi_type == 'z':
             if self.roi_z is None:
                 print(datetime.now(), 'Please select a valid ROI for z tracking')
@@ -325,7 +324,7 @@ class Frontend(QtGui.QFrame):
             tick.hide()
         imageWidget.addItem(self.hist, row=0, col=1)
 
-        # xy drift graph (graph without a fixed range)
+        # xyz drift graph (graph without a fixed range)
         self.xyzGraph = pg.GraphicsWindow()
 
 #        self.xyzGraph.resize(200, 300)
@@ -382,11 +381,11 @@ class Frontend(QtGui.QFrame):
                                                symbolBrush=(255, 0, 0),
                                                symbolSize=5, symbolPen=None)
 
-        self.xyDataMean = self.xyplotItem.plot([], pen=None,
-                                               symbolBrush=(117, 184, 200),
-                                               symbolSize=5, symbolPen=None)
-
-        self.xyDataEllipse = self.xyplotItem.plot(pen=(117, 184, 200))
+        # Algo que nunca se implemento (ver plot_ellipse)
+        # self.xyDataMean = self.xyplotItem.plot([], pen=None,
+        #                                        symbolBrush=(117, 184, 200),
+        #                                        symbolSize=5, symbolPen=None)
+        # self.xyDataEllipse = self.xyplotItem.plot(pen=(117, 184, 200))
 
         # z drift graph (1D histogram)
         x = np.arange(-30, 30)
@@ -839,43 +838,67 @@ class Backend(QtCore.QObject):
         Description: toggles ON/OFF feedback for either continous (TCSPC)
         or discrete (scan imaging) correction
         """
+        if mode not in ('discrete', 'continous'):
+            _lgr.warning("Invalid feedback mode: %s", mode)
         # FIXME: feedback split
         if val is True:
             # Qué efecto tendría colocar esta función aquí? Esto es según focus.py
-            # self.reset() 
+            # self.reset()
             # self.update()
             if (mode == 'continous') and (not self.tracking_value):
                 _lgr.warning("NO activaste el tracking!!!!!. Yo me encargo")
                 self.toggle_tracking(True)
-               
             # set up and start actuator process
             if mode == 'continous':
                 self.set_actuator_param()
-                self.adw.Start_Process(4)  # proceso para xy
-                self.adw.Start_Process(3)  # proceso para z
-                _lgr.info('Process 4 started. Status: %s', self.adw.Process_Status(4))
-                _lgr.info('Process 3 started. Status: %s', self.adw.Process_Status(3))
                 _lgr.debug('Feedback loop ON')
                 self.feedback_active = True
-                self.feedback_xy = True
-                self.feedback_z = True
         elif val is False:
             self.feedback_active = False
-            self.feedback_xy = False
-            self.feedback_z = False
-            if True:  #  mode == 'continous':
-                self.adw.Stop_Process(4)
-                self.adw.Stop_Process(3)
-                _lgr.info('Process 4 stopped. Status: %s', self.adw.Process_Status(4))
-                _lgr.info('Process 3 stopped. Status: %s', self.adw.Process_Status(3))
-                self.displacement = np.array([0.0, 0.0])
-                _lgr.debug('Feedback loop Off')
+            _lgr.debug('Feedback loop Off')
         else:
             print("Deberías pasar un booleano, no:", val)
-
+        self.set_xy_feedback(val, mode)
+        self.set_z_feedback(val, mode)
         self.updateGUIcheckboxSignal.emit(self.tracking_value,
                                           self.feedback_active,
                                           self.save_data_state)
+
+    def set_z_feedback(self, val, mode='continous'):
+        """Inicia y detiene los procesos de estabilizacion de la ADwin para z."""
+        if val is True:
+            if mode == 'continous':  # set up and start actuator process
+                self.set_z_actuator_param()
+                self.adw.Start_Process(3)  # proceso para z
+                _lgr.info('Process 3 started. Status: %s', self.adw.Process_Status(3))
+                _lgr.debug('z Feedback loop ON')
+                self.feedback_z = True
+        elif val is False:
+            self.feedback_z = False
+            self.adw.Stop_Process(3)
+            _lgr.info('Process 3 stopped. Status: %s', self.adw.Process_Status(3))
+            _lgr.debug('z Feedback loop Off')
+        else:
+            _lgr.error("Deberías pasar un booleano, no: %s", val)
+
+    def set_xy_feedback(self, val, mode='continous'):
+        """Inicia y detiene los procesos de estabilizacion de la ADwin para xy."""
+        if val is True:
+            if mode == 'continous':  # set up and start actuator process
+                self.set_xy_actuator_param()
+                self.adw.Start_Process(4)  # proceso para xy
+                _lgr.info('Process 4 started. Status: %s', self.adw.Process_Status(4))
+                _lgr.debug('xy Feedback loop ON')
+                self.feedback_xy = True
+        elif val is False:
+            self.feedback_xy = False
+            if True:  # mode == 'continous':
+                self.adw.Stop_Process(4)
+                _lgr.info('Process 4 stopped. Status: %s', self.adw.Process_Status(4))
+                self.displacement = np.array([0.0, 0.0])
+                _lgr.debug('xy Feedback loop Off')
+        else:
+            _lgr.error("Deberías pasar un booleano, no: %s", val)
 
     def center_of_mass(self):
         """Calculate z image center of mass."""
@@ -1227,36 +1250,50 @@ class Backend(QtCore.QObject):
         self.viewtimer.start(self.xyz_time)
 
     def set_actuator_param(self, pixeltime=1000):
-        """Inicializar los parámetros antes de arrancar los scripts.
+        """Inicializar los parámetros antes de arrancar los scripts."""
+        self.set_actuator_param_xy(pixeltime)
+        self.set_actuator_param_z(pixeltime)
 
-        TODO: revisar para z y xy separados
-        """
+    def set_actuator_param_xy(self, pixeltime=1000):
+        """Inicializar los parámetros xy antes de arrancar los scripts."""
         self.adw.Set_FPar(46, tools.timeToADwin(pixeltime))
-        self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))
 
         # set-up actuator initial param script
         # MoveTo usa un script que actualiza estos valores, podemos confiar
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
-        currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
-
         x_f = tools.convert(currentXposition, 'XtoU')
         y_f = tools.convert(currentYposition, 'XtoU')
-        z_f = tools.convert(currentZposition, 'XtoU')
 
         # set-up actuator initial params
         self.adw.Set_FPar(40, x_f)
         self.adw.Set_FPar(41, y_f)
-        self.adw.Set_FPar(32, z_f)
 
-        # Para mi es igual a hacer esto:
+        # Para mi es igual a hacer esto:  VERIFICADO
         # self.adw.Set_FPar(40, self.adw.Get_FPar(70))
         # self.adw.Set_FPar(41, self.adw.Get_FPar(71))
-        # self.adw.Set_FPar(32, self.adw.Get_FPar(72))
 
         # Comento porque son cosas viejas (Andi)
         # self.adw.Set_Par(40, 1)
+
+    def set_actuator_param_z(self, pixeltime=1000):
+        """Inicializar los parámetros z antes de arrancar los scripts."""
+        self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))
+
+        # set-up actuator initial param script
+        # MoveTo usa un script que actualiza estos valores, podemos confiar
+        currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
+        z_f = tools.convert(currentZposition, 'XtoU')
+
+        # set-up actuator initial params
+        self.adw.Set_FPar(32, z_f)
+
+        # Para mi es igual a hacer esto: VERIFICADO
+        # self.adw.Set_FPar(32, self.adw.Get_FPar(72))
+
+        # Comento porque son cosas viejas (Andi)
         # self.adw.Set_Par(30, 1)
+
 
     def actuator_xyz(self, x_f, y_f, z_f):
         """Setear los parámetros de tracking de la adwin mientras corre.
