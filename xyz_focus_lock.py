@@ -22,7 +22,7 @@ import tools.tools as tools
 import scan
 
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
-from PyQt5.QtWidgets import QGroupBox
+from PyQt5.QtWidgets import QGroupBox, QHBoxLayout
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
@@ -247,7 +247,7 @@ class Frontend(QtGui.QFrame):
     @pyqtSlot(bool, bool, bool)
     def get_backend_states(self, tracking, feedback, savedata):
         """Actualizar el frontend de acuerdo al estado del backend."""
-        self.trackingBeadsBox.setChecked(tracking)
+        self.trackAllBox.setChecked(tracking)
         self.feedbackLoopBox.setChecked(feedback)
         self.saveDataBox.setChecked(savedata)
 
@@ -433,11 +433,19 @@ class Frontend(QtGui.QFrame):
         self.exportDataButton = QtGui.QPushButton('Export current data')
 
         # position tracking checkbox
-        self.trackingBeadsBox = QtGui.QCheckBox('Track xy fiducials')
-        self.trackingBeadsBox.stateChanged.connect(
+        self.trackAllBox = QtGui.QCheckBox('All')
+        self.trackAllBox.stateChanged.connect(
             self.setup_data_curves) # agrego esta lìnea porque el tracking no funciona
-        self.trackingBeadsBox.stateChanged.connect(
+        self.trackAllBox.stateChanged.connect(
             lambda: self.emit_roi_info(roi_type='xy'))
+        trackgb = QGroupBox("Tracking")
+        trackLayout = QHBoxLayout()
+        trackgb.setLayout(trackLayout)
+        trackLayout.addWidget(self.trackAllBox)
+        self.trackXYBox = QtGui.QCheckBox("xy")
+        self.trackZBox = QtGui.QCheckBox("z")
+        trackLayout.addWidget(self.trackXYBox)
+        trackLayout.addWidget(self.trackZBox)
 
         # En xyz_tracking está la función def setup_data_curves en frontend
         # aquí no, está relacionada con piezo? o es necesaria aquí?
@@ -486,7 +494,8 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.exportDataButton, 6, 0)
         subgrid.addWidget(self.clearDataButton, 7, 0)
         subgrid.addWidget(self.xyPatternButton, 8, 0)
-        subgrid.addWidget(self.trackingBeadsBox, 1, 1)
+        # subgrid.addWidget(self.trackAllBox, 1, 1)
+        subgrid.addWidget(trackgb, 1, 1)
         subgrid.addWidget(self.feedbackLoopBox, 2, 1)
         subgrid.addWidget(self.saveDataBox, 3, 1)
         subgrid.addWidget(self.shutterLabel, 9, 0)
@@ -518,7 +527,7 @@ class Frontend(QtGui.QFrame):
 
         TODO: arreglar esta forma fea de hacer las cosas
         """
-        if self.trackingBeadsBox.isChecked():
+        if self.trackAllBox.isChecked():
             if self.xCurve is not None:
                 for i in range(len(self.roilist)):  # remove previous curves
                     self.xyzGraph.xPlot.removeItem(self.xCurve[i])
