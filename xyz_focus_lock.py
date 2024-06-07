@@ -657,7 +657,7 @@ class Backend(QtCore.QObject):
         self.currenty: np.ndarray = np.zeros((1,))
 
         # Los llamamos en toggle_tracking
-        self.reset()
+        self.reset_graph()
         self.reset_data_arrays()
 
         self.counter = 0  # Se usa para generar un patrón. Es cuántas veces se llamó a update
@@ -843,11 +843,11 @@ class Backend(QtCore.QObject):
         """
         if val is True:
             if not self.tracking_z:
-                self.reset()
+                self.reset_graph()
                 self.reset_data_arrays()
                 self.startTime = time.time()
             self.tracking_xy = True
-            self.counter = 0  # Como es para partones lo pongo acá
+            self.counter = 0  # Como es para patrones lo pongo acá
 
             # initialize relevant xy-tracking arrays
             size = len(self.roi_coordinates_list)
@@ -856,9 +856,10 @@ class Backend(QtCore.QObject):
             self.currenty = np.zeros(size)
             self.x = np.zeros(size)  # Deltas respecto a posicion inicial
             self.y = np.zeros(size)
-            if self.initial is True:  # Obvio porque reset lo pone en True
-                self.initialx = np.zeros(size)
-                self.initialy = np.zeros(size)
+            self.initialx = np.zeros(size)
+            self.initialy = np.zeros(size)
+            self._initialize_xy_positions()
+
         elif val is False:
             self.tracking_xy = False
         else:
@@ -870,21 +871,22 @@ class Backend(QtCore.QObject):
 
         Drift correction feedback loop is not automatically started.
         """
-        
         if val is True:
             if not self.tracking_xy:
-                self.reset()
+                self.reset_graph()
                 self.reset_data_arrays()
                 self.startTime = time.time()
-
+            # init z position
+            # si queremos prender el tracking, seguramente está el ROI definido,
+            # etc.
+            self.center_of_mass()  # Esto actualiza la posicion z medida
+            self.initialz = self.currentz
             self.tracking_z = True
         elif val is False:
             self.tracking_z = False
         else:
             _lgr.error("Valor inválido pasado a toggle_tracking_z: %s", val)
 
-    # Esta función es adecuada porque tiene en cuenta los procesos de de ADwin
-    # para drift xy
     @pyqtSlot(bool)
     def toggle_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin.
@@ -896,25 +898,13 @@ class Backend(QtCore.QObject):
         if mode not in ('discrete', 'continous'):
             _lgr.warning("Invalid feedback mode: %s", mode)
         # FIXME: feedback split
-        if val is True:
-            # Qué efecto tendría colocar esta función aquí? Esto es según focus.py
-            # self.reset()
-            # self.update()
-            if (mode == 'continous') and (not self.tracking_value):
-                _lgr.warning("NO activaste el tracking!!!!!. Yo me encargo")
-                self.toggle_tracking(True)
-            # set up and start actuator process
-            if mode == 'continous':
-                self.set_actuator_param()
-                _lgr.debug('Feedback loop ON')
-                self.feedback_active = True
-        elif val is False:
-            self.feedback_active = False
-            _lgr.debug('Feedback loop Off')
-        else:
-            print("Deberías pasar un booleano, no:", val)
+        if type(val) is not bool:
+            _lgr.warning("Toggling feedback mode not boolean; %s", type(val))
+
         self.set_xy_feedback(val, mode)
         self.set_z_feedback(val, mode)
+        self.feedback_active = bool(val)
+        _lgr.debug('Feedback loop active: %s', self.feedback_active)
         self.updateGUIcheckboxSignal.emit(self.tracking_value,
                                           self.feedback_active,
                                           self.save_data_state)
@@ -939,6 +929,9 @@ class Backend(QtCore.QObject):
     def set_xy_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para xy."""
         if val is True:
+            if (mode == 'continous') and (not self.tracking_xy):
+                _lgr.warning("Requested XY feedback without tracking. Enabling tracking")
+                self.toggle_tracking_xy(True)
             if mode == 'continous':  # set up and start actuator process
                 self.set_xy_actuator_param()
                 self.adw.Start_Process(4)  # proceso para xy
@@ -1042,42 +1035,57 @@ class Backend(QtCore.QObject):
 
         return currentx, currenty
 
+    def _initialize_xy_positions(self):
+        """Set the current xy positions as the starting ones."""
+        self._fit_xy_rois()
+        for i, roi in enumerate(self.roi_coordinates_list):
+            self.initialx[i] = self.currentx[i]
+            self.initialy[i] = self.currenty[i]
+
+    def _fit_xy_rois(self):
+        """Fitea lo ROIs xy con la última imagen obtenida."""
+        for i, roi in enumerate(self.roi_coordinates_list):
+            roi = self.roi_coordinates_list[i]
+            try:
+                self.currentx[i], self.currenty[i] = self.gaussian_fit(roi)
+            except Exception as e:
+                self.currentx[i] = self.initialx[i]
+                self.currenty[i] = self.initialy[i]
+                _lgr.warning("Error en Gaussian_fit: %e", e)
+
+    def _check_xy_fit_limits(self):
+        """Chequea que los fiteos no se hayan ido de límite.
+
+        Si se fueron de límite, los pone como si estuviesen OK. Lo correcto sería que
+        no los tenga en cuenta.
+
+        FIXME: poner NANs y usar averages que lo tengan en cuenta
+        """
+        maxdist = 200  # in nm
+        for i, roi in enumerate(self.roi_coordinates_list):
+            if (np.abs(self.initialx[i] - self.currentx[i]) > maxdist
+                    or np.abs(self.initialy[i] - self.currenty[i]) > maxdist):
+                _lgr.warning('Max dist exceeded in xy ROI #%s', i)
+                self.currentx[i] = self.initialx[i]
+                self.currenty[i] = self.initialy[i]
+
     def track(self, track_type):  # Añado parámetro para trabajar en xy y z
         """Track fiducial marks and update shifts.
 
-        Function to track fiducial markers (Au NPs) from the selected ROI.
-        The position of the NPs is calculated through an xy gaussian fit
-    mentira -->   If feedback_active = True it also corrects for drifts in xy
+        Function to track fiducial markers and z reflection spot.
+        The position of the markers  is calculated through an xy gaussian fit.
+        The position of the z spot is calculated using center of mass
+
         If save_data_state = True it saves the xy data
         """
         # Calculate average intensity in the image to check laser fluctuations
         self.avgInt = np.mean(self.image)
-        # print('Average intensity', self.avgInt)
 
         # xy track routine of N=size fiducial AuNP
         if track_type == 'xy':
-            for i, roi in enumerate(self.roi_coordinates_list):
-                roi = self.roi_coordinates_list[i]
-                try:
-                    self.currentx[i], self.currenty[i] = self.gaussian_fit(roi)
-                except Exception as e:
-                    self.currentx[i] = self.initialx[i]
-                    self.currenty[i] = self.initialy[i]
-                    print("Error en Gaussian_fit:", e)
-                if self.initial is False:
-                    # Chequeo para malas localizaciones
-                    maxdist = 200  # in nm
-                    if (np.abs(self.initialx[i] - self.currentx[i]) > maxdist
-                        or np.abs(self.initialy[i] - self.currenty[i]) > maxdist):
-                        _lgr.warning('Max dist exceeded in xy ROI #%s', i)
-                        self.currentx[i] = self.initialx[i]
-                        self.currenty[i] = self.initialy[i]
-            if self.initial is True:
-                for i, roi in enumerate(self.roi_coordinates_list):
-                    self.initialx[i] = self.currentx[i]
-                    self.initialy[i] = self.currenty[i]
-                self.initial = False
-             # self.x, y and z are relative to initial positions
+            self._fit_xy_rois()
+            self._check_xy_fit_limits()
+            # self.x, y and z are relative to initial positions
             for i, roi in enumerate(self.roi_coordinates_list):
                 self.x[i] = self.currentx[i] - self.initialx[i]
                 self.y[i] = self.currenty[i] - self.initialy[i]
@@ -1090,18 +1098,16 @@ class Backend(QtCore.QObject):
                 self.j += 1
 
         # z track of the reflected IR beam
-        # Revisar esto del trackeo en z, no puedo correlacionar con focus.py
         if track_type == 'z':
             self.center_of_mass()
-            if self.initial_focus is True:
-                self.initialz = self.currentz
-                self.initial_focus = False
             self.z = (self.currentz - self.initialz) * PX_Z  # self.z in nm
             if self.save_data_state:
                 self.z_time_array[self.j_z] = time.time() - self.startTime
                 self.z_array[self.j_z] = self.currentz
                 self.j_z += 1
 
+        # FIXME: mover el chequeo del tracking a un lugar general que sea independiente
+        # de xy y z
         if self.j >= self.buffersize or self.j_z >= (self.buffersize):
             self.export_data()
             self.reset_data_arrays()
@@ -1110,7 +1116,6 @@ class Backend(QtCore.QObject):
     def correct_xy(self, mode='continous'):
         """Corregir posicion xy."""
         # TODO: implementar PI
-        # TODO: implementar Discreto para PSF (para single correction)
 
         xmean = np.mean(self.x)
         ymean = np.mean(self.y)
@@ -1137,8 +1142,7 @@ class Backend(QtCore.QObject):
                 dy *= xy_correct_factor
 
         if (abs(dx) > security_thr or abs(dy) > security_thr):
-            print(datetime.now(),
-                  '[xyz_tracking] xy Correction movement larger than 200 nm,'
+            _lgr.error('xy Correction movement larger than 200 nm,'
                   ' active correction turned OFF')
             self.toggle_feedback(False, mode)
         else:
@@ -1213,33 +1217,19 @@ class Backend(QtCore.QObject):
     def single_xy_correction(self, feedback_val, initial):
         """
         From: [psf] xySignal
-        Description: Starts acquisition of the camera and makes one single xy
-        track and, if feedback_val is True, corrects for the drift
+        feedback_val is unused
         """
-        _lgr.debug('Feedback %s', feedback_val)
         if initial:
             self.toggle_feedback(True, mode='discrete')
-            self.initial = initial
-            print(datetime.now(), '[xy_tracking] initial', initial)
+            _lgr.info("Initial xy single tracking")
         if not self.camON:
             print(datetime.now(), 'singlexy liveview started')
             self.camON = True
-            # if self.camera.open_device():
-            #     self.camera.set_roi(16, 16, 1920, 1200)
-            #     try:
-            #         self.camera.alloc_and_announce_buffers()
-            #         self.camera.start_acquisition()
-            #     except Exception as e:
-            #         print("Exception", str(e))
-            # else:
-            #     self.camera.destroy_all()
-
         time.sleep(0.200)
-        print("Estoy dentro de single_xy_correction")
+
         self.update_view()
-        # self.image = self.camera.on_acquisition_timer()
-        # self.changedImage.emit(self.image) Hecho por update_view
-        self.camON = False
+        if initial:
+            self._initialize_xy_positions()
 
         self.track('xy')
         self.update_graph_data()
@@ -1255,13 +1245,13 @@ class Backend(QtCore.QObject):
         if initial:
             if not self.camON:
                 self.camON = True
-            # self.reset()
-            # self.reset_data_arrays()
+
         self.update_view()
-        self.update_graph_data()
         if initial:
-            self.initial_focus = True
+            self.center_of_mass()  # Esto actualiza la posicion z medida
+            self.initialz = self.currentz
         self.track('z')
+        self.update_graph_data()
         self.correct_z(mode='discrete')
         # if self.save_data_state:
         #     self.time_array.append(self.currentTime)
@@ -1397,10 +1387,13 @@ class Backend(QtCore.QObject):
         self.set_moveTo_param(x_f, y_f, z_f)
         self.adw.Start_Process(2)
 
-    def reset(self):
-        """Prepare graphs buffers and internal data for new measurement."""
-        self.initial = True
-        self.initial_focus = True
+    def reset_graph(self):
+        """Prepare graphs buffers and internal graph data for new measurement.
+
+        FIXED: Initial flags were set here
+        """
+        # self.initial = True
+        # self.initial_focus = True
 
         # buffers de datos xy para graficar
         try:  # esto es un leftover de cuando no inicializaba la lista
@@ -1453,7 +1446,8 @@ class Backend(QtCore.QObject):
         self.toggle_feedback(False)
         self.toggle_tracking(False)
 
-        self.reset()
+        # TODO: Ver si no restringir a xy
+        self.reset_graph()
         self.reset_data_arrays()
 
         # TODO: sync this with GUI checkboxes (Lantz typedfeat?)
@@ -1631,9 +1625,10 @@ class Backend(QtCore.QObject):
         # check
         self.toggle_tracking(False)
         self.pattern = False
-        self.reset()
+        self.reset_graph()
         self.reset_data_arrays()
         # comparar con la funcion de focus: algo que ver con focusTimer
+        # TODO: ¿Seguro de que queremos apagar?
         if self.camON:
             self.viewtimer.stop()
             self.liveviewSignal.emit(False)
@@ -1656,7 +1651,7 @@ class Backend(QtCore.QObject):
         frontend.closeSignal.connect(self.stop)
         frontend.saveDataSignal.connect(self.get_save_data_state)
         frontend.exportDataButton.clicked.connect(self.export_data)
-        frontend.clearDataButton.clicked.connect(self.reset)
+        frontend.clearDataButton.clicked.connect(self.reset_graph)
         frontend.clearDataButton.clicked.connect(self.reset_data_arrays)
         # Falta botón de Calibrate con calibrate_z
         frontend.trackingBeadsBox.stateChanged.connect(
