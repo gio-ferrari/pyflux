@@ -214,7 +214,7 @@ class Frontend(QtGui.QFrame):
         self.xyDataItem.setData(np.mean(xData, axis=1), np.mean(yData, axis=1))
         # los cambios aquí tienen que verse reflejados en la gui, histogramas
         if len(xData) > 2:  # TODO: chequear esta parte
-            self.plot_ellipse(xData, yData)
+            # self.plot_ellipse(xData, yData)
             hist, bin_edges = np.histogram(zData, bins=60)
             self.zHist.setOpts(x=bin_edges[:-1], height=hist)
             xstd = np.std(np.mean(xData, axis=1))
@@ -265,6 +265,7 @@ class Frontend(QtGui.QFrame):
             self.shutterCheckbox.setChecked(on)
 
     # TODO: Chequear si necesito esto, cf xyz
+    # FIXME reimplementar esto, evitando loops
     @pyqtSlot(bool, bool, bool)
     def get_backend_states(self, tracking, feedback, savedata):
         """Actualizar el frontend de acuerdo al estado del backend."""
@@ -398,6 +399,7 @@ class Frontend(QtGui.QFrame):
                                   left=('Y position', 'nm'))  # Cambio ejes FC
         self.xyplotItem.setAspectLocked(True)  # Agregué FC
 
+        # FIXME: ver si esto esta funcionando
         self.xyDataItem = self.xyplotItem.plot([], pen=None,
                                                symbolBrush=(255, 0, 0),
                                                symbolSize=5, symbolPen=None)
@@ -640,11 +642,11 @@ class Backend(QtCore.QObject):
         # self.viewtimer.timeout.connect(self.update)
         self.xyz_time = 200  # 200 ms per acquisition + fit + correction
 
-        self.tracking_value = False  # Si trackear (NO si corregir)
+        # Si trackear (NO si corregir)
         self.tracking_xy = False
         self.tracking_z = False
         self.save_data_state = False
-        self.feedback_active = False  # Si corregir (implica trackear)
+        # Si corregir (implica trackear)
         self.feedback_xy = False
         self.feedback_z = False
         self.camON = False  # Si la cámara está prendida, para cámaras on/off
@@ -833,7 +835,6 @@ class Backend(QtCore.QObject):
         """
         self.toggle_tracking_xy(val)
         self.toggle_tracking_z(val)
-        self.tracking_value = val
 
     @pyqtSlot(bool)
     def toggle_tracking_xy(self, val):
@@ -842,6 +843,9 @@ class Backend(QtCore.QObject):
         Drift correction feedback loop is not automatically started.
         """
         if val is True:
+            if self.tracking_xy:
+                _lgr.info("Doble activación tracking xy")
+                return
             if not self.tracking_z:
                 self.reset_graph()
                 self.reset_data_arrays()
@@ -861,6 +865,9 @@ class Backend(QtCore.QObject):
             self._initialize_xy_positions()
 
         elif val is False:
+            if not self.tracking_xy:
+                _lgr.info("Doble des activación tracking xy")
+                return
             self.tracking_xy = False
         else:
             _lgr.error("Valor inválido pasado a toggle_tracking_z: %s", val)
@@ -872,6 +879,9 @@ class Backend(QtCore.QObject):
         Drift correction feedback loop is not automatically started.
         """
         if val is True:
+            if self.tracking_z:
+                _lgr.info("Doble activación tracking z")
+                return
             if not self.tracking_xy:
                 self.reset_graph()
                 self.reset_data_arrays()
@@ -883,6 +893,9 @@ class Backend(QtCore.QObject):
             self.initialz = self.currentz
             self.tracking_z = True
         elif val is False:
+            if not self.tracking_z:
+                _lgr.info("Doble desactivación tracking z")
+                return
             self.tracking_z = False
         else:
             _lgr.error("Valor inválido pasado a toggle_tracking_z: %s", val)
@@ -897,21 +910,23 @@ class Backend(QtCore.QObject):
         """
         if mode not in ('discrete', 'continous'):
             _lgr.warning("Invalid feedback mode: %s", mode)
-        # FIXME: feedback split
         if type(val) is not bool:
             _lgr.warning("Toggling feedback mode not boolean; %s", type(val))
 
+        # FIXME: feedback split
         self.set_xy_feedback(val, mode)
         self.set_z_feedback(val, mode)
-        self.feedback_active = bool(val)
-        _lgr.debug('Feedback loop active: %s', self.feedback_active)
-        self.updateGUIcheckboxSignal.emit(self.tracking_value,
-                                          self.feedback_active,
-                                          self.save_data_state)
+        _lgr.debug('Feedback loop active: %s', val)
+        # self.updateGUIcheckboxSignal.emit(self.tracking_value,
+        #                                   self.feedback_active,
+        #                                   self.save_data_state)
 
     def set_z_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para z."""
         if val is True:
+            if self.feedback_z:  # esto es para evitar loops por la actualización de back a front
+                _lgr.info("Dobre activación de z")
+                return
             if mode == 'continous':  # set up and start actuator process
                 self.set_z_actuator_param()
                 self.adw.Start_Process(3)  # proceso para z
@@ -919,6 +934,8 @@ class Backend(QtCore.QObject):
                 _lgr.debug('z Feedback loop ON')
                 self.feedback_z = True
         elif val is False:
+            if not self.feedback_z:
+                _lgr.info("Dobre desactivación de z")
             self.feedback_z = False
             self.adw.Stop_Process(3)
             _lgr.info('Process 3 stopped. Status: %s', self.adw.Process_Status(3))
@@ -929,6 +946,9 @@ class Backend(QtCore.QObject):
     def set_xy_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para xy."""
         if val is True:
+            if self.feedback_xy:
+                _lgr.info("Doble activacion feedback xy")
+                return
             if (mode == 'continous') and (not self.tracking_xy):
                 _lgr.warning("Requested XY feedback without tracking. Enabling tracking")
                 self.toggle_tracking_xy(True)
@@ -939,7 +959,10 @@ class Backend(QtCore.QObject):
                 _lgr.debug('xy Feedback loop ON')
                 self.feedback_xy = True
         elif val is False:
+            if not self.feedback_xy:
+                _lgr.info("Doble desactivacion feedback xy")
             self.feedback_xy = False
+            # FIXME: check condition below
             if True:  # mode == 'continous':
                 self.adw.Stop_Process(4)
                 _lgr.info('Process 4 stopped. Status: %s', self.adw.Process_Status(4))
@@ -1551,9 +1574,9 @@ class Backend(QtCore.QObject):
         self.toggle_feedback(True)
         self.save_data_state = True
         # Esto está comentado en focus pero no en xy
-        self.updateGUIcheckboxSignal.emit(self.tracking_value,
-                                          self.feedback_active,
-                                          self.save_data_state)
+        # self.updateGUIcheckboxSignal.emit(self.tracking_value,
+        #                                   self.feedback_active,
+        #                                   self.save_data_state)
         _lgr.debug('System xy locked')
 
     @pyqtSlot(np.ndarray, np.ndarray)
@@ -1566,9 +1589,9 @@ class Backend(QtCore.QObject):
         """
         self.toggle_feedback(False)
         # self.toggle_tracking(True)
-        self.updateGUIcheckboxSignal.emit(self.tracking_value,
-                                          self.feedback_active,
-                                          self.save_data_state)
+        # self.updateGUIcheckboxSignal.emit(self.tracking_value,
+        #                                   self.feedback_active,
+        #                                   self.save_data_state)
         x_f, y_f = r
         z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         self.actuator_xyz(x_f, y_f, z_f)
