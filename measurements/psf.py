@@ -25,6 +25,7 @@ from tools import customLog  # NOQA
 import logging as _lgn
 
 _lgr = _lgn.getLogger(__name__)
+_lgr.setLevel(_lgn.DEBUG)
 
 π = np.pi
 
@@ -40,8 +41,8 @@ class Frontend(QtGui.QFrame):
     """
     Signals
     """
-    _plots: list[_pg.PlotItem] = []  # plots de las donas
-    _images: list[np.ndarray] = [None, ] * FIX_K  # data
+    _plots: list = [] #  [_pg.PlotItem] = []  # plots de las donas
+    _images: list = [None, ] * FIX_K  #list[np.ndarray] = [None, ] * FIX_K  # data
     _centerplots: list = [None, ] * FIX_K  # Plots de los centros reales
     _perfectplots: list = [None, ] * FIX_K  # Plots de los centros ideales
     _nframes = None
@@ -91,27 +92,32 @@ class Frontend(QtGui.QFrame):
         ----------
             completed: int
                 Porcentaje de avance
-            image: numpy:ndarray or None
+            image: numpy:ndarray
                 Imagen recibida (si hay) o None si sólo hay que actualizar el %
             order: int
-                Numero de medida. Va de 0 a nFrames * nDonuts -1
+                Numero de medida. Va de 0 a nFrames * nDonuts -1, o bien -1 si
+                no hay medida
         """
-        self.progressBar.setValue(completed)
-        if completed == 100:
-            self.stopButton.setEnabled(False)
-            self.startButton.setEnabled(True)
-            if (image is None) and (order is None):
-                # measurement finished: process file
-                self.process_measurement()
-        if not (self._ndonuts and self._nframes):
-            _lgr.error("No estan seteados numeros necesarios")
-            return
-        if image and order is not None:
-            n_img = order % self._nframes
-            n_donut = order // self._ndonuts
-            _lgr.debug("Actualizando imagen %s/%s de la dona %s", n_img, self._nframes,
-                       n_donut)
-            self.update_donut_image(n_donut, self.backend)
+        try:
+            self.progressBar.setValue(completed)
+            if completed == 100:
+                self.stopButton.setEnabled(False)
+                self.startButton.setEnabled(True)
+                if order == -1:
+                    # measurement finished: process file
+                    time.sleep(1.5)
+                    self.process_measurement()
+            if not (self._ndonuts and self._nframes):
+                _lgr.error("No estan seteados numeros necesarios")
+                return
+            if order >= 0:
+                n_img = order % self._nframes
+                n_donut = order // self._nframes
+                _lgr.debug("Actualizando imagen %s/%s de la dona %s", n_img+1, self._nframes,
+                           n_donut)
+                self.update_donut_image(n_donut, image)
+        except Exception as e:
+            _lgr.error("Excepcion en gps: %s", e)
 
     def process_measurement(self):
         """Update and analyse the graphs."""
@@ -122,7 +128,7 @@ class Frontend(QtGui.QFrame):
         if not base_filename:
             _lgr.error("The backend does not know the filename")
             raise ValueError("No filename")
-        if not self.backend.data or len(self.backend.data) != self._ndonuts * self._nframes:
+        if self._backend.data is None or len(self._backend.data) != self._ndonuts * self._nframes:
             _lgr.warning("These seems to be no data on the backend")
             return
         # cargar configuracion
@@ -130,18 +136,21 @@ class Frontend(QtGui.QFrame):
         if not conf:
             _lgr.warning("Config file not found")
             return
-        scale = conf.getfloat('Scan range (µm)')
+        scale = conf.getfloat('Scan range (µm)') * 1E3
         ps = conf.getfloat('Pixel size (µm)') * 1E3
-        if abs(self.backend.data.shape[1] * ps - scale) > 1E-3:
+        _lgr.info("Pixel size is %s", ps)
+        if abs(self._backend.data.shape[1] * ps - scale) > 1E-3:
             _lgr.warning("Diferencias de escala de %s",
-                         (self.backend.data.shape[1] * ps - scale))
+                         (self._backend.data.shape[1] * ps - scale))
         centros_OK = psft.centers_minflux(FIX_L, FIX_K)
-        for nd in self._ndonuts:
+        for nd in range(self._ndonuts):
             start = nd * self._nframes
-            avg = np.average(self.backend.data[start: start + self._nframes], axis=0)
+            avg = np.average(self._backend.data[start: start + self._nframes], axis=0)
             img = self.update_donut_image(nd, avg)
-            self._update_image_scale(img, conf, *avg.shape)
-            centro = self._find_center(nd, ps)
+            _lgr.info("Antes de update scale")
+            self._update_image_scale(img, ps, *avg.shape)
+            _lgr.info("Antes de find center")
+            centro = self._find_center(nd, ps, centros_OK[nd])
             _lgr.error("La dona %s se encuentra en %s y debería estar en %s",
                        nd, centro, centros_OK[nd])
             print(f"Correr la dona {nd} en {centro-centros_OK[nd]}")
@@ -165,7 +174,7 @@ class Frontend(QtGui.QFrame):
         tr = QtGui.QTransform()
         img.setTransform(tr.scale(pixel_size, pixel_size).translate(-extent_x/2, -extent_y/2))
 
-    def _find_center(self, n_donut: int, pixel_size: float, center: np.ndarray):
+    def _find_center(self, n_donut: int, pixel_size: float, centro: np.ndarray):
         """Find the center of a donut and update the image.
 
         Parameters
@@ -174,8 +183,8 @@ class Frontend(QtGui.QFrame):
             number of donut to analyze
         pixel_size: float
             size of each pixel in nm
-        center: np.ndarray
-            best center for this donut
+        centro: array
+            centro ideal
 
         Returns
         -------
@@ -183,23 +192,25 @@ class Frontend(QtGui.QFrame):
         """
         plot = self._plots[n_donut]
         image = self._images[n_donut]
-        xc, yc = psft.find_center(image, trim=30)
+        xc, yc = psft.find_center(image, trim=15)
+        _lgr.error("Antes de centerplots")
         if self._centerplots[n_donut] is not None:
             try:
-                plot.removeItem[self._centerplots[n_donut]]
-                plot.removeItem[self._perfectplots[n_donut]]
+                plot.removeItem(self._centerplots[n_donut])
+                plot.removeItem(self._perfectplots[n_donut])
             except Exception as e:
                 _lgr.error("Error updating center %s: %s", n_donut, e)
         sp = plot.plot([xc], [yc], pen=(200, 200, 200), symbolBrush=(255, 0, 0),
                        symbolPen='w', )
         self._centerplots[n_donut] = sp
-        np = plot.plot([xc], [yc], pen=(200, 200, 200), symbolBrush=(0, 255, 0),
+        _lgr.error("Antes de segundo plot")
+        ideal_plot = plot.plot([centro[0]], [centro[1]], pen=(200, 200, 200), symbolBrush=(0, 255, 0),
                        symbolPen='w', )
-        self._perfectplots[n_donut] = np
+        self._perfectplots[n_donut] = ideal_plot
         tr = QtGui.QTransform()
         shift = [-_/2 for _ in image.shape]
         sp.setTransform(tr.scale(pixel_size, pixel_size).translate(*shift))
-        np.setTransform(tr.scale(pixel_size, pixel_size).translate(*shift))
+        # ideal_plot.setTransform(tr.scale(pixel_size, pixel_size).translate(*shift))
         # TODO: Fix si se independizan las resoluciones x e y
         return (np.array((xc, yc,)) - np.array([-_/2 for _ in image.shape])) * pixel_size
 
@@ -220,7 +231,7 @@ class Frontend(QtGui.QFrame):
     def setup_gui(self):
         self.setWindowTitle('PSF measurement')
 
-        self.resize(230, 300)
+        self.resize(800, 600)
 
         grid = QtGui.QGridLayout()
 
@@ -359,7 +370,7 @@ class Frontend(QtGui.QFrame):
             # self.vb.addItem(img)
             # self.vb.setAspectLocked(True)
             # self.hist = _pg.HistogramLUTItem(image=img)
-            grid.addWidget(self.imageWidget, 0, 2, 2, 2)
+            grid.addWidget(self.imageWidget, 0, 2, 3, -1)
         except Exception as e:
             print("Excepción", e)
 
@@ -393,11 +404,14 @@ class Frontend(QtGui.QFrame):
         if donut_number > len(self._plots):
             _lgr.error("Invalid donut number: %s", donut_number)
             return
+        _lgr.info("Actualizando imagen %s con una de intensidad %s",
+                  donut_number, image.sum())
         plot = self._plots[donut_number]
         plot.clear()
         img = _pg.ImageItem(image)
         plot.addItem(img)
         self._images[donut_number] = image
+        _lgr.debug("Fin actualizacion imagen %s", donut_number)
         return img
 
 
@@ -437,27 +451,28 @@ class Backend(QtCore.QObject):
         self.xyIsDone = False
         self.zIsDone = False
         self.scanIsDone = False
-
-        self.progressSignal.emit(0, None, None)
-        self.shutterSignal.emit(7, False)
-        self.shutterSignal.emit(11, False)
-
-        _lgr.info('PSF measurement started')
-
-        self.xyStopSignal.emit(True)
-        # self.zStopSignal.emit(True)
-
-        # open IR and tracking shutter
-        self.shutterSignal.emit(5, True)
-        self.shutterSignal.emit(6, True)
-        self.moveToInitialSignal.emit()
-
-        self.data = np.zeros((self.totalFrameNum, self.nPixels, self.nPixels))
-        _lgr.debug('Data shape is %s', np.shape(self.data))
-        self.xy_flag = True
-        self.z_flag = True
-        self.scan_flag = True
-
+        try:
+            self.progressSignal.emit(0, np.array([]), -1)
+            self.shutterSignal.emit(7, False)
+            self.shutterSignal.emit(11, False)
+    
+            _lgr.info('PSF measurement started')
+    
+            self.xyStopSignal.emit(True)
+            # self.zStopSignal.emit(True)
+    
+            # open IR and tracking shutter
+            self.shutterSignal.emit(5, True)
+            self.shutterSignal.emit(6, True)
+            self.moveToInitialSignal.emit()
+    
+            self.data = np.zeros((self.totalFrameNum, self.nPixels, self.nPixels))
+            _lgr.debug('Data shape is %s', np.shape(self.data))
+            self.xy_flag = True
+            self.z_flag = True
+            self.scan_flag = True
+        except Exception as e:
+            print("Excepcion en start:", e)
         self.measTimer.start(0)
 
     def stop(self):
@@ -474,7 +489,7 @@ class Backend(QtCore.QObject):
         # self.zStopSignal.emit(False)
 
         self.export_data()
-
+        self.progressSignal.emit(100, np.array([]), -1)  # changed from 0
         _lgr.debug('PSF measurement ended')
 
     def loop(self):

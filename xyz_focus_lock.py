@@ -1137,19 +1137,22 @@ class Backend(QtCore.QObject):
 
         time.sleep(0.200)
         print("Estoy dentro de single_xy_correction")
-        self.update_view()
-        # self.image = self.camera.on_acquisition_timer()
-        # self.changedImage.emit(self.image) Hecho por update_view
-        self.camON = False
-
-        self.track('xy')
-        self.update_graph_data()
-        self.correct_xy(mode='discrete')
-        target_x = np.round(self.target_x, 3)
-        target_y = np.round(self.target_y, 3)
-        _lgr.info('Discrete correction to (%s, %s)', target_x, target_y)
-        self.xyIsDone.emit(True, target_x, target_y)
-        _lgr.debug('Single xy correction ended')
+        try:
+            self.update_view()
+            # self.image = self.camera.on_acquisition_timer()
+            # self.changedImage.emit(self.image) Hecho por update_view
+            self.camON = False
+    
+            self.track('xy')
+            self.update_graph_data()
+            self.correct_xy(mode='discrete')
+            target_x = np.round(self.target_x, 3)
+            target_y = np.round(self.target_y, 3)
+            _lgr.info('Discrete correction to (%s, %s)', target_x, target_y)
+            self.xyIsDone.emit(True, target_x, target_y)
+            _lgr.debug('Single xy correction ended')
+        except Exception as e:
+            print("Excepcion en singleXY :", e)
 
     @pyqtSlot(bool, bool)
     def single_z_correction(self, feedback_val, initial):
@@ -1511,7 +1514,7 @@ class Backend(QtCore.QObject):
         -------
             From: [minflux] xyzEndSignal or [psf] endSignal
         """
-        self.xy_filename = fname
+        self.xy_filename = fname + 'xy_data'
         self.export_data()
         # TODO: decide whether I want feedback ON/OFF at the end of measurement
         self.toggle_feedback(False)

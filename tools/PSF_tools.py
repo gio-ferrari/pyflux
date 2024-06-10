@@ -33,7 +33,7 @@ def radial_sum(image: _np.ndarray):
             max_y = min(yp, y[-1] - yp)
             if max_x == 0 and max_y == 0:
                 out[xp, yp] = _np.inf
-                print(xp, yp, "NAN")
+                # print(xp, yp, "NAN")
             else:
                 nitems = 0
                 value = 0
@@ -126,8 +126,7 @@ if __name__ == '__main__':
     plt.figure("test")
     plt.scatter(cms[:,0],cms[:,1])
    
-    
-
+ 
     # config['Scanning parameters'] = {
     #     'Date and time': dateandtime,
     #     'Initial Position [x0, y0, z0] (µm)': main.initialPos,
