@@ -452,7 +452,7 @@ class Frontend(QtGui.QFrame):
         # self.delete_roi_zButton = QtGui.QPushButton('delete ROI z')
         # self.delete_roi_zButton.clicked.connect(self.delete_roi_z)
 
-        # position tracking checkbox
+        # export data checkbox
         self.exportDataButton = QtGui.QPushButton('Export current data')
 
         # position tracking checkbox
@@ -473,16 +473,36 @@ class Frontend(QtGui.QFrame):
         self.trackManager = GroupedCheckBoxes(self.trackAllBox, self.trackXYBox,
                                               self.trackZBox,
                                               )
-        self.trackXY.stateChanged.connect(
+        self.trackXYBox.stateChanged.connect(
             lambda: self.emit_roi_info(roi_type='xy'))
         self.trackZBox.stateChanged.connect(
             lambda: self.emit_roi_info(roi_type='z'))
 
-        # Ver como manejar el setup data curves
-
+        # TODO Ver como manejar el setup data curves
+        # TODO: ver cómo manejar el emit_roi
+        # TODO: ver cómo prender las cosas de a una
 
         # turn ON/OFF feedback loop
         self.feedbackLoopBox = QtGui.QCheckBox('Feedback loop')
+        # self.feedbackAllBox = QtGui.QCheckBox('All')
+        # feedbackgb = QGroupBox("Feedback")
+        # feedbackLayout = QHBoxLayout()
+        # feedbackgb.setLayout(feedbackLayout)
+        # feedbackLayout.addWidget(self.feedbackAllBox)
+        # self.feedbackXYBox = QtGui.QCheckBox("xy")
+        # self.feedbackZBox = QtGui.QCheckBox("z")
+        # feedbackLayout.addWidget(self.feedbackXYBox)
+        # feedbackLayout.addWidget(self.feedbackZBox)
+        # self.feedbackManager = GroupedCheckBoxes(self.feedbackAllBox,
+        #                                          self.feedbackXYBox,
+        #                                          self.feedbackZBox,
+        #                                          )
+
+        # self.feedbackXYBox.stateChanged.connect(
+            # lambda: self.emit_roi_info(roi_type='xy'))
+        # self.feedbackZBox.stateChanged.connect(
+            # lambda: self.emit_roi_info(roi_type='z'))
+
 
         # save data signal
         self.saveDataBox = QtGui.QCheckBox("Save data")
