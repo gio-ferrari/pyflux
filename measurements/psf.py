@@ -42,6 +42,7 @@ class Frontend(QtGui.QFrame):
     Signals
     """
     _plots: list = [] #  [_pg.PlotItem] = []  # plots de las donas
+    _imitems: list = []  # [_pg.ImageItem] = []  # plots de las donas
     _images: list = [None, ] * FIX_K  #list[np.ndarray] = [None, ] * FIX_K  # data
     _centerplots: list = [None, ] * FIX_K  # Plots de los centros reales
     _perfectplots: list = [None, ] * FIX_K  # Plots de los centros ideales
@@ -115,7 +116,7 @@ class Frontend(QtGui.QFrame):
                 n_donut = order // self._nframes
                 _lgr.debug("Actualizando imagen %s/%s de la dona %s", n_img+1, self._nframes,
                            n_donut)
-                self.update_donut_image(n_donut, image)
+                self.update_donut_image(n_donut, np.rot90(image, k=-1))
         except Exception as e:
             _lgr.error("Excepcion en gps: %s", e)
 
@@ -353,23 +354,13 @@ class Frontend(QtGui.QFrame):
             for i in range(FIX_K):  # Debería ser K
                 p = self.imageWidget.addPlot(title=f"Dona {i+1}")
                 self._plots.append(p)
+                img = _pg.ImageItem()
+                p.addItem(img)
+                self._imitems.append(img)
                 p.setLabels(bottom='x/nm', left='y/nm')
                 if ((i+1) % N_COLS) == 0:  # es lo que hay
                     self.imageWidget.nextRow()
-            # self.xaxis = _pg.AxisItem(orientation='bottom', maxTickLength=5)
-            # self.xaxis.showLabel(show=True)
-            # self.xaxis.setLabel('x [px]')  # Ver nm
-            # self.yaxis = _pg.AxisItem(orientation='left', maxTickLength=5)
-            # self.yaxis.showLabel(show=True)
-            # self.yaxis.setLabel('y [px]')  # ver nm
-            # image widget set-up and layout
-            # self.vb = self.imageWidget.addPlot(row=0, col=0, axisItems={
-            #     'bottom': self.xaxis, 'left': self.yaxis})
-            # img = _pg.ImageItem(self.img_array[image_number,:,:])
-            # self.vb.clear()
-            # self.vb.addItem(img)
-            # self.vb.setAspectLocked(True)
-            # self.hist = _pg.HistogramLUTItem(image=img)
+                # p.setAspectLocked(True)
             grid.addWidget(self.imageWidget, 0, 2, 3, -1)
         except Exception as e:
             print("Excepción", e)
@@ -406,13 +397,12 @@ class Frontend(QtGui.QFrame):
             return
         _lgr.info("Actualizando imagen %s con una de intensidad %s",
                   donut_number, image.sum())
-        plot = self._plots[donut_number]
-        plot.clear()
-        img = _pg.ImageItem(image)
-        plot.addItem(img)
+        imitem = self._imitems[donut_number]
+        imitem.setImage(image)
         self._images[donut_number] = image
+        self._plots[donut_number].autoRange()
         _lgr.debug("Fin actualizacion imagen %s", donut_number)
-        return img
+        return imitem
 
 
 class Backend(QtCore.QObject):
