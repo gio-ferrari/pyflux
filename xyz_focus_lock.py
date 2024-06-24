@@ -190,12 +190,13 @@ class Frontend(QtGui.QFrame):
             self.img.setImage(np.zeros((1200, 1920)), autoLevels=False)
             _lgr.info('Live view stopped')
 
-    @pyqtSlot(np.ndarray)
-    def get_image(self, img):
+    @pyqtSlot(np.ndarray, np.ndarray)
+    def get_image(self, img, avgIntData):
         """Recibe la imagen del back."""
         self.img.setImage(img, autoLevels=False)
         self.xaxis.setScale(scale=PX_SIZE/1000)  # scale to µm
         self.yaxis.setScale(scale=PX_SIZE/1000)  # scale to µm
+        self.avgIntCurve.setData(avgIntData, connect="finite")
 
     # Cambió la señal changed_data
     # cambiaron los parámetros del slot get_data
@@ -259,11 +260,10 @@ class Frontend(QtGui.QFrame):
             ystd = np.std(np.nanmean(yData, axis=1))
             self.ystd_value.setText(str(np.around(ystd, 2)))
 
-    @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
-    def get_z_data(self, tData, zData, avgIntData):
+    @pyqtSlot(np.ndarray, np.ndarray)
+    def get_z_data(self, tData, zData):
         """Recibir datos nuevos z, intensidad del backend."""
         self.zCurve.setData(tData, zData, connect="finite")
-        self.avgIntCurve.setData(avgIntData, connect="finite")
 
         if len(zData) > 2:
             hist, bin_edges = np.histogram(zData, bins=60)
@@ -322,7 +322,7 @@ class Frontend(QtGui.QFrame):
         self.trackZBox.setChecked(tracking_z)
         # self.feedbackLoopBox.setChecked(feedback)
         self.feedbackXYBox.setChecked(feedback_xy)
-        self.feedbackXYBox.setChecked(feedback_z)
+        self.feedbackZBox.setChecked(feedback_z)
         self.saveDataBox.setChecked(savedata)
 
     def emit_save_data_state(self):
@@ -644,9 +644,9 @@ class Frontend(QtGui.QFrame):
 
 
 class Backend(QtCore.QObject):
-    changedImage = pyqtSignal(np.ndarray)
+    changedImage = pyqtSignal(np.ndarray, np.ndarray, )
     changedXYData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, )
-    changedZData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, )
+    changedZData = pyqtSignal(np.ndarray, np.ndarray, )
     # no se usa en xyz_tracking
     updateGUIcheckboxSignal = pyqtSignal(bool, bool, bool, bool, bool)
     # changedSetPoint = pyqtSignal(float) #Debería añadir esta señal??? de focus.py
@@ -815,11 +815,12 @@ class Backend(QtCore.QObject):
                 self.export_data()
                 self.reset_data_arrays()
             # FIXME: Ver cómo separar los trackings
-            self.update_graph_data()
             if self.feedback_xy:
                 self.correct_xy()
             if self.feedback_z:
                 self.correct_z()
+                
+        self.update_graph_data()
 
         # De acá para abajo es para hacer un patrón para algún test
         if self.pattern:
@@ -845,7 +846,7 @@ class Backend(QtCore.QObject):
             self.video.append(self.image)
 
         # send image to gui
-        self.changedImage.emit(self.image)
+        # self.changedImage.emit(self.image)  # ahora esta en update_graph_data
 
     # Incorporo cambios con vistas a añadir data actualizada de z
     def update_graph_data(self):
@@ -864,8 +865,11 @@ class Backend(QtCore.QObject):
                 self.avgIntData[self.ptr] = self.avgInt
                 self.changedZData.emit(self.time[0:self.ptr + 1],
                                        self.zData[0:self.ptr + 1],
-                                       self.avgIntData[0:self.ptr + 1],
                                        )
+            self.avgIntData[self.ptr] = self.avgInt
+            self.changedImage.emit(self.image,
+                                   self.avgIntData[0:self.ptr + 1],
+                                   )
         else:  # roll a mano
             self.time[:-1] = self.time[1:]
             self.time[-1] = self.currentTime
@@ -878,10 +882,12 @@ class Backend(QtCore.QObject):
             if self.tracking_z:
                 self.zData[:-1] = self.zData[1:]
                 self.zData[-1] = self.z
-                self.avgIntData[:-1] = self.avgIntData[1:]
-                self.avgIntData[-1] = self.avgInt
-                self.changedZData.emit(self.time, self.zData, self.avgIntData)
-
+                self.changedZData.emit(self.time, self.zData)
+            self.avgIntData[:-1] = self.avgIntData[1:]
+            self.avgIntData[-1] = self.avgInt
+            self.changedImage.emit(self.image,
+                                   self.avgIntData,
+                                   )
         self.ptr += 1
 
     # esta función es igual a la de xyz_tracking porque es para xy únicamente
@@ -977,19 +983,15 @@ class Backend(QtCore.QObject):
         if type(val) is not bool:
             _lgr.warning("Toggling feedback mode not boolean; %s", type(val))
 
-        # FIXME: feedback split
         self.set_xy_feedback(val, mode)
         self.set_z_feedback(val, mode)
         _lgr.debug('Feedback loop active: %s', val)
-        self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
-                                          self.feedback_xy, self.feedback_z,
-                                          self.save_data_state)
 
     def set_z_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para z."""
         if val is True:
             if self.feedback_z:  # esto es para evitar loops por la actualización de back a front
-                _lgr.info("Dobre activación de z")
+                _lgr.info("Doble activación de z")
                 return
             if mode == 'continous':  # set up and start actuator process
                 self.set_z_actuator_param()
@@ -999,13 +1001,16 @@ class Backend(QtCore.QObject):
                 self.feedback_z = True
         elif val is False:
             if not self.feedback_z:
-                _lgr.info("Dobre desactivación de z")
+                _lgr.info("Doble desactivación de z")
             self.feedback_z = False
             self.adw.Stop_Process(3)
             _lgr.info('Process 3 stopped. Status: %s', self.adw.Process_Status(3))
             _lgr.debug('z Feedback loop Off')
         else:
             _lgr.error("Deberías pasar un booleano, no: %s", val)
+        self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
+                                          self.feedback_xy, self.feedback_z,
+                                          self.save_data_state)
 
     def set_xy_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para xy."""
@@ -1034,6 +1039,9 @@ class Backend(QtCore.QObject):
                 _lgr.debug('xy Feedback loop Off')
         else:
             _lgr.error("Deberías pasar un booleano, no: %s", val)
+        self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
+                                          self.feedback_xy, self.feedback_z,
+                                          self.save_data_state)
 
     def center_of_mass(self):
         """Calculate z image center of mass."""
@@ -1226,7 +1234,7 @@ class Backend(QtCore.QObject):
         if (abs(dx) > security_thr or abs(dy) > security_thr):
             _lgr.error('xy Correction movement larger than 200 nm,'
                   ' active correction turned OFF')
-            self.toggle_feedback(False, mode)
+            self.set_xy_feedback(False, mode)
         else:
             # compensate for the mismatch between camera/piezo system of
             # reference
@@ -1277,7 +1285,7 @@ class Backend(QtCore.QObject):
             print(datetime.now(),
                   '[xyz_tracking] Z Correction movement larger than 200 nm,'
                   ' active correction turned OFF')
-            self.toggle_feedback(False, mode)
+            self.set_z_feedback(False, mode)
         else:
             # add correction to piezo position
             targetXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
@@ -1483,8 +1491,9 @@ class Backend(QtCore.QObject):
         self.ptr = 0  # Posición en los buffers de graficación
         self.startTime = time.time()
 
-        self.changedData.emit(self.time, self.xData, self.yData, self.zData,
-                              self.avgIntData)
+        self.changedXYData.emit(self.time, self.xData, self.yData)
+        self.changedZData.emit(self.time, self.zData)
+        # self.changedImage.emit()
 
     def reset_xy_graph(self):
         """Prepare xy graphs buffers for new measurement."""
@@ -1732,29 +1741,26 @@ class Backend(QtCore.QObject):
         frontend.clearDataButton.clicked.connect(self.reset_graph)
         frontend.clearDataButton.clicked.connect(self.reset_data_arrays)
         # Falta botón de Calibrate con calibrate_z
-        frontend.trackingBeadsBox.stateChanged.connect(
-            lambda: self.toggle_tracking(frontend.trackingBeadsBox.isChecked())
+        frontend.trackXYBox.stateChanged.connect(
+            lambda: self.toggle_tracking_xy(frontend.trackXYBox.isChecked())
+            )
+        frontend.trackZBox.stateChanged.connect(
+            lambda: self.toggle_tracking_z(frontend.trackZBox.isChecked())
             )
         frontend.shutterCheckbox.stateChanged.connect(
             lambda: self.toggle_tracking_shutter(
                 8, frontend.shutterCheckbox.isChecked()))
         frontend.liveviewButton.clicked.connect(self.liveview)
-        frontend.feedbackLoopBox.stateChanged.connect(
-            lambda: self.toggle_feedback(frontend.feedbackLoopBox.isChecked()))
+
+        frontend.feedbackXYBox.stateChanged.connect(
+            lambda: self.set_xy_feedback(frontend.feedbackXYBox.isChecked()))
+        frontend.feedbackZBox.stateChanged.connect(
+            lambda: self.set_z_feedback(frontend.feedbackZBox.isChecked()))
         frontend.xyPatternButton.clicked.connect(
             lambda: self.start_tracking_pattern
             )  # duda con esto, comparar con línea análoga en xyz_tracking
 
-        # La función toggle_feedback se utiliza como un slot de PyQt y se
-        # conecta al evento stateChanged de un cuadro de verificación llamado
-        # feedbackLoopBox. Su propósito es activar o desactivar el feedback
-        # (retroalimentación) para la corrección continua en el modo especificado.
-
         # TO DO: clean-up checkbox create continous and discrete feedback loop
-
-        # lambda function and gui_###_state are used to toggle both backend
-        # states and checkbox status so that they always correspond
-        # (checked <-> active, not checked <-> inactive)
 
     @pyqtSlot()
     def stop(self):
