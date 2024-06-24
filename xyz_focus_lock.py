@@ -313,10 +313,15 @@ class Frontend(QtGui.QFrame):
     # TODO: Chequear si necesito esto, cf xyz
     # FIXME reimplementar esto, evitando loops
     @pyqtSlot(bool, bool, bool)
-    def get_backend_states(self, tracking, feedback, savedata):
+    def get_backend_states(self, tracking_xy, tracking_z, feedback_xy, feedback_z,
+                           savedata):
         """Actualizar el frontend de acuerdo al estado del backend."""
-        self.trackAllBox.setChecked(tracking)
-        self.feedbackLoopBox.setChecked(feedback)
+        # self.trackAllBox.setChecked(tracking)
+        self.trackXYBox.setChecked(tracking_xy)
+        self.trackZBox.setChecked(tracking_z)
+        # self.feedbackLoopBox.setChecked(feedback)
+        self.feedbackXYBox.setChecked(feedback_xy)
+        self.feedbackXYBox.setChecked(feedback_z)
         self.saveDataBox.setChecked(savedata)
 
     def emit_save_data_state(self):
@@ -647,7 +652,7 @@ class Backend(QtCore.QObject):
     changedXYData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, )
     changedZData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, )
     # no se usa en xyz_tracking
-    updateGUIcheckboxSignal = pyqtSignal(bool, bool, bool)
+    updateGUIcheckboxSignal = pyqtSignal(bool, bool, bool, bool, bool)
     # changedSetPoint = pyqtSignal(float) #Debería añadir esta señal??? de focus.py
     xyIsDone = pyqtSignal(bool, float, float)  # signal to emit new piezo position after drift correction
     shuttermodeSignal = pyqtSignal(int, bool)
@@ -980,9 +985,9 @@ class Backend(QtCore.QObject):
         self.set_xy_feedback(val, mode)
         self.set_z_feedback(val, mode)
         _lgr.debug('Feedback loop active: %s', val)
-        # self.updateGUIcheckboxSignal.emit(self.tracking_value,
-        #                                   self.feedback_active,
-        #                                   self.save_data_state)
+        self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
+                                          self.feedback_xy, self.feedback_z,
+                                          self.save_data_state)
 
     def set_z_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para z."""
@@ -1631,9 +1636,9 @@ class Backend(QtCore.QObject):
         self.toggle_feedback(True)
         self.save_data_state = True
         # Esto está comentado en focus pero no en xy
-        # self.updateGUIcheckboxSignal.emit(self.tracking_value,
-        #                                   self.feedback_active,
-        #                                   self.save_data_state)
+        self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
+                                          self.feedback_xy, self.feedback_z,
+                                          self.save_data_state)
         _lgr.debug('System xy locked')
 
     @pyqtSlot(np.ndarray, np.ndarray)
@@ -1646,9 +1651,9 @@ class Backend(QtCore.QObject):
         """
         self.toggle_feedback(False)
         # self.toggle_tracking(True)
-        # self.updateGUIcheckboxSignal.emit(self.tracking_value,
-        #                                   self.feedback_active,
-        #                                   self.save_data_state)
+        self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
+                                          self.feedback_xy, self.feedback_z,
+                                          self.save_data_state)
         x_f, y_f = r
         z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         self.actuator_xyz(x_f, y_f, z_f)
