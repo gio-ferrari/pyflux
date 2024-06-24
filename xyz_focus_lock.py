@@ -48,6 +48,15 @@ class GroupedCheckBoxes:
     """Manages grouped CheckBoxes states."""
 
     def __init__(self, all_checkbox: QCheckBox, *other_checkboxes):
+        """Init class.
+
+        Parameters
+        ----------
+        all_checkbox : QCheckBox
+            The checkbox that checks/unchecks all others.
+        *other_checkboxes : TYPE
+            All other checkboxes.
+        """
         self.acb = all_checkbox
         self.others = other_checkboxes
         for _ in other_checkboxes:
@@ -92,8 +101,8 @@ class Frontend(QtGui.QFrame):
         self.roilist: list = []  # list[viewbox_tools.ROI2]
         self.roi_z: viewbox_tools.ROI2 = None
         # lista de graficos de desplazamientos de cada fiduciaria
-        self.xCurve: list = None  # list[pg.PlotDataItem]
-        self.yCurve: list = None  # list[pg.PlotDataItem]
+        self.xCurve: list = []  # list[pg.PlotDataItem]  una por ROI
+        self.yCurve: list = []  # list[pg.PlotDataItem]  una por ROI
 
         self.setup_gui()
 
@@ -224,6 +233,43 @@ class Frontend(QtGui.QFrame):
             zstd = np.std(zData)
             self.zstd_value.setText(str(np.around(zstd, 2)))
 
+    @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
+    def get_xy_data(self, tData, xData, yData):
+        """Recibir datos nuevos xy del backend."""
+        N_NP = np.shape(xData)[1]
+        if N_NP != len(self.roilist):
+            _lgr.error("El número de ROIs y la info de xData no coinciden")
+
+        # x data
+        for i in range(N_NP):
+            self.xCurve[i].setData(tData, xData[:, i])
+        self.xmeanCurve.setData(tData, np.mean(xData, axis=1))
+        # y data
+        for i in range(N_NP):
+            self.yCurve[i].setData(tData, yData[:, i])
+        self.ymeanCurve.setData(tData, np.mean(yData, axis=1))
+        # set xy 2D data
+        self.xyDataItem.setData(np.mean(xData, axis=1), np.mean(yData, axis=1))
+        # los cambios aquí tienen que verse reflejados en la gui, histogramas
+        if len(xData) > 2:  # TODO: chequear esta parte
+            # self.plot_ellipse(xData, yData)
+            xstd = np.std(np.mean(xData, axis=1))
+            self.xstd_value.setText(str(np.around(xstd, 2)))
+            ystd = np.std(np.mean(yData, axis=1))
+            self.ystd_value.setText(str(np.around(ystd, 2)))
+
+    @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
+    def get_z_data(self, tData, zData, avgIntData):
+        """Recibir datos nuevos z, intensidad del backend."""
+        self.zCurve.setData(tData, zData)
+        self.avgIntCurve.setData(avgIntData)
+
+        hist, bin_edges = np.histogram(zData, bins=60)
+        self.zHist.setOpts(x=bin_edges[:-1], height=hist)
+        zstd = np.std(zData)
+        self.zstd_value.setText(str(np.around(zstd, 2)))
+
+
     def plot_ellipse(self, x_array, y_array):
         pass
 #            cov = np.cov(x_array, y_array)
@@ -282,7 +328,8 @@ class Frontend(QtGui.QFrame):
 
     def make_connection(self, backend):
         backend.changedImage.connect(self.get_image)
-        backend.changedData.connect(self.get_data)
+        backend.changedXYData.connect(self.get_xy_data)
+        backend.changedZData.connect(self.get_z_data)
         backend.updateGUIcheckboxSignal.connect(self.get_backend_states)
         backend.shuttermodeSignal.connect(self.update_shutter)
         backend.liveviewSignal.connect(self.toggle_liveview)
@@ -376,7 +423,7 @@ class Frontend(QtGui.QFrame):
         self.xyzGraph.zPlot.setLabels(bottom=('Time', 's'),
                                       left=('Z position', 'nm'))
         self.xyzGraph.zPlot.showGrid(x=True, y=True)
-        self.zCurve = self.xyzGraph.zPlot.plot(pen='y')
+        self.zCurve = self.xyzGraph.zPlot.plot(pen='y', connect='finite')
 
         self.xyzGraph.avgIntPlot = self.xyzGraph.addPlot(row=3, col=0)
         self.xyzGraph.avgIntPlot.setLabels(bottom=('Time', 's'),
@@ -456,17 +503,15 @@ class Frontend(QtGui.QFrame):
         self.exportDataButton = QtGui.QPushButton('Export current data')
 
         # position tracking checkbox
-        self.trackAllBox = QtGui.QCheckBox('All')
-        self.trackAllBox.stateChanged.connect(
-            self.setup_data_curves) # agrego esta lìnea porque el tracking no funciona
         # self.trackAllBox.stateChanged.connect(
-            # lambda: self.emit_roi_info(roi_type='xy'))
+        #     lambda: self.emit_roi_info(roi_type='xy'))
         trackgb = QGroupBox("Tracking")
         trackLayout = QHBoxLayout()
         trackgb.setLayout(trackLayout)
-        trackLayout.addWidget(self.trackAllBox)
+        self.trackAllBox = QtGui.QCheckBox('All')
         self.trackXYBox = QtGui.QCheckBox("xy")
         self.trackZBox = QtGui.QCheckBox("z")
+        trackLayout.addWidget(self.trackAllBox)
         trackLayout.addWidget(self.trackXYBox)
         trackLayout.addWidget(self.trackZBox)
 
@@ -477,26 +522,27 @@ class Frontend(QtGui.QFrame):
             lambda: self.emit_roi_info(roi_type='xy'))
         self.trackZBox.stateChanged.connect(
             lambda: self.emit_roi_info(roi_type='z'))
+        self.trackAllBox.stateChanged.connect(self.setup_xy_data_curves)
 
         # TODO Ver como manejar el setup data curves
         # TODO: ver cómo manejar el emit_roi
         # TODO: ver cómo prender las cosas de a una
 
         # turn ON/OFF feedback loop
-        self.feedbackLoopBox = QtGui.QCheckBox('Feedback loop')
-        # self.feedbackAllBox = QtGui.QCheckBox('All')
-        # feedbackgb = QGroupBox("Feedback")
-        # feedbackLayout = QHBoxLayout()
-        # feedbackgb.setLayout(feedbackLayout)
-        # feedbackLayout.addWidget(self.feedbackAllBox)
-        # self.feedbackXYBox = QtGui.QCheckBox("xy")
-        # self.feedbackZBox = QtGui.QCheckBox("z")
-        # feedbackLayout.addWidget(self.feedbackXYBox)
-        # feedbackLayout.addWidget(self.feedbackZBox)
-        # self.feedbackManager = GroupedCheckBoxes(self.feedbackAllBox,
-        #                                          self.feedbackXYBox,
-        #                                          self.feedbackZBox,
-        #                                          )
+        # self.feedbackLoopBox = QtGui.QCheckBox('Feedback loop')
+        feedbackgb = QGroupBox("Feedback")
+        feedbackLayout = QHBoxLayout()
+        feedbackgb.setLayout(feedbackLayout)
+        self.feedbackAllBox = QtGui.QCheckBox('All')
+        self.feedbackXYBox = QtGui.QCheckBox("xy")
+        self.feedbackZBox = QtGui.QCheckBox("z")
+        feedbackLayout.addWidget(self.feedbackAllBox)
+        feedbackLayout.addWidget(self.feedbackXYBox)
+        feedbackLayout.addWidget(self.feedbackZBox)
+        self.feedbackManager = GroupedCheckBoxes(self.feedbackAllBox,
+                                                  self.feedbackXYBox,
+                                                  self.feedbackZBox,
+                                                  )
 
         # self.feedbackXYBox.stateChanged.connect(
             # lambda: self.emit_roi_info(roi_type='xy'))
@@ -542,7 +588,8 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.xyPatternButton, 8, 0)
         # subgrid.addWidget(self.trackAllBox, 1, 1)
         subgrid.addWidget(trackgb, 1, 1)
-        subgrid.addWidget(self.feedbackLoopBox, 2, 1)
+        # subgrid.addWidget(self.feedbackLoopBox, 2, 1)
+        subgrid.addWidget(feedbackgb, 2, 1)
         subgrid.addWidget(self.saveDataBox, 3, 1)
         subgrid.addWidget(self.shutterLabel, 9, 0)
         subgrid.addWidget(self.shutterCheckbox, 9, 1)
@@ -566,15 +613,13 @@ class Frontend(QtGui.QFrame):
         self.liveviewButton.clicked.connect(
             lambda: self.toggle_liveview(self.liveviewButton.isChecked()))
 
-    # aquí debería ir esta función de ser necesario, pruebo descomentando para
-    # saber si debe ir o no
-    def setup_data_curves(self):
+    def setup_xy_data_curves(self):
         """Crear o borrar las curvas si hace falta.
 
         TODO: arreglar esta forma fea de hacer las cosas
         """
         if self.trackAllBox.isChecked():
-            if self.xCurve is not None:
+            if self.xCurve:
                 for i in range(len(self.roilist)):  # remove previous curves
                     self.xyzGraph.xPlot.removeItem(self.xCurve[i])
                     self.xyzGraph.yPlot.removeItem(self.yCurve[i])
@@ -599,8 +644,8 @@ class Frontend(QtGui.QFrame):
 
 class Backend(QtCore.QObject):
     changedImage = pyqtSignal(np.ndarray)
-    changedData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, np.ndarray,
-                             np.ndarray)
+    changedXYData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, )
+    changedZData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, )
     # no se usa en xyz_tracking
     updateGUIcheckboxSignal = pyqtSignal(bool, bool, bool)
     # changedSetPoint = pyqtSignal(float) #Debería añadir esta señal??? de focus.py
@@ -614,8 +659,8 @@ class Backend(QtCore.QObject):
 
     - changedImage:
         To: [frontend] get_image
-    - changedData:
-        To: [frontend] get_data
+    - changedXYData, changedZData:
+        To: [frontend] get_xy_data, get_z_data
     - updateGUIcheckboxSignal:
         To: [frontend] get_backend_states
     - xyIsDone:
@@ -760,31 +805,20 @@ class Backend(QtCore.QObject):
         self.update_view()
 
         if self.tracking_xy:
-            t0 = time.time()
             self.track('xy')
-            t1 = time.time()
-            # print('track xy took', (t1-t0)*1000, 'ms')
         if self.tracking_z:
-            t0 = time.time()
             self.track('z')
-            t1 = time.time()
-            # print('track z took', (t1-t0)*1000, 'ms')
         if self.tracking_xy or self.tracking_z:
-            t0 = time.time()
+            # Grabar salida
+            if self.j >= self.buffersize or self.j_z >= (self.buffersize):
+                self.export_data()
+                self.reset_data_arrays()
             # FIXME: Ver cómo separar los trackings
             self.update_graph_data()
-            t1 = time.time()
-            # print('update graph data took', (t1-t0)*1000, 'ms')
             if self.feedback_xy:
-                t0 = time.time()
                 self.correct_xy()
-                t1 = time.time()
-                # print('correct took', (t1-t0)*1000, 'ms')
             if self.feedback_z:
-                t0 = time.time()
                 self.correct_z()
-                t1 = time.time()
-                # print('correct took', (t1-t0)*1000, 'ms')
 
         # De acá para abajo es para hacer un patrón para algún test
         if self.pattern:
@@ -816,31 +850,37 @@ class Backend(QtCore.QObject):
     def update_graph_data(self):
         """Update the data displayed in the graphs and pass around."""
         if self.ptr < self.npoints:
-            self.xData[self.ptr, :] = self.x + self.displacement[0]
-            self.yData[self.ptr, :] = self.y + self.displacement[1]
-            self.zData[self.ptr] = self.z  # Es el delta z en nm respecto al inicial
-            self.avgIntData[self.ptr] = self.avgInt
             self.time[self.ptr] = self.currentTime
-
-            self.changedData.emit(self.time[0:self.ptr + 1],
-                                  self.xData[0:self.ptr + 1],
-                                  self.yData[0:self.ptr + 1],
-                                  self.zData[0:self.ptr + 1],
-                                  self.avgIntData[0:self.ptr + 1])
+            if self.tracking_xy:
+                self.xData[self.ptr, :] = self.x + self.displacement[0]
+                self.yData[self.ptr, :] = self.y + self.displacement[1]
+                self.changedXYData.emit(self.time[0:self.ptr + 1],
+                                        self.xData[0:self.ptr + 1],
+                                        self.yData[0:self.ptr + 1],
+                                        )
+            if self.tracking_z:
+                self.zData[self.ptr] = self.z  # Es el delta z en nm respecto al inicial
+                self.avgIntData[self.ptr] = self.avgInt
+                self.changedZData.emit(self.time[0:self.ptr + 1],
+                                       self.zData[0:self.ptr + 1],
+                                       self.avgIntData[0:self.ptr + 1],
+                                       )
         else:  # roll a mano
-            self.xData[:-1] = self.xData[1:]
-            self.xData[-1, :] = self.x + self.displacement[0]
-            self.yData[:-1] = self.yData[1:]
-            self.yData[-1, :] = self.y + self.displacement[1]
-            self.zData[:-1] = self.zData[1:]
-            self.zData[-1] = self.z
-            self.avgIntData[:-1] = self.avgIntData[1:]
-            self.avgIntData[-1] = self.avgInt
             self.time[:-1] = self.time[1:]
             self.time[-1] = self.currentTime
+            if self.tracking_xy:
+                self.xData[:-1] = self.xData[1:]
+                self.xData[-1, :] = self.x + self.displacement[0]
+                self.yData[:-1] = self.yData[1:]
+                self.yData[-1, :] = self.y + self.displacement[1]
+                self.changedXYData.emit(self.time, self.xData, self.yData,)
+            if self.tracking_z:
+                self.zData[:-1] = self.zData[1:]
+                self.zData[-1] = self.z
+                self.avgIntData[:-1] = self.avgIntData[1:]
+                self.avgIntData[-1] = self.avgInt
+                self.changedZData.emit(self.time, self.zData, self.avgIntData)
 
-            self.changedData.emit(self.time, self.xData, self.yData,
-                                  self.zData, self.avgIntData)
         self.ptr += 1
 
     # esta función es igual a la de xyz_tracking porque es para xy únicamente
@@ -866,10 +906,11 @@ class Backend(QtCore.QObject):
             if self.tracking_xy:
                 _lgr.info("Doble activación tracking xy")
                 return
+            self.reset_xy_graph()
             if not self.tracking_z:
-                self.reset_graph()
-                self.reset_data_arrays()
-                self.startTime = time.time()
+                # self.reset_data_arrays()   mover a feedback
+                self.reset_z_graph()  # Prepararlo para que exista, vacío
+                self.reset_graph()  # esto manda los buffers al front
             self.tracking_xy = True
             self.counter = 0  # Como es para patrones lo pongo acá
 
@@ -886,7 +927,7 @@ class Backend(QtCore.QObject):
 
         elif val is False:
             if not self.tracking_xy:
-                _lgr.info("Doble des activación tracking xy")
+                _lgr.info("Doble desactivación tracking xy")
                 return
             self.tracking_xy = False
         else:
@@ -902,10 +943,12 @@ class Backend(QtCore.QObject):
             if self.tracking_z:
                 _lgr.info("Doble activación tracking z")
                 return
+            self.reset_z_graph()
             if not self.tracking_xy:
+                self.reset_xy_graph()
                 self.reset_graph()
-                self.reset_data_arrays()
-                self.startTime = time.time()
+                # self.reset_data_arrays()
+
             # init z position
             # si queremos prender el tracking, seguramente está el ROI definido,
             # etc.
@@ -1140,7 +1183,7 @@ class Backend(QtCore.QObject):
                 self.y_array[self.j, :] = self.y + self.displacement[1]
                 self.j += 1
 
-        # z track of the reflected IR beam
+        # z track of the reflected beam
         if track_type == 'z':
             self.center_of_mass()
             self.z = (self.currentz - self.initialz) * PX_Z  # self.z in nm
@@ -1148,12 +1191,7 @@ class Backend(QtCore.QObject):
                 self.z_time_array[self.j_z] = time.time() - self.startTime
                 self.z_array[self.j_z] = self.currentz
                 self.j_z += 1
-
-        # FIXME: mover el chequeo del tracking a un lugar general que sea independiente
-        # de xy y z
-        if self.j >= self.buffersize or self.j_z >= (self.buffersize):
-            self.export_data()
-            self.reset_data_arrays()
+        ...
 
 
     def correct_xy(self, mode='continous'):
@@ -1438,28 +1476,27 @@ class Backend(QtCore.QObject):
         # self.initial = True
         # self.initial_focus = True
 
-        # buffers de datos xy para graficar
-        try:  # esto es un leftover de cuando no inicializaba la lista
-            self.xData = np.zeros((self.npoints,
-                                   len(self.roi_coordinates_list)))
-            self.yData = np.zeros((self.npoints,
-                                   len(self.roi_coordinates_list)))
-        except Exception:
-            self.xData = np.zeros(self.npoints)
-            self.yData = np.zeros(self.npoints)
         # buffer para data z para graficar
-        self.zData = np.zeros(self.npoints)
-        self.avgIntData = np.zeros(self.npoints)
+        self.reset_other_graphs()
         self.time = np.zeros(self.npoints)
         self.ptr = 0  # Posición en los buffers de graficación
-        self.startTime = self.startTime = time.time()
-        # ----------- Salen de focus.py se usan en update_stats
-        # self.max_dev = 0  
-        # self.std = 0
-        # self.n = 1
-        # -----------
+        self.startTime = time.time()
+
         self.changedData.emit(self.time, self.xData, self.yData, self.zData,
                               self.avgIntData)
+
+    def reset_xy_graph(self):
+        """Prepare xy graphs buffers for new measurement."""
+        self.xData = np.full((self.npoints, len(self.roi_coordinates_list)), np.nan)
+        self.yData = np.full((self.npoints, len(self.roi_coordinates_list)), np.nan)
+
+    def reset_z_graph(self):
+        """Prepare z graphs buffers and internal graph data for new measurement."""
+        self.zData = np.full((self.npoints,), np.nan)
+
+    def reset_other_graphs(self):
+        """Reset data unrealted to xy and z."""
+        self.avgIntData = np.full((self.npoints,), np.nan)
 
     def reset_data_arrays(self):
         """Reset/create buffers holding measured positions vs time."""
