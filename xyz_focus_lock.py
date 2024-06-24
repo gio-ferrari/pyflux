@@ -936,6 +936,9 @@ class Backend(QtCore.QObject):
             if not self.tracking_xy:
                 _lgr.info("Doble desactivación tracking xy")
                 return
+            if self.feedback_xy:
+                _lgr.warning("Desactivación tracking xy con feedback activado")
+                self.set_xy_feedback(False)
             self.tracking_xy = False
         else:
             _lgr.error("Valor inválido pasado a toggle_tracking_z: %s", val)
@@ -966,6 +969,9 @@ class Backend(QtCore.QObject):
             if not self.tracking_z:
                 _lgr.info("Doble desactivación tracking z")
                 return
+            if self.feedback_z:
+                _lgr.warning("Desactivación tracking z con feedback activado")
+                self.set_z_feedback(False)
             self.tracking_z = False
         else:
             _lgr.error("Valor inválido pasado a toggle_tracking_z: %s", val)
