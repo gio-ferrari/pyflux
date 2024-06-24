@@ -199,39 +199,39 @@ class Frontend(QtGui.QFrame):
 
     # Cambió la señal changed_data
     # cambiaron los parámetros del slot get_data
-    @pyqtSlot(np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray)
-    def get_data(self, tData, xData, yData, zData, avgIntData):
-        """Recibir datos nuevos del backend."""
-        N_NP = np.shape(xData)[1]
-        if N_NP != len(self.roilist):
-            _lgr.error("El número de ROIs y la info de xData no coinciden")
+    # @pyqtSlot(np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray)
+    # def get_data(self, tData, xData, yData, zData, avgIntData):
+    #     """Recibir datos nuevos del backend."""
+    #     N_NP = np.shape(xData)[1]
+    #     if N_NP != len(self.roilist):
+    #         _lgr.error("El número de ROIs y la info de xData no coinciden")
 
-        # x data
-        for i in range(N_NP):
-            self.xCurve[i].setData(tData, xData[:, i])
-        self.xmeanCurve.setData(tData, np.mean(xData, axis=1))
-        # y data
-        for i in range(N_NP):
-            self.yCurve[i].setData(tData, yData[:, i])
-        self.ymeanCurve.setData(tData, np.mean(yData, axis=1))
-        # z data
-        self.zCurve.setData(tData, zData)
-        # avg intensity data
-        self.avgIntCurve.setData(avgIntData)
+    #     # x data
+    #     for i in range(N_NP):
+    #         self.xCurve[i].setData(tData, xData[:, i])
+    #     self.xmeanCurve.setData(tData, np.nanmean(xData, axis=1))
+    #     # y data
+    #     for i in range(N_NP):
+    #         self.yCurve[i].setData(tData, yData[:, i])
+    #     self.ymeanCurve.setData(tData, np.nanmean(yData, axis=1))
+    #     # z data
+    #     self.zCurve.setData(tData, zData)
+    #     # avg intensity data
+    #     self.avgIntCurve.setData(avgIntData)
 
-        # set xy 2D data
-        self.xyDataItem.setData(np.mean(xData, axis=1), np.mean(yData, axis=1))
-        # los cambios aquí tienen que verse reflejados en la gui, histogramas
-        if len(xData) > 2:  # TODO: chequear esta parte
-            # self.plot_ellipse(xData, yData)
-            hist, bin_edges = np.histogram(zData, bins=60)
-            self.zHist.setOpts(x=bin_edges[:-1], height=hist)
-            xstd = np.std(np.mean(xData, axis=1))
-            self.xstd_value.setText(str(np.around(xstd, 2)))
-            ystd = np.std(np.mean(yData, axis=1))
-            self.ystd_value.setText(str(np.around(ystd, 2)))
-            zstd = np.std(zData)
-            self.zstd_value.setText(str(np.around(zstd, 2)))
+    #     # set xy 2D data
+    #     self.xyDataItem.setData(np.nanmean(xData, axis=1), np.nanmean(yData, axis=1))
+    #     # los cambios aquí tienen que verse reflejados en la gui, histogramas
+    #     if len(xData) > 2:  # TODO: chequear esta parte
+    #         # self.plot_ellipse(xData, yData)
+    #         hist, bin_edges = np.histogram(zData, bins=60)
+    #         self.zHist.setOpts(x=bin_edges[:-1], height=hist)
+    #         xstd = np.std(np.nanmean(xData, axis=1))
+    #         self.xstd_value.setText(str(np.around(xstd, 2)))
+    #         ystd = np.std(np.nanmean(yData, axis=1))
+    #         self.ystd_value.setText(str(np.around(ystd, 2)))
+    #         zstd = np.nanstd(zData)
+    #         self.zstd_value.setText(str(np.around(zstd, 2)))
 
     @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
     def get_xy_data(self, tData, xData, yData):
@@ -242,33 +242,34 @@ class Frontend(QtGui.QFrame):
 
         # x data
         for i in range(N_NP):
-            self.xCurve[i].setData(tData, xData[:, i])
-        self.xmeanCurve.setData(tData, np.mean(xData, axis=1))
+            self.xCurve[i].setData(tData, xData[:, i], connect="finite")
+        self.xmeanCurve.setData(tData, np.nanmean(xData, axis=1), connect="finite")
         # y data
         for i in range(N_NP):
-            self.yCurve[i].setData(tData, yData[:, i])
-        self.ymeanCurve.setData(tData, np.mean(yData, axis=1))
+            self.yCurve[i].setData(tData, yData[:, i], connect="finite")
+        self.ymeanCurve.setData(tData, np.nanmean(yData, axis=1), connect="finite")
         # set xy 2D data
-        self.xyDataItem.setData(np.mean(xData, axis=1), np.mean(yData, axis=1))
+        self.xyDataItem.setData(np.nanmean(xData, axis=1), np.nanmean(yData, axis=1),
+                                connect="finite")
         # los cambios aquí tienen que verse reflejados en la gui, histogramas
         if len(xData) > 2:  # TODO: chequear esta parte
             # self.plot_ellipse(xData, yData)
-            xstd = np.std(np.mean(xData, axis=1))
+            xstd = np.std(np.nanmean(xData, axis=1))
             self.xstd_value.setText(str(np.around(xstd, 2)))
-            ystd = np.std(np.mean(yData, axis=1))
+            ystd = np.std(np.nanmean(yData, axis=1))
             self.ystd_value.setText(str(np.around(ystd, 2)))
 
     @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
     def get_z_data(self, tData, zData, avgIntData):
         """Recibir datos nuevos z, intensidad del backend."""
-        self.zCurve.setData(tData, zData)
-        self.avgIntCurve.setData(avgIntData)
+        self.zCurve.setData(tData, zData, connect="finite")
+        self.avgIntCurve.setData(avgIntData, connect="finite")
 
-        hist, bin_edges = np.histogram(zData, bins=60)
-        self.zHist.setOpts(x=bin_edges[:-1], height=hist)
-        zstd = np.std(zData)
-        self.zstd_value.setText(str(np.around(zstd, 2)))
-
+        if len(zData) > 2:
+            hist, bin_edges = np.histogram(zData, bins=60)
+            self.zHist.setOpts(x=bin_edges[:-1], height=hist)
+            zstd = np.nanstd(zData)
+            self.zstd_value.setText(str(np.around(zstd, 2)))
 
     def plot_ellipse(self, x_array, y_array):
         pass
@@ -527,14 +528,10 @@ class Frontend(QtGui.QFrame):
             lambda: self.emit_roi_info(roi_type='xy'))
         self.trackZBox.stateChanged.connect(
             lambda: self.emit_roi_info(roi_type='z'))
-        self.trackAllBox.stateChanged.connect(self.setup_xy_data_curves)
+        self.trackXYBox.stateChanged.connect(self.setup_xy_data_curves)
 
-        # TODO Ver como manejar el setup data curves
-        # TODO: ver cómo manejar el emit_roi
-        # TODO: ver cómo prender las cosas de a una
 
         # turn ON/OFF feedback loop
-        # self.feedbackLoopBox = QtGui.QCheckBox('Feedback loop')
         feedbackgb = QGroupBox("Feedback")
         feedbackLayout = QHBoxLayout()
         feedbackgb.setLayout(feedbackLayout)
@@ -545,15 +542,13 @@ class Frontend(QtGui.QFrame):
         feedbackLayout.addWidget(self.feedbackXYBox)
         feedbackLayout.addWidget(self.feedbackZBox)
         self.feedbackManager = GroupedCheckBoxes(self.feedbackAllBox,
-                                                  self.feedbackXYBox,
-                                                  self.feedbackZBox,
-                                                  )
-
+                                                 self.feedbackXYBox,
+                                                 self.feedbackZBox,
+                                                 )
         # self.feedbackXYBox.stateChanged.connect(
-            # lambda: self.emit_roi_info(roi_type='xy'))
+        #     lambda: self.emit_roi_info(roi_type='xy'))
         # self.feedbackZBox.stateChanged.connect(
-            # lambda: self.emit_roi_info(roi_type='z'))
-
+        #     lambda: self.emit_roi_info(roi_type='z'))
 
         # save data signal
         self.saveDataBox = QtGui.QCheckBox("Save data")
@@ -621,22 +616,23 @@ class Frontend(QtGui.QFrame):
     def setup_xy_data_curves(self):
         """Crear o borrar las curvas si hace falta.
 
-        TODO: arreglar esta forma fea de hacer las cosas
+        z, AvgInt, etc. No importan porque no hay que ajustar por el nro de ROIs
         """
-        if self.trackAllBox.isChecked():
-            if self.xCurve:
-                for i in range(len(self.roilist)):  # remove previous curves
-                    self.xyzGraph.xPlot.removeItem(self.xCurve[i])
-                    self.xyzGraph.yPlot.removeItem(self.yCurve[i])
-                    # TODO: Promedio, z e AvgInt???
-            self.xCurve = [0] * len(self.roilist)
-            for i in range(len(self.roilist)):
-                self.xCurve[i] = self.xyzGraph.xPlot.plot(pen='w', alpha=0.3)
-                self.xCurve[i].setAlpha(0.3, auto=False)
-            self.yCurve = [0] * len(self.roilist)
-            for i in range(len(self.roilist)):
-                self.yCurve[i] = self.xyzGraph.yPlot.plot(pen='r', alpha=0.3)
-                self.yCurve[i].setAlpha(0.3, auto=False)
+        if self.trackXYBox.isChecked():
+            # remove previous curves
+            for curve in self.xCurve:
+                self.xyzGraph.xPlot.removeItem(curve)
+            for curve in self.yCurve:
+                self.xyzGraph.yPlot.removeItem(curve)
+
+            self.xCurve = [self.xyzGraph.xPlot.plot(pen='w', alpha=0.3) for
+                           _ in len(self.roilist)]
+            for curve in self.xCurve:
+                curve.setAlpha(0.3, auto=False)
+            self.yCurve = [self.xyzGraph.yPlot.plot(pen='r', alpha=0.3) for
+                           _ in len(self.roilist)]
+            for curve in self.yCurve:
+                curve.setAlpha(0.3, auto=False)
 
     def closeEvent(self, *args, **kwargs):
         _lgr.info('Close in frontend')
@@ -1542,10 +1538,7 @@ class Backend(QtCore.QObject):
             self.liveviewSignal.emit(False)
 
     def export_data(self):
-        """Export t and x, y for each Roi data into a .txt file.
-
-        TODO: ver info z
-        """
+        """Export t and xy for each Roi data into a .txt file and t and z to another."""
         fname = self.xy_filename
         # case distinction to prevent wrong filenaming when starting minflux
         # or psf measurement
