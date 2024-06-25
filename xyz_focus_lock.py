@@ -38,6 +38,13 @@ _lgr = _lgn.getLogger(__name__)
 
 VIDEO = False
 
+# TODO: Hacer que no inicie trackings si no hay ROIS. Que vuelva a resetear los checkboxes si no puede iniciar
+# Que haya tracking para feedback
+# Ver el tema de      self.time[self.ptr] = self.currentTime
+# nans e histogramas
+# No grafica xy ni calcula std
+# ver logica resetgraphs
+
 
 PX_SIZE = 23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
 PX_Z = 16  # 20 nm/px for z in nm
@@ -266,7 +273,7 @@ class Frontend(QtGui.QFrame):
         self.zCurve.setData(tData, zData, connect="finite")
 
         if len(zData) > 2:
-            hist, bin_edges = np.histogram(zData, bins=60)
+            hist, bin_edges = np.histogram(zData[~np.isnan(zData)], bins=60)
             self.zHist.setOpts(x=bin_edges[:-1], height=hist)
             zstd = np.nanstd(zData)
             self.zstd_value.setText(str(np.around(zstd, 2)))
@@ -313,7 +320,7 @@ class Frontend(QtGui.QFrame):
 
     # TODO: Chequear si necesito esto, cf xyz
     # FIXME reimplementar esto, evitando loops
-    @pyqtSlot(bool, bool, bool)
+    @pyqtSlot(bool, bool, bool, bool, bool)
     def get_backend_states(self, tracking_xy, tracking_z, feedback_xy, feedback_z,
                            savedata):
         """Actualizar el frontend de acuerdo al estado del backend."""
@@ -587,10 +594,10 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.clearDataButton, 7, 0)
         subgrid.addWidget(self.xyPatternButton, 8, 0)
         # subgrid.addWidget(self.trackAllBox, 1, 1)
-        subgrid.addWidget(trackgb, 1, 1)
+        subgrid.addWidget(trackgb, 0, 1, 2, 3)
         # subgrid.addWidget(self.feedbackLoopBox, 2, 1)
-        subgrid.addWidget(feedbackgb, 2, 1)
-        subgrid.addWidget(self.saveDataBox, 3, 1)
+        subgrid.addWidget(feedbackgb, 2, 1, 2, 3)
+        subgrid.addWidget(self.saveDataBox, 4, 1)
         subgrid.addWidget(self.shutterLabel, 9, 0)
         subgrid.addWidget(self.shutterCheckbox, 9, 1)
 
@@ -614,10 +621,8 @@ class Frontend(QtGui.QFrame):
             lambda: self.toggle_liveview(self.liveviewButton.isChecked()))
 
     def setup_xy_data_curves(self):
-        """Crear o borrar las curvas si hace falta.
+        """Crear o borrar las curvas si hace falta."""
 
-        z, AvgInt, etc. No importan porque no hay que ajustar por el nro de ROIs
-        """
         if self.trackXYBox.isChecked():
             # remove previous curves
             for curve in self.xCurve:
@@ -626,11 +631,11 @@ class Frontend(QtGui.QFrame):
                 self.xyzGraph.yPlot.removeItem(curve)
 
             self.xCurve = [self.xyzGraph.xPlot.plot(pen='w', alpha=0.3) for
-                           _ in len(self.roilist)]
+                           _ in range(len(self.roilist))]
             for curve in self.xCurve:
                 curve.setAlpha(0.3, auto=False)
             self.yCurve = [self.xyzGraph.yPlot.plot(pen='r', alpha=0.3) for
-                           _ in len(self.roilist)]
+                           _ in range(len(self.roilist))]
             for curve in self.yCurve:
                 curve.setAlpha(0.3, auto=False)
 
@@ -725,6 +730,8 @@ class Backend(QtCore.QObject):
         self.currenty: np.ndarray = np.zeros((1,))
 
         # Los llamamos en toggle_tracking
+        self.reset_xy_graph()
+        self.reset_z_graph()
         self.reset_graph()
         self.reset_data_arrays()
 
@@ -792,6 +799,7 @@ class Backend(QtCore.QObject):
             self.camON = False
         self.camON = True
         self.viewtimer.start(self.xyz_time)
+        # self.startTime = time.time()
 
     def liveview_stop(self):
         self.viewtimer.stop()
@@ -836,6 +844,9 @@ class Backend(QtCore.QObject):
         # acquire image
         # This is a 2D array, (only R channel)
         self.image = self.camera.on_acquisition_timer()
+        self.currentTime = time.time() - self.startTime
+        # Calculate average intensity in the image to check laser fluctuations
+        self.avgInt = np.mean(self.image)
         # WARNING: fix to match camera orientation with piezo orientation
         self.image = np.rot90(self.image, k=3)  # Este es nuestro estandar
         if np.all(self.previous_image == self.image):
@@ -862,7 +873,7 @@ class Backend(QtCore.QObject):
                                         )
             if self.tracking_z:
                 self.zData[self.ptr] = self.z  # Es el delta z en nm respecto al inicial
-                self.avgIntData[self.ptr] = self.avgInt
+                # self.avgIntData[self.ptr] = self.avgInt
                 self.changedZData.emit(self.time[0:self.ptr + 1],
                                        self.zData[0:self.ptr + 1],
                                        )
@@ -913,6 +924,9 @@ class Backend(QtCore.QObject):
             if self.tracking_xy:
                 _lgr.info("Doble activación tracking xy")
                 return
+            if not self.roi_coordinates_list:
+                _lgr.warning("No hay ROIS para tracking xy")
+                return
             self.reset_xy_graph()
             if not self.tracking_z:
                 # self.reset_data_arrays()   mover a feedback
@@ -952,6 +966,9 @@ class Backend(QtCore.QObject):
         if val is True:
             if self.tracking_z:
                 _lgr.info("Doble activación tracking z")
+                return
+            if (self.zROIcoordinates == 0).all():
+                _lgr.warning("no hay ROI para  tracking z")
                 return
             self.reset_z_graph()
             if not self.tracking_xy:
@@ -1000,7 +1017,7 @@ class Backend(QtCore.QObject):
                 _lgr.info("Doble activación de z")
                 return
             if mode == 'continous':  # set up and start actuator process
-                self.set_z_actuator_param()
+                self.set_actuator_param_z()
                 self.adw.Start_Process(3)  # proceso para z
                 _lgr.info('Process 3 started. Status: %s', self.adw.Process_Status(3))
                 _lgr.debug('z Feedback loop ON')
@@ -1028,7 +1045,7 @@ class Backend(QtCore.QObject):
                 _lgr.warning("Requested XY feedback without tracking. Enabling tracking")
                 self.toggle_tracking_xy(True)
             if mode == 'continous':  # set up and start actuator process
-                self.set_xy_actuator_param()
+                self.set_actuator_param_xy()
                 self.adw.Start_Process(4)  # proceso para xy
                 _lgr.info('Process 4 started. Status: %s', self.adw.Process_Status(4))
                 _lgr.debug('xy Feedback loop ON')
@@ -1179,8 +1196,6 @@ class Backend(QtCore.QObject):
 
         If save_data_state = True it saves the xy data
         """
-        # Calculate average intensity in the image to check laser fluctuations
-        self.avgInt = np.mean(self.image)
 
         # xy track routine of N=size fiducial AuNP
         if track_type == 'xy':
@@ -1190,7 +1205,6 @@ class Backend(QtCore.QObject):
             for i, roi in enumerate(self.roi_coordinates_list):
                 self.x[i] = self.currentx[i] - self.initialx[i]
                 self.y[i] = self.currenty[i] - self.initialy[i]
-                self.currentTime = time.time() - self.startTime
 
             if self.save_data_state:
                 self.time_array[self.j] = self.currentTime
@@ -1497,14 +1511,14 @@ class Backend(QtCore.QObject):
         self.ptr = 0  # Posición en los buffers de graficación
         self.startTime = time.time()
 
-        self.changedXYData.emit(self.time, self.xData, self.yData)
-        self.changedZData.emit(self.time, self.zData)
+        # self.changedXYData.emit(self.time, self.xData, self.yData)
+        # self.changedZData.emit(self.time, self.zData)
         # self.changedImage.emit()
 
     def reset_xy_graph(self):
         """Prepare xy graphs buffers for new measurement."""
-        self.xData = np.full((self.npoints, len(self.roi_coordinates_list)), np.nan)
-        self.yData = np.full((self.npoints, len(self.roi_coordinates_list)), np.nan)
+        self.xData = np.full((self.npoints, len(self.roi_coordinates_list)), 0.)#np.nan)
+        self.yData = np.full((self.npoints, len(self.roi_coordinates_list)), 0.)#np.nan)
 
     def reset_z_graph(self):
         """Prepare z graphs buffers and internal graph data for new measurement."""
