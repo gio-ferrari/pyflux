@@ -45,6 +45,9 @@ _lgr = _lgn.getLogger(__name__)
 # No grafica xy ni calcula std -> pyqtgraph viejo y NANS
 # ver logica resetgraphs
 
+_FPAR_X = 40
+_FPAR_Y = 41
+_FPAR_Z = 32
 
 PX_SIZE = 23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
 PX_Z = 16  # 20 nm/px for z in nm
@@ -127,8 +130,8 @@ class Frontend(QtGui.QFrame):
             self.xyROIButton.setChecked(False)
         elif roi_type == 'z':
             ROIpen = pg.mkPen(color='y')
-            ROIpos = (512 - 64, 512 - 64)
-            self.roi_z = viewbox_tools.ROI2(140, self.vb, ROIpos,
+            ROIpos = (1100, 265) #Lugar conveniente para colocar el roi z
+            self.roi_z = viewbox_tools.ROI2(150, self.vb, ROIpos,
                                             handlePos=(1, 0),
                                             handleCenter=(0, 1),
                                             scaleSnap=True,
@@ -357,6 +360,8 @@ class Frontend(QtGui.QFrame):
 
         # set up histogram for the liveview image
         self.hist = pg.HistogramLUTItem(image=self.img)
+        self.hist.gradient.loadPreset('magma')
+        self.hist.vb.setLimits(yMin=0, yMax=10000)
         # lut = viewbox_tools.generatePgColormap(cmaps.parula)
         # self.hist.gradient.setColorMap(lut) #
         # self.hist.vb.setLimits(yMin=800, yMax=3000)
@@ -1428,9 +1433,9 @@ class Backend(QtCore.QObject):
         y_f = tools.convert(y_f, 'XtoU')
         z_f = tools.convert(z_f, 'XtoU')
 
-        self.adw.Set_FPar(40, x_f)
-        self.adw.Set_FPar(41, y_f)
-        self.adw.Set_FPar(32, z_f)
+        self.adw.Set_FPar(_FPAR_X, x_f)
+        self.adw.Set_FPar(_FPAR_Y, y_f)
+        self.adw.Set_FPar(_FPAR_Z, z_f)
 
         # Estas dos líneas son de los scripts viejos (ver .bas y .bak)
         # self.adw.Set_Par(40, 1)
@@ -1686,7 +1691,7 @@ class Backend(QtCore.QObject):
         -------
             From: [minflux] xyzEndSignal or [psf] endSignal
         """
-        self.xy_filename = fname
+        self.xy_filename = fname + 'xy_data'
         self.export_data()
         # TODO: decide whether I want feedback ON/OFF at the end of measurement
         self.toggle_feedback(False)
