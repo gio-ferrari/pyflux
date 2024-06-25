@@ -945,10 +945,11 @@ class Backend(QtCore.QObject):
             if not self.tracking_z:
                 _lgr.info("Doble desactivación tracking z")
                 return True
+            self.tracking_z = False
             if self.feedback_z:
                 _lgr.warning("Desactivación tracking z con feedback activado")
                 self.set_z_feedback(False)
-            self.tracking_z = False
+                self.notify_status()
             return True
         else:
             _lgr.error("Valor inválido pasado a toggle_tracking_z: %s", val)
