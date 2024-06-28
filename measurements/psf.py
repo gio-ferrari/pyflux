@@ -116,7 +116,8 @@ class Frontend(QtGui.QFrame):
                 n_donut = order // self._nframes
                 _lgr.debug("Actualizando imagen %s/%s de la dona %s", n_img+1, self._nframes,
                            n_donut)
-                self.update_donut_image(n_donut, np.rot90(image, k=-1))
+                # PLACE
+                self.update_donut_image(n_donut, image)
         except Exception as e:
             _lgr.error("Excepcion en gps: %s", e)
 
@@ -193,7 +194,7 @@ class Frontend(QtGui.QFrame):
         """
         plot = self._plots[n_donut]
         image = self._images[n_donut]
-        xc, yc = psft.find_center(image, trim=15)
+        xc, yc = psft.find_min(image, trim=15)
         _lgr.error("Antes de centerplots")
         if self._centerplots[n_donut] is not None:
             try:

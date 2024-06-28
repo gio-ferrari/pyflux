@@ -177,12 +177,12 @@ class Frontend(QtGui.QFrame):
     def get_image(self, image):
         
 #        self.img.setImage(image, autoLevels=False)
-        self.image = image.T[:,::-1]
+        # PLACE
+        self.image = image
         self.img.setImage(self.image, autoLevels=False)
-        
         self.xaxis.setScale(scale=self.pxSize) #scale to µm
         self.yaxis.setScale(scale=self.pxSize) #scale to µm
-        
+
     @pyqtSlot(np.ndarray)
     def get_real_position(self, val): 
       
@@ -1725,7 +1725,7 @@ class Backend(QtCore.QObject):
         tools.saveConfig(self, now, name)
 
         # save image
-        
+        # PLACE   --> Ya no la guardamos rotada!!!
         data = self.image_to_save
         result = Image.fromarray(data.astype('uint16'))
         result.save(r'{}.tiff'.format(name))
@@ -1831,7 +1831,8 @@ class Backend(QtCore.QObject):
             self.lineData = self.line_acquisition()
 
             if self.full_scan is True:
-                self.image[self.i, :] = self.lineData
+                # PLACE
+                self.image[:, self.i] = self.lineData
             elif self.FBaverage_scan is True:
                 # display average of forward and backward image
                 c0 = self.NofAuxPixels
@@ -1841,9 +1842,11 @@ class Backend(QtCore.QObject):
                 lineData_B = self.lineData[3*c0+c1:3*c0+2*c1]
 
                 if self.i % 2 == 0:
-                    self.image[self.i, :] = lineData_F
+                    # PLACE
+                    self.image[:, self.i] = lineData_F
                 if self.i % 2 != 0:
-                    self.image[self.i, :] = lineData_B[::-1]
+                    # PLACE
+                    self.image[:, self.i] = lineData_B[::-1]
             else:
                 # displays only forward image
                 c0 = self.NofAuxPixels
@@ -1851,11 +1854,10 @@ class Backend(QtCore.QObject):
 
                 lineData_F = self.lineData[c0:c0+c1]
                 lineData_B = self.lineData[3*c0+c1:3*c0+2*c1]
-
-                self.imageF[self.i, :] = lineData_F
-                self.imageB[self.i, :] = lineData_B[::-1]
-
-                self.image[self.i, :] = lineData_F
+                # PLACE
+                self.imageF[:, self.i] = lineData_F
+                self.imageB[:, self.i] = lineData_B[::-1]
+                self.image[:, self.i] = lineData_F
             # display image after every scanned line
             self.image_to_save = self.image
             self.imageF_copy = self.imageF     # TO DO: clean up with fit signal to avoid the copy image
