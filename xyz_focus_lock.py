@@ -741,6 +741,7 @@ class Backend(QtCore.QObject):
         # This is a 2D array, (only R channel)
         self.image = self.camera.on_acquisition_timer()
         # WARNING: fix to match camera orientation with piezo orientation
+        # PLACE -> ver permutacion XY
         self.image = np.rot90(self.image, k=3)  # Este es nuestro estandar
         if np.all(self.previous_image == self.image):
             _lgr.error('Latest_frame equal to previous frame')
@@ -896,7 +897,7 @@ class Backend(QtCore.QObject):
         yrange_nm = ymax_nm - ymin_nm
         x_nm = np.arange(0, xrange_nm, PX_SIZE)
         y_nm = np.arange(0, yrange_nm, PX_SIZE)
-
+        # PLACE -> ver indexing
         (Mx_nm, My_nm) = np.meshgrid(x_nm, y_nm)
         # find max
         argmax = np.unravel_index(np.argmax(array, axis=None), array.shape)
@@ -918,6 +919,7 @@ class Backend(QtCore.QObject):
 
         x_sub_nm = np.arange(0, xsubsize) * PX_SIZE
         y_sub_nm = np.arange(0, ysubsize) * PX_SIZE
+        # PLACE -> ver indexing
         [Mx_sub, My_sub] = np.meshgrid(x_sub_nm, y_sub_nm)
 
         # make initial guess for parameters
