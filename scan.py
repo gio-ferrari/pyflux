@@ -175,17 +175,16 @@ class Frontend(QtGui.QFrame):
      
     @pyqtSlot(np.ndarray)
     def get_image(self, image):
-        
-#        self.img.setImage(image, autoLevels=False)
-        self.image = image.T[:,::-1]
+        """Update image received from backend."""
+        # self.img.setImage(image, autoLevels=False)
+        self.image = image
         self.img.setImage(self.image, autoLevels=False)
-        
-        self.xaxis.setScale(scale=self.pxSize) #scale to µm
-        self.yaxis.setScale(scale=self.pxSize) #scale to µm
-        
+        self.xaxis.setScale(scale=self.pxSize)  # scale to µm
+        self.yaxis.setScale(scale=self.pxSize)  # scale to µm
+
     @pyqtSlot(np.ndarray)
-    def get_real_position(self, val): 
-      
+    def get_real_position(self, val):
+
       val = np.around(val, 3)
       self.moveToEdit.setText('{} {} {}'.format(*val))
         
@@ -358,7 +357,7 @@ class Frontend(QtGui.QFrame):
         x = np.arange(np.size(data)) * px_to_nm
         self.lplotWidget.linePlot.plot(x, data, name='Data')
         
-        #make 1D Gauss fit
+        # make 1D Gauss fit
         if self.lplotWidget.gauss:
             popt, pcov = self.fitGauss1D(data)    
             
@@ -457,18 +456,11 @@ class Frontend(QtGui.QFrame):
         self.crosshairCheckbox.setChecked(False)
         self.select_ROIButton.setEnabled(False)
 
-        
-        ROIsize = np.array(self.roi.size())
-        ROIpos = np.array(self.roi.pos())
-        
-        npixels = int(self.NofPixelsEdit.text())
         pxSize = self.pxSize
         initialPos = np.array(self.initialPosEdit.text().split(' '),
                               dtype=np.float64)
 
-        newPos_px = tools.ROIscanRelativePOS(ROIpos, npixels, ROIsize[1])
-
-        newPos_µm = newPos_px * pxSize + initialPos[0:2]
+        newPos_µm = np.array(self.roi.pos()) * pxSize + initialPos[0:2]
 
         newPos_µm = np.around(newPos_µm, 2)
 
@@ -476,13 +468,13 @@ class Frontend(QtGui.QFrame):
                                                       newPos_µm[1],
                                                       initialPos[2]))
 
-        newRange_px = ROIsize[1]
+        newRange_px = self.roi.size()[1]
         newRange_µm = pxSize * newRange_px
         newRange_µm = np.around(newRange_µm, 2)
         self.scanRangeEdit.setText('{}'.format(newRange_µm))
-        
+
         self.emit_param()
-        
+
     def emit_fit_ROI(self, actionType): # TO DO: change name from "fit" to a more general name including fit/move to center
       
       if self.roi is not None:
@@ -1725,13 +1717,12 @@ class Backend(QtCore.QObject):
         tools.saveConfig(self, now, name)
 
         # save image
-        
         data = self.image_to_save
         result = Image.fromarray(data.astype('uint16'))
         result.save(r'{}.tiff'.format(name))
-        
+
         if self.save_FB is True:
-          
+
           print('[scan] Saved current frame F and B', name)
           
           # save image F
@@ -1764,21 +1755,22 @@ class Backend(QtCore.QObject):
         
         
     def line_acquisition(self):
-        
+        """Scan and get line from ADwin."""
+
         self.adw.Start_Process(1)
-        
+
         line_time = (1/1000) * self.data_t[-1]  # target linetime in ms
         wait_time = line_time * 1.05 # TO DO: optimize this, it should work with 1.00, or maybe even less?
                                      # it should even work without the time.sleep()
-        
+
         time.sleep(wait_time/1000) # in s
 
         line_data = self.adw.GetData_Long(1, 0, self.tot_pixels)
-        
-        line_data[0] = 0  # TO DO: fix the high count error on first element
-        
+
+        # line_data[0] = 0  # TO DO: fix the high count error on first element
+
         return line_data
-   
+
     @pyqtSlot(bool, str)
     def liveview(self, lvbool, mode):
         if lvbool:
@@ -1831,7 +1823,7 @@ class Backend(QtCore.QObject):
             self.lineData = self.line_acquisition()
 
             if self.full_scan is True:
-                self.image[self.i, :] = self.lineData
+                self.image[:, self.i] = self.lineData
             elif self.FBaverage_scan is True:
                 # display average of forward and backward image
                 c0 = self.NofAuxPixels
@@ -1841,9 +1833,9 @@ class Backend(QtCore.QObject):
                 lineData_B = self.lineData[3*c0+c1:3*c0+2*c1]
 
                 if self.i % 2 == 0:
-                    self.image[self.i, :] = lineData_F
+                    self.image[:, self.i] = lineData_F
                 if self.i % 2 != 0:
-                    self.image[self.i, :] = lineData_B[::-1]
+                    self.image[:, self.i] = lineData_B[::-1]
             else:
                 # displays only forward image
                 c0 = self.NofAuxPixels
@@ -1851,11 +1843,9 @@ class Backend(QtCore.QObject):
 
                 lineData_F = self.lineData[c0:c0+c1]
                 lineData_B = self.lineData[3*c0+c1:3*c0+2*c1]
-
-                self.imageF[self.i, :] = lineData_F
-                self.imageB[self.i, :] = lineData_B[::-1]
-
-                self.image[self.i, :] = lineData_F
+                self.imageF[:, self.i] = lineData_F
+                self.imageB[:, self.i] = lineData_B[::-1]
+                self.image[:, self.i] = lineData_F
             # display image after every scanned line
             self.image_to_save = self.image
             self.imageF_copy = self.imageF     # TO DO: clean up with fit signal to avoid the copy image
