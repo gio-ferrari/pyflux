@@ -94,13 +94,12 @@ class Frontend(QtGui.QFrame):
             self.xyROIButton.setChecked(False)
         elif roi_type == 'z':
             ROIpen = pg.mkPen(color='y')
-            ROIpos = (1100, 265) #Lugar conveniente para colocar el roi z
+            ROIpos = (1100, 265)  # Lugar conveniente para colocar el roi z
             self.roi_z = viewbox_tools.ROI2(150, self.vb, ROIpos,
                                             handlePos=(1, 0),
                                             handleCenter=(0, 1),
                                             scaleSnap=True,
                                             translateSnap=True,
-                                            # self.ROInumber) test Andi
                                             pen=ROIpen, number='z')
             self.zROIButton.setEnabled(False)
         else:
@@ -740,9 +739,6 @@ class Backend(QtCore.QObject):
         # acquire image
         # This is a 2D array, (only R channel)
         self.image = self.camera.on_acquisition_timer()
-        # WARNING: fix to match camera orientation with piezo orientation
-        # PLACE -> ver permutacion XY
-        self.image = np.rot90(self.image, k=3)  # Este es nuestro estandar
         if np.all(self.previous_image == self.image):
             _lgr.error('Latest_frame equal to previous frame')
         self.previous_image = self.image
@@ -872,12 +868,9 @@ class Backend(QtCore.QObject):
         self.m_center = np.array(ndi.measurements.center_of_mass(zimage))
         # calculate z estimator
         # TODO: copiar de new_focus
-        self.currentz = self.m_center[0]
-
+        self.currentz = self.m_center[1]
         # El estimador está en píxeles... fraccionarios
 
-    # Le estoy agregando un parámetro (roi_coordinates) para que sea como en
-    # xyz_tracking
     def gaussian_fit(self, roi_coordinates) -> (float, float):
         """Devuelve el centro del fiteo, en nm respecto al ROI.
 
@@ -898,7 +891,7 @@ class Backend(QtCore.QObject):
         x_nm = np.arange(0, xrange_nm, PX_SIZE)
         y_nm = np.arange(0, yrange_nm, PX_SIZE)
         # PLACE -> ver indexing
-        (Mx_nm, My_nm) = np.meshgrid(x_nm, y_nm)
+        (Mx_nm, My_nm) = np.meshgrid(x_nm, y_nm, indexing='ij')
         # find max
         argmax = np.unravel_index(np.argmax(array, axis=None), array.shape)
         x_center_id = argmax[0]
@@ -920,7 +913,7 @@ class Backend(QtCore.QObject):
         x_sub_nm = np.arange(0, xsubsize) * PX_SIZE
         y_sub_nm = np.arange(0, ysubsize) * PX_SIZE
         # PLACE -> ver indexing
-        [Mx_sub, My_sub] = np.meshgrid(x_sub_nm, y_sub_nm)
+        [Mx_sub, My_sub] = np.meshgrid(x_sub_nm, y_sub_nm, indexing='ij')
 
         # make initial guess for parameters
         bkg = np.min(array)
@@ -960,7 +953,6 @@ class Backend(QtCore.QObject):
         """
         # Calculate average intensity in the image to check laser fluctuations
         self.avgInt = np.mean(self.image)
-        # print('Average intensity', self.avgInt)
 
         # xy track routine of N=size fiducial AuNP
         if track_type == 'xy':
@@ -1033,9 +1025,9 @@ class Backend(QtCore.QObject):
 
         security_thr = 0.35  # in µm
 
-        # HINT: los signos están acorde a la platina y la rotación de la imagen
+        # HINT: los signos están acorde a la platina y a la imagen
         if np.abs(xmean) > threshold:
-            dx = xmean / 1000  # conversion to µm
+            dx = -xmean / 1000  # conversion to µm
             if abs(dx) < xy_far_threshold:
                 dx *= xy_correct_factor
 
@@ -1056,7 +1048,7 @@ class Backend(QtCore.QObject):
             # c, s = np.cos(theta), np.sin(theta)
             # R = np.array(((c,-s), (s, c)))
 
-            # dy, dx = np.dot(R, np.asarray([dx, dy])) #ver si se puede arreglar esto añadiendo dz
+            # dy, dx = np.dot(R, np.asarray([dx, dy]))
 
             # add correction to piezo position
             currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
@@ -1073,7 +1065,7 @@ class Backend(QtCore.QObject):
                 self.actuator_xyz(targetXposition, targetYposition,
                                   targetZposition)
             if mode == 'discrete':
-                #self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
+                # self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
                 self.target_x = targetXposition
                 self.target_y = targetYposition
 
@@ -1106,7 +1098,6 @@ class Backend(QtCore.QObject):
             targetYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
             currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
 
-            # TODO: chequear signos acá o arriba
             targetZposition = currentZposition + dz  # in µm
 
             if mode == 'continous':
@@ -1114,7 +1105,7 @@ class Backend(QtCore.QObject):
                 self.actuator_xyz(targetXposition, targetYposition,
                                   targetZposition)
             if mode == 'discrete':
-                #self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
+                # self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
                 self.target_z = targetZposition
 
     @pyqtSlot(bool, bool)

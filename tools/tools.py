@@ -79,17 +79,8 @@ def convert(x, key):
             # [value] =  x*um/V) + um = um
 
         return value
-        
-        
-def ROIscanRelativePOS(pos, Nimage, nROI):
-    
-    scanPos = np.zeros(2)
-    scanPos[0] = pos[0]
-    scanPos[1] = - pos[1] + Nimage - nROI
-    
-    return scanPos
-    
-    
+
+
 def timeToADwin(t):
     
     "time in µs to ADwin time units of 3.33 ns"
