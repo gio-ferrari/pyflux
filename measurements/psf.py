@@ -468,7 +468,7 @@ class Backend(QtCore.QObject):
 
     def stop(self):
         self.measTimer.stop()
-        self.progressSignal.emit(100, None, None)  # changed from 0
+        self.progressSignal.emit(100, np.array([]), -1)  # changed from 0
         self.shutterSignal.emit(8, False)
 
         # new filename indicating that getUniqueName() has already found filename
