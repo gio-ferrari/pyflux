@@ -77,17 +77,37 @@ def doughnut1D(x, A, x0, d, offset):
     
     return D.ravel()
 
-    
-def doughnut2D(grid, A, x0, y0, d, offset):
-    
+
+def doughnut2D(grid, A: float, x0: float, y0: float, d: float, offset, ravel:bool = True):
+    """Generate a 2D donut.
+
+    Parameters
+    ----------
+    grid : TYPE
+        DESCRIPTION.
+    A : TYPE
+        DESCRIPTION.
+    x0 : TYPE
+        DESCRIPTION.
+    y0 : TYPE
+        DESCRIPTION.
+    d : TYPE
+        DESCRIPTION.
+    offset : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     x, y = grid
     x0 = float(x0)
-    y0 = float(y0) 
-    r = np.sqrt((x-x0)**2 + (y-y0)**2) 
-    
+    y0 = float(y0)
+    r = np.sqrt((x-x0)**2 + (y-y0)**2)
     D = offset + A * (r**2/d**4) * np.exp(-4 * np.log(2) * (r**2/d**2))
-    
-    return D.ravel()
+    return D.ravel() if ravel else D
 
 
 
