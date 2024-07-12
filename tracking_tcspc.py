@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jan 15 14:14:14 2019
+TCSPC con tracking
 
-@author: USUARIO
+Es un engendro entre cosas PyQt heredadas y cosas GUI agnósticas hecha para simplificar
+
+@author: azelcer
 """
 
 import threading as _th
@@ -13,7 +15,7 @@ import numpy as np
 import time
 from datetime import date, datetime
 import os
-import tools.tools as tools
+import tools.filenames as fntools
 from tkinter import Tk, filedialog
 # import tifffile as tiff
 import logging as _lgn
@@ -144,24 +146,18 @@ class Frontend(QtGui.QFrame):
         self.fileWidget = QGroupBox("Save options")
         self.fileWidget.setFixedHeight(130)
         self.fileWidget.setFixedWidth(230)
-
-        # Prepare button
+        # Buttons
         self.prepareButton = QtGui.QPushButton("Prepare TTTR")
-        # Measure button
         self.measureButton = QtGui.QPushButton("Measure TTTR")
-        # forced stop measurement
         self.stopButton = QtGui.QPushButton("Stop")
-        # exportData button
         self.exportDataButton = QtGui.QPushButton("Export data")
-        # Clear data
         self.clearButton = QtGui.QPushButton("Clear data")
-
-        # TCSPC parameters
-        self.acqtimeLabel = QtGui.QLabel("Acquisition time [s]")
+        # TCSPC parameters labels and edits
+        acqtimeLabel = QtGui.QLabel("Acquisition time [s]")
         self.acqtimeEdit = QtGui.QLineEdit("1")
-        self.resolutionLabel = QtGui.QLabel("Resolution [ps]")
+        resolutionLabel = QtGui.QLabel("Resolution [ps]")
         self.resolutionEdit = QtGui.QLineEdit("16")
-        self.offsetLabel = QtGui.QLabel("Offset [ns]")
+        offsetLabel = QtGui.QLabel("Offset [ns]")
         self.offsetEdit = QtGui.QLineEdit("3")
 
         self.channel0Label = QtGui.QLabel("Input 0 (sync) [kHz]")
@@ -176,17 +172,23 @@ class Frontend(QtGui.QFrame):
 
         # microTime histogram and timetrace
         self.histPlot = self.dataWidget.addPlot(
-            row=1, col=0, title="microTime histogram"
+            row=0, col=0, title="microTime histogram"
         )
         self.histPlot.setLabels(bottom=("ns"), left=("counts"))
 
-        self.tracePlot = self.dataWidget.addPlot(row=2, col=0, title="Time trace")
-        self.tracePlot.setLabels(bottom=("ms"), left=("counts"))
+        self.tracePlot = self.dataWidget.addPlot(row=1, col=0, title="Time trace")
+        self.tracePlot.setLabels(bottom=("s"), left=("counts"))
+
+        self.posPlot = self.dataWidget.addPlot(row=0, col=1, rowspan=2, title="Position")
+        self.posPlot.showGrid(x=True, y=True)
+        self.posPlot.setLabels(
+            bottom=("X position", "nm"), left=("Y position", "nm")
+        )
 
         # folder
         # TO DO: move this to backend
         today = str(date.today()).replace("-", "")
-        root = r"C:\\Data\\"
+        root = "C:\\Data\\"
         folder = root + today
         try:
             os.mkdir(folder)
@@ -220,11 +222,11 @@ class Frontend(QtGui.QFrame):
         subgrid = QtGui.QGridLayout()
         self.paramWidget.setLayout(subgrid)
         # subgrid.addWidget(phParamTitle, 0, 0, 2, 3)
-        subgrid.addWidget(self.acqtimeLabel, 2, 0)
+        subgrid.addWidget(acqtimeLabel, 2, 0)
         subgrid.addWidget(self.acqtimeEdit, 2, 1)
-        subgrid.addWidget(self.resolutionLabel, 4, 0)
+        subgrid.addWidget(resolutionLabel, 4, 0)
         subgrid.addWidget(self.resolutionEdit, 4, 1)
-        subgrid.addWidget(self.offsetLabel, 6, 0)
+        subgrid.addWidget(offsetLabel, 6, 0)
         subgrid.addWidget(self.offsetEdit, 6, 1)
         subgrid.addWidget(self.channel0Label, 8, 0)
         subgrid.addWidget(self.channel0Value, 8, 1)
@@ -311,7 +313,7 @@ class Backend(QtCore.QObject):
         """Called from GUI."""
         t0 = time.time()
         self.prepare_ph()
-        self.currentfname = tools.getUniqueName(self.fname)
+        self.currentfname = fntools.getUniqueName(self.fname)
 
         t1 = time.time()
         _lgr.info("Starting the PH measurement took %s s", (t1 - t0))
@@ -331,7 +333,7 @@ class Backend(QtCore.QObject):
         """Called from another module (minflux)"""
         print(datetime.now(), "[tcspc] preparing minflux measurement")
         t0 = time.time()
-        self.currentfname = tools.getUniqueName(fname)
+        self.currentfname = fntools.getUniqueName(fname)
         self.prepare_ph()
         self.ph.tacq = acqtime * n * 1000  # TO DO: correspond to GUI !!!
         self.ph.lib.PH_SetBinning(
@@ -419,15 +421,21 @@ class PicoHarpReaderThread(_th.Thread):
     _stop_event: _th.Event = _th.Event()
 
     def __init__(self, ph: picoharp.PicoHarp300, fname: str, img_evt: _th.Event,
+                 PSFs: np.ndarray, SBR: float,
                  *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.ph = ph.lib
         self._fname = fname
         self._img_evt = img_evt
+        self._PSFs = PSFs
+        self._SBR = SBR
 
     def run(self):
         try:
-            self.startTTTR_Track(self._fname, self._img_evt, PSF, SBR, binwidth)
+            microbin_duration = 16E-3  # in ns, instrumental, match with front
+            macrobin_duration = 12.5  # in ns, match with opticalfibers
+            binwidth = int(np.round(macrobin_duration / microbin_duration))  # microbins per macrobin
+            self.startTTTR_Track(self._fname, self._img_evt, self.PSFs, self._SBR, binwidth)
         except Exception as e:
             _lgr.error("Exception %s measuring: %s", type(e), e)
 
@@ -465,7 +473,8 @@ class PicoHarpReaderThread(_th.Thread):
         measuring = True
         self.ph.PH_StartMeas(ctypes.c_int(self._DEV_NUM), ctypes.c_int(self.tacq))
         _lgr.info("Tracking TCSPC measurement started")
-        vec = np.zeros((4,), dtype=np.uint64)
+        n_bins = int(np.ceil(4096 / binwidth))  # (4096+bins-1) / /bins
+        vec = np.zeros((n_bins,), dtype=np.uint64)
         flags = ctypes.c_int()
         ctcDone = ctypes.c_int()
         nactual = ctypes.c_int()  # actual number of data in buffer
@@ -560,13 +569,6 @@ if __name__ == "__main__":
     ph = picoharp.PicoHarp300()
     worker = Backend(ph)
     gui = Frontend()
-
-    workerThread = QtCore.QThread()
-    workerThread.start()
-    worker.moveToThread(workerThread)
-
-    worker.tcspcTimer.moveToThread(workerThread)
-    worker.tcspcTimer.timeout.connect(worker.update)
 
     worker.make_connection(gui)
     gui.make_connection(worker)
