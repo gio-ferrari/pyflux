@@ -21,11 +21,16 @@ from tkinter import Tk, filedialog
 import logging as _lgn
 
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui
+from pyqtgraph.Qt import QtCore
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QGroupBox
+from PyQt5 import QtWidgets
 
-import drivers.picoharp as picoharp
+try:
+    import drivers.picoharp as picoharp
+except ImportError:
+    print("Loading mock picoharp")
+    import drivers.mock_picoharp as picoharp
 import PicoHarp.Read_PTU as Read_PTU
 # import drivers.ADwin as ADwin
 from tools import analysis as _analysis
@@ -43,7 +48,7 @@ FLAG_FIFOFULL = 0x0003
 _lgr = _lgn.getLogger(__name__)
 
 
-class Frontend(QtGui.QFrame):
+class Frontend(QtWidgets.QFrame):
     paramSignal = pyqtSignal(list)
     measureSignal = pyqtSignal()
 
@@ -136,7 +141,7 @@ class Frontend(QtGui.QFrame):
         self.paramWidget.setFixedHeight(230)
         self.paramWidget.setFixedWidth(230)
 
-        phParamTitle = QtGui.QLabel("<h2>TCSPC settings</h2>")
+        phParamTitle = QtWidgets.QLabel("<h2>TCSPC settings</h2>")
         phParamTitle.setTextFormat(QtCore.Qt.RichText)
 
         # widget to display data
@@ -147,28 +152,28 @@ class Frontend(QtGui.QFrame):
         self.fileWidget.setFixedHeight(130)
         self.fileWidget.setFixedWidth(230)
         # Buttons
-        self.prepareButton = QtGui.QPushButton("Prepare TTTR")
-        self.measureButton = QtGui.QPushButton("Measure TTTR")
-        self.stopButton = QtGui.QPushButton("Stop")
-        self.exportDataButton = QtGui.QPushButton("Export data")
-        self.clearButton = QtGui.QPushButton("Clear data")
+        self.prepareButton = QtWidgets.QPushButton("Prepare TTTR")
+        self.measureButton = QtWidgets.QPushButton("Measure TTTR")
+        self.stopButton = QtWidgets.QPushButton("Stop")
+        self.exportDataButton = QtWidgets.QPushButton("Export data")
+        self.clearButton = QtWidgets.QPushButton("Clear data")
         # TCSPC parameters labels and edits
-        acqtimeLabel = QtGui.QLabel("Acquisition time [s]")
-        self.acqtimeEdit = QtGui.QLineEdit("1")
-        resolutionLabel = QtGui.QLabel("Resolution [ps]")
-        self.resolutionEdit = QtGui.QLineEdit("16")
-        offsetLabel = QtGui.QLabel("Offset [ns]")
-        self.offsetEdit = QtGui.QLineEdit("3")
+        acqtimeLabel = QtWidgets.QLabel("Acquisition time [s]")
+        self.acqtimeEdit = QtWidgets.QLineEdit("1")
+        resolutionLabel = QtWidgets.QLabel("Resolution [ps]")
+        self.resolutionEdit = QtWidgets.QLineEdit("16")
+        offsetLabel = QtWidgets.QLabel("Offset [ns]")
+        self.offsetEdit = QtWidgets.QLineEdit("3")
 
-        self.channel0Label = QtGui.QLabel("Input 0 (sync) [kHz]")
-        self.channel0Value = QtGui.QLineEdit("")
+        self.channel0Label = QtWidgets.QLabel("Input 0 (sync) [kHz]")
+        self.channel0Value = QtWidgets.QLineEdit("")
         self.channel0Value.setReadOnly(True)
 
-        self.channel1Label = QtGui.QLabel("Input 1 (APD) [kHz]")
-        self.channel1Value = QtGui.QLineEdit("")
+        self.channel1Label = QtWidgets.QLabel("Input 1 (APD) [kHz]")
+        self.channel1Value = QtWidgets.QLineEdit("")
         self.channel1Value.setReadOnly(True)
 
-        self.filenameEdit = QtGui.QLineEdit("filename")
+        self.filenameEdit = QtWidgets.QLineEdit("filename")
 
         # microTime histogram and timetrace
         self.histPlot = self.dataWidget.addPlot(
@@ -197,9 +202,9 @@ class Frontend(QtGui.QFrame):
         else:
             _lgr.info("Directory %s already exists", folder)
 
-        self.folderLabel = QtGui.QLabel("Folder:")
-        self.folderEdit = QtGui.QLineEdit(folder)
-        self.browseFolderButton = QtGui.QPushButton("Browse")
+        self.folderLabel = QtWidgets.QLabel("Folder:")
+        self.folderEdit = QtWidgets.QLineEdit(folder)
+        self.browseFolderButton = QtWidgets.QPushButton("Browse")
         self.browseFolderButton.setCheckable(True)
 
         # GUI connections
@@ -212,14 +217,14 @@ class Frontend(QtGui.QFrame):
         self.resolutionEdit.textChanged.connect(self.emit_param)
 
         # general GUI layout
-        grid = QtGui.QGridLayout()
+        grid = QtWidgets.QGridLayout()
         self.setLayout(grid)
         grid.addWidget(self.paramWidget, 0, 0)
         grid.addWidget(self.fileWidget, 1, 0)
         grid.addWidget(self.dataWidget, 0, 1, 2, 2)
 
         # param Widget layout
-        subgrid = QtGui.QGridLayout()
+        subgrid = QtWidgets.QGridLayout()
         self.paramWidget.setLayout(subgrid)
         # subgrid.addWidget(phParamTitle, 0, 0, 2, 3)
         subgrid.addWidget(acqtimeLabel, 2, 0)
@@ -238,7 +243,7 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.stopButton, 17, 1)
         subgrid.addWidget(self.clearButton, 18, 1)
 
-        file_subgrid = QtGui.QGridLayout()
+        file_subgrid = QtWidgets.QGridLayout()
         self.fileWidget.setLayout(file_subgrid)
 
         file_subgrid.addWidget(self.filenameEdit, 0, 0, 1, 2)
@@ -490,10 +495,10 @@ class PicoHarpReaderThread(_th.Thread):
                 _lgr.warning("Not enough buffers, voy a retrasarme un poco...")
                 buf = np.ndarray((MAXRECS,), np.dtype(ctypes.c_uint))
                 buffers.append(buf)
-            self.lib.PH_ReadFiFo(
+            self.ph.PH_ReadFiFo(
                 ctypes.c_int(self._DEV_NUM),
-                buf.data_as(ctypes.POINTER(ctypes.c_uint32)),
-                MAXRECS,
+                buf.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)),
+                ctypes.c_int(MAXRECS),
                 ctypes.byref(nactual),
             )
 
@@ -558,12 +563,12 @@ class WriterThread(_th.Thread):
 
 if __name__ == "__main__":
 
-    if not QtGui.QApplication.instance():
-        app = QtGui.QApplication([])
+    if not QtWidgets.QApplication.instance():
+        app = QtWidgets.QApplication([])
     else:
-        app = QtGui.QApplication.instance()
+        app = QtWidgets.QApplication.instance()
 
-    # app.setStyle(QtGui.QStyleFactory.create('fusion'))
+    # app.setStyle(QtWidgets.QStyleFactory.create('fusion'))
     app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
 
     ph = picoharp.PicoHarp300()
