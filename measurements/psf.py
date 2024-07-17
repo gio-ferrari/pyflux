@@ -9,6 +9,8 @@ import numpy as np
 import os
 from datetime import date, datetime
 import time
+from enum import Enum as _Enum
+
 
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as _pg
@@ -36,14 +38,26 @@ FIX_L = 100.  # en nm
 FIX_K = 4
 N_COLS = 2
 
+
+class Status(_Enum):
+    """Status of the PSF worker."""
+
+    IDLE = 0
+    WAITING_XY = 1
+    WAITING_Z = 2
+    WAITING_SCAN = 3
+    WAITING_CORRECTION = 4
+    ABORTING = 5
+
+
 class Frontend(QtGui.QFrame):
     paramSignal = pyqtSignal(dict)
     """
     Signals
     """
-    _plots: list = [] #  [_pg.PlotItem] = []  # plots de las donas
+    _plots: list = []  # [_pg.PlotItem] = []  # plots de las donas
     _imitems: list = []  # [_pg.ImageItem] = []  # plots de las donas
-    _images: list = [None, ] * FIX_K  #list[np.ndarray] = [None, ] * FIX_K  # data
+    _images: list = [None, ] * FIX_K  # list[np.ndarray] = [None, ] * FIX_K  # data
     _centerplots: list = [None, ] * FIX_K  # Plots de los centros reales
     _perfectplots: list = [None, ] * FIX_K  # Plots de los centros ideales
     _nframes = None
@@ -421,6 +435,7 @@ class Backend(QtCore.QObject):
     """
     Signals
     """
+    _status = Status.IDLE
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -439,9 +454,10 @@ class Backend(QtCore.QObject):
 
     def start(self):
         self.i = 0
-        self.xyIsDone = False
-        self.zIsDone = False
-        self.scanIsDone = False
+        self._status = Status.IDLE
+        # self.xyIsDone = False
+        # self.zIsDone = False
+        # self.scanIsDone = False
         try:
             self.progressSignal.emit(0, np.array([]), -1)
             self.shutterSignal.emit(7, False)
@@ -459,15 +475,18 @@ class Backend(QtCore.QObject):
     
             self.data = np.zeros((self.totalFrameNum, self.nPixels, self.nPixels))
             _lgr.debug('Data shape is %s', np.shape(self.data))
-            self.xy_flag = True
-            self.z_flag = True
-            self.scan_flag = True
+            # self.xy_flag = True
+            # self.z_flag = True
+            # self.scan_flag = True
         except Exception as e:
             print("Excepcion en start:", e)
-        self.measTimer.start(0)
+        # self.measTimer.start(0)
+        self.xySignal.emit(True, True)
+
 
     def stop(self):
-        self.measTimer.stop()
+        # self.measTimer.stop()
+        self._status = Status.ABORTING
         self.progressSignal.emit(100, None, None)  # changed from 0
         self.shutterSignal.emit(8, False)
 
@@ -483,57 +502,57 @@ class Backend(QtCore.QObject):
         self.progressSignal.emit(100, np.array([]), -1)  # changed from 0
         _lgr.debug('PSF measurement ended')
 
-    def loop(self):
-        """Check status on each tick.
+    # def loop(self):
+    #     """Check status on each tick.
 
-        This would be best implemented using a state machine and no timer.
-        """
-        if self.i == 0:
-            initial = True
-        else:
-            initial = False
+    #     This would be best implemented using a state machine and no timer.
+    #     """
+    #     if self.i == 0:
+    #         initial = True
+    #     else:
+    #         initial = False
 
-        if self.xy_flag:
-            self.xySignal.emit(True, initial)
-            self.xy_flag = False
-            _lgr.debug(' xy signal emitted (%s)', self.i)
-        if self.xyIsDone:
-            if self.z_flag:
-                self.zSignal.emit(True, initial)
-                self.z_flag = False
-                _lgr.debug('z signal emitted (%s)', self.i)
+    #     if self.xy_flag:
+    #         self.xySignal.emit(True, initial)
+    #         self.xy_flag = False
+    #         _lgr.debug(' xy signal emitted (%s)', self.i)
+    #     if self.xyIsDone:
+    #         if self.z_flag:
+    #             self.zSignal.emit(True, initial)
+    #             self.z_flag = False
+    #             _lgr.debug('z signal emitted (%s)', self.i)
 
-            if self.zIsDone:
-                shutternum = self.i // self.nFrames + 1
-                if self.scan_flag:
-                    if not self.alignMode:
-                        self.shutterSignal.emit(shutternum, True)
-                    initialPos = np.array([self.target_x, self.target_y,
-                                           self.target_z], dtype=np.float64)
-                    self.scanSignal.emit(True, 'frame', initialPos)
-                    self.scan_flag = False
-                    _lgr.debug('scan signal emitted (%s)', self.i)
+    #         if self.zIsDone:
+    #             shutternum = self.i // self.nFrames + 1
+    #             if self.scan_flag:
+    #                 if not self.alignMode:
+    #                     self.shutterSignal.emit(shutternum, True)
+    #                 initialPos = np.array([self.target_x, self.target_y,
+    #                                        self.target_z], dtype=np.float64)
+    #                 self.scanSignal.emit(True, 'frame', initialPos)
+    #                 self.scan_flag = False
+    #                 _lgr.debug('scan signal emitted (%s)', self.i)
 
-                if self.scanIsDone:
-                    if not self.alignMode:
-                        self.shutterSignal.emit(shutternum, False)
-                    completed = ((self.i+1)/self.totalFrameNum) * 100
+    #             if self.scanIsDone:
+    #                 if not self.alignMode:
+    #                     self.shutterSignal.emit(shutternum, False)
+    #                 completed = ((self.i+1)/self.totalFrameNum) * 100
 
-                    self.xy_flag = True
-                    self.z_flag = True
-                    self.scan_flag = True
-                    self.xyIsDone = False
-                    self.zIsDone = False
-                    self.scanIsDone = False
+    #                 self.xy_flag = True
+    #                 self.z_flag = True
+    #                 self.scan_flag = True
+    #                 self.xyIsDone = False
+    #                 self.zIsDone = False
+    #                 self.scanIsDone = False
 
-                    self.data[self.i, :, :] = self.currentFrame
-                    self.progressSignal.emit(completed, self.data[self.i, :, :], self.i)
-                    _lgr.debug('PSF %s of %s', self.i+1, self.totalFrameNum)
+    #                 self.data[self.i, :, :] = self.currentFrame
+    #                 self.progressSignal.emit(completed, self.data[self.i, :, :], self.i)
+    #                 _lgr.debug('PSF %s of %s', self.i+1, self.totalFrameNum)
 
-                    if self.i < self.totalFrameNum-1:
-                        self.i += 1
-                    else:
-                        self.stop()  # Incluye un progressSignal
+    #                 if self.i < self.totalFrameNum-1:
+    #                     self.i += 1
+    #                 else:
+    #                     self.stop()  # Incluye un progressSignal
 
     def export_data(self):
         fname = self.filename
@@ -563,25 +582,62 @@ class Backend(QtCore.QObject):
         """
         Connection: [xy_tracking] xyIsDone
         """
-        self.xyIsDone = True
+        # self.xyIsDone = True
         self.target_x = x
         self.target_y = y
+        if self._status == Status.ABORTING:
+            return
+        if self._status != Status.WAITING_XY:
+            _lgr.error("unexpected XY done")
+        self._status = Status.WAITING_Z
+        self.zSignal.emit(True, (self.i == 0))
+        _lgr.debug('z signal emitted (%s)', self.i)
 
     @pyqtSlot(bool, float)
     def get_z_is_done(self, val, z):
         """
         Connection: [focus] zIsDone
         """
-        self.zIsDone = True
+        # self.zIsDone = True
         self.target_z = z
+        if self._status == Status.ABORTING:
+            return
+        if self._status != Status.WAITING_Z:
+            _lgr.error("unexpected Z done")
+        self._status = Status.WAITING_SCAN
+        shutternum = self.i // self.nFrames + 1
+        if self.scan_flag:
+            if not self.alignMode:
+                self.shutterSignal.emit(shutternum, True)
+            initialPos = np.array([self.target_x, self.target_y,
+                                   self.target_z], dtype=np.float64)
+            self.scanSignal.emit(True, 'frame', initialPos)
+            _lgr.debug('scan signal emitted (%s)', self.i)
 
     @pyqtSlot(bool, np.ndarray)
     def get_scan_is_done(self, val, image):
         """
         Connection: [scan] scanIsDone
         """
-        self.scanIsDone = True
+        # self.scanIsDone = True
         self.currentFrame = image
+        if self._status == Status.ABORTING:
+            return
+        if self._status != Status.WAITING_SCAN:
+            _lgr.error("unexpected SCAN done")
+        shutternum = self.i // self.nFrames + 1
+        if not self.alignMode:
+            self.shutterSignal.emit(shutternum, False)
+        completed = ((self.i+1)/self.totalFrameNum) * 100
+
+        self.data[self.i, :, :] = self.currentFrame
+        self.progressSignal.emit(completed, self.data[self.i, :, :], self.i)
+        _lgr.debug('PSF %s of %s', self.i+1, self.totalFrameNum)
+
+        if self.i < self.totalFrameNum-1:
+            self.i += 1
+        else:
+            self.stop()  # Incluye un progressSignal
 
     @pyqtSlot(dict)
     def get_scan_parameters(self, params):

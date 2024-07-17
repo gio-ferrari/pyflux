@@ -1633,9 +1633,9 @@ class Backend(QtCore.QObject):
 
     @pyqtSlot()
     def get_moveTo_initial_signal(self):
-        
+        """Enviada (al menos por) PSF."""
         self.moveTo(*self.initialPos)
-    
+
     def relative_move(self, axis, direction):
         
         if axis == 'x' and direction == 'up':
