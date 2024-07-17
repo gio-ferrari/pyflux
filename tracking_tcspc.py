@@ -22,7 +22,7 @@ import logging as _lgn
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QGroupBox
 from PyQt5 import QtWidgets
 
@@ -46,14 +46,18 @@ FLAG_OVERFLOW = 0x0040
 FLAG_FIFOFULL = 0x0003
 
 _lgr = _lgn.getLogger(__name__)
+_lgn.basicConfig(level=_lgn.INFO)
 
 
 class Frontend(QtWidgets.QFrame):
+    """Frontend para TCSPC con tracking."""
+
+    # Signals
     paramSignal = pyqtSignal(list)
     measureSignal = pyqtSignal()
 
     def __init__(self, *args, **kwargs):
-
+        """No hace nada."""
         super().__init__(*args, **kwargs)
 
         # initial directory
@@ -61,36 +65,31 @@ class Frontend(QtWidgets.QFrame):
         self.setup_gui()
 
     def start_measurement(self):
-
+        """Inicia la medida."""
         self.measureButton.setEnabled(False)
         self.measureSignal.emit()
 
     def load_folder(self):
-
+        """Muestra una ventana de selección de carpeta."""
         try:
             root = Tk()
             root.withdraw()
             folder = filedialog.askdirectory(parent=root, initialdir=self.initialDir)
             root.destroy()
-            if folder != "":
+            if folder:
                 self.folderEdit.setText(folder)
         except OSError:
             pass
 
     def emit_param(self):
-
         # TO DO: change for dictionary
-
         filename = os.path.join(self.folderEdit.text(), self.filenameEdit.text())
-
         name = filename
         res = int(self.resolutionEdit.text())
         tacq = float(self.acqtimeEdit.text())
         folder = self.folderEdit.text()
         offset = float(self.offsetEdit.text())
-
         paramlist = [name, res, tacq, folder, offset]
-
         self.paramSignal.emit(paramlist)
 
     @pyqtSlot(float, float)
@@ -262,21 +261,22 @@ class Backend(QtCore.QObject):
 
     ctRatesSignal = pyqtSignal(float, float)
     plotDataSignal = pyqtSignal(np.ndarray, np.ndarray)
-
     tcspcDoneSignal = pyqtSignal()
+    measureEndSignal = pyqtSignal()  # to self and front, triggered by working thread
+    localizationSignal = pyqtSignal(float, float)  # int, int
     _measure_thread: "PicoHarpReaderThread" = None
 
     def __init__(self, ph_device, *args, **kwargs):
-
+        """Receive picoharp driver device."""
         super().__init__(*args, **kwargs)
         self.ph = ph_device
 
     def update(self):
-
+        """Placeholder."""
         self.measure_count_rate()
 
     def measure_count_rate(self):
-
+        """Sned countrate to front."""
         self.cts0 = self.ph.countrate(0)
         self.cts1 = self.ph.countrate(1)
         self.ctRatesSignal.emit(self.cts0, self.cts1)
@@ -284,7 +284,7 @@ class Backend(QtCore.QObject):
     def prepare_ph(self):
         """Initialize a measurement.
 
-        Full of hardcoded values.
+        TODO: Full of hardcoded values.
         """
         self.ph.open()
         self.ph.initialize()
@@ -311,7 +311,7 @@ class Backend(QtCore.QObject):
         _lgr.info("Resolution = %s ps", self.ph.resolution)
         _lgr.info("Acquisition time = %s ms",  self.ph.tacq)
         _lgr.info("Offset = %s ps", self.ph.offset)
-        print("Picoharp 300 prepared for TTTR measurement", flush=True)
+        _lgr.info("TCSPC prepared for TTTR measurement")
 
     @pyqtSlot()
     def measure(self):
@@ -322,16 +322,9 @@ class Backend(QtCore.QObject):
 
         t1 = time.time()
         _lgr.info("Starting the PH measurement took %s s", (t1 - t0))
-        # self._measure_thread = PicoHarpReaderThread()
-        # self._measure_thread.start()
-        # hacer el join y luego...
-        # np.savetxt(self.currentfname + ".txt", [])
-        # while self.ph.measure_state != "done":
-        #     pass
-        # self.export_data()
-
-    #        self.ph.lib.PH_ClearHistMem(ctypes.c_int(0),
-    #                                  ctypes.c_int(0))
+        self._measure_thread = PicoHarpReaderThread(self.ph, "Lefilename", None,
+                                                    np.ones((4, 80, 80,)), 18., self)
+        self._measure_thread.start()
 
     @pyqtSlot(str, int, int)
     def prepare_minflux(self, fname, acqtime, n):
@@ -414,10 +407,29 @@ class Backend(QtCore.QObject):
         frontend.prepareButton.clicked.connect(self.prepare_ph)
         frontend.stopButton.clicked.connect(self.stop_measure)
         frontend.emit_param()  # TO DO: change such that backend has parameters defined from the start
+        self.measureEndSignal.connect(self.cleanup_measurement)
 
     def stop(self):
         # TODO: call this function
         self.ph.finalize()
+
+    def ack_measurement_end(self):
+        """Signal to front (and ourselves) that measure ended."""
+        self.measureEndSignal.emit()
+
+    def ack_position(self, x: float, y: float):
+        """Signal new localization to front."""
+        self.localizationSignal.emit(x, y)
+
+    def cleanup_measurement(self):
+        self._measure_thread.join(10)
+        if self._measure_thread.is_alive():
+            _lgr.error("Measure_thread has not ended")
+        # np.savetxt(self.currentfname + ".txt", [])
+        # self.export_data()
+
+        #     self.ph.lib.PH_ClearHistMem(ctypes.c_int(0),
+        #                               ctypes.c_int(0))
 
 
 class PicoHarpReaderThread(_th.Thread):
@@ -426,23 +438,50 @@ class PicoHarpReaderThread(_th.Thread):
     _stop_event: _th.Event = _th.Event()
 
     def __init__(self, ph: picoharp.PicoHarp300, fname: str, img_evt: _th.Event,
-                 PSFs: np.ndarray, SBR: float,
+                 PSFs: np.ndarray, SBR: float, signaler: QtCore.QObject,
                  *args, **kwargs):
+        """Prepare.
+        
+
+        Parameters
+        ----------
+        ph : picoharp.PicoHarp300
+            Driver.
+        fname : str
+            Filename to save to.
+        img_evt : _th.Event
+            event triggered when a XY image is ready.
+        PSFs : np.ndarray
+            Array of PSF for locating.
+        SBR : float
+            Signal to background ratio.
+        signaler : QtCore.QObject
+            Object to communicate with Qt. Must expose methods to send location and
+            end of measurement events.
+
+        Returns
+        -------
+        None.
+
+        """
         super().__init__(*args, **kwargs)
         self.ph = ph.lib
         self._fname = fname
         self._img_evt = img_evt
         self._PSFs = PSFs
         self._SBR = SBR
+        self._signaler = signaler
+        self._tacq = 1000  # FIXME: esto debería poder ser infinito o venir del front
 
     def run(self):
         try:
             microbin_duration = 16E-3  # in ns, instrumental, match with front
             macrobin_duration = 12.5  # in ns, match with opticalfibers
             binwidth = int(np.round(macrobin_duration / microbin_duration))  # microbins per macrobin
-            self.startTTTR_Track(self._fname, self._img_evt, self.PSFs, self._SBR, binwidth)
+            self.startTTTR_Track(self._fname, self._img_evt, self._PSFs, self._SBR, binwidth)
         except Exception as e:
             _lgr.error("Exception %s measuring: %s", type(e), e)
+        self._signaler.ack_measurement_end()
 
     def stop(self):
         """External signal to stop measurement."""
@@ -476,7 +515,7 @@ class PicoHarpReaderThread(_th.Thread):
         wt.start()
         locator = _analysis.MinFluxLocator(PSF, SBR)
         measuring = True
-        self.ph.PH_StartMeas(ctypes.c_int(self._DEV_NUM), ctypes.c_int(self.tacq))
+        self.ph.PH_StartMeas(ctypes.c_int(self._DEV_NUM), ctypes.c_int(self._tacq))
         _lgr.info("Tracking TCSPC measurement started")
         n_bins = int(np.ceil(4096 / binwidth))  # (4096+bins-1) / /bins
         vec = np.zeros((n_bins,), dtype=np.uint64)
@@ -489,32 +528,39 @@ class PicoHarpReaderThread(_th.Thread):
             if flags.value & FLAG_FIFOFULL > 0:
                 _lgr.error("FiFo Overrun!")
                 self.stop_PH_measure()
+                measuring = False
+                continue
             try:
                 buf = buffer_q.pop()
+                print("got buffer")
             except IndexError:
                 _lgr.warning("Not enough buffers, voy a retrasarme un poco...")
                 buf = np.ndarray((MAXRECS,), np.dtype(ctypes.c_uint))
                 buffers.append(buf)
+                measuring = False
             self.ph.PH_ReadFiFo(
                 ctypes.c_int(self._DEV_NUM),
                 buf.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)),
                 ctypes.c_int(MAXRECS),
                 ctypes.byref(nactual),
             )
+            _lgr.info("records read: %s", nactual.value)
 
             if nactual.value > 0:
                 _lgr.info("Current photon count: %s", nactual.value)
                 data_q.put_nowait((nactual.value, buf, ))  # report async
-                if img_evt.is_set():
+                if True:  # img_evt.is_set():
                     _rpf.all_in_one(buf[:nactual.value], vec, binwidth)
-                    pos = locator(vec)  # (maybe always instead of when image)
+                    pos = locator(vec)[0]
                     print(pos)
-                #   move
-                    img_evt.clear()
+                    self._signaler.ack_position(pos[0], pos[1])
+                    # move
+                    # img_evt.clear()
 
                 progress += nactual.value
             else:
-                self.lib.PH_CTCStatus(ctypes.c_int(self._DEV_NUM), ctypes.byref(ctcDone))
+                _lgr.info("Calling status")
+                self.ph.PH_CTCStatus(ctypes.c_int(self._DEV_NUM), ctypes.byref(ctcDone))
                 if ctcDone.value > 0:
                     _lgr.info("TCSPC Done")
                     self.numRecords = progress

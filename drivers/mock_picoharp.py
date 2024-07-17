@@ -96,6 +96,11 @@ class libmock:
         flags.value = self._flags
         return 0
 
+    def PH_CTCStatus(self, devidx: ctypes.c_int, status,) -> int:
+        status.value = int(time.time_ns() - self._start_time > self._tacq * 1E6)
+        print(status.value, flush=True)
+        return 0
+
     def PH_StopMeas(self, devidx: ctypes.c_int) -> int:
         self._status = 'IDLE'
         # En realidad no habria que vaciar el buffer
@@ -107,6 +112,8 @@ class libmock:
         self._status = 'MEASURING'
         self._pos = 0
         self._last_read = time.time_ns()
+        self._start_time = time.time_ns()
+        self._tacq = tacq.value
         return 0
 
     def PH_SetBinning(self, devidx: ctypes.c_int, binning: ctypes.c_int):
@@ -131,9 +138,12 @@ class libmock:
         # llenar con lo que hay en el buffer
         # si el tiempo y el bufffer de llegada dan para mas, llenar con mas
         # Poner lo que sobra en el buffer y ajustar pos
-        available = self._pos + ...
-        # buffer._arr[] == ...
+        # available = self._pos + ...
+        buffer._arr[:] = 1
+        print("asdfsdñglkjbhaskj bgfusaod vbgoua svodu gfuyk vguoy guoig ", flush=True)
+        time.sleep(1.1)
         self._last_read = time.time_ns()
+        nactual.value = 0
         return 0
 
 
