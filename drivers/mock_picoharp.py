@@ -71,8 +71,17 @@ class libmock:
         self._x_freq = 0.5 * np.pi * x_speed / x_amplitude
         self._y_freq = 0.5 * np.pi * y_speed / y_amplitude
         # No le damos bola a nada
-        # 0.5 s de periodo
-        idx_pulses = 
+        # 0.5 s de periodo, 20MHz
+        period = 0.5  # segundos
+        amplitude_x = 10  # nm
+        amplitude_y = 5  # nm
+        pulse_freq = 20E6  # Hz, pulso sync
+        idx_pulses = np.arange(period * pulse_freq)  # pulsos de cada dona
+        t_sync = idx_pulses * 1/pulse_freq  # T_sync
+        shift_pulses = np.roll(np.arange(4), -1) / (pulse_freq * 4)
+        t_pulses = t_sync[:, np.newaxis] + shift_pulses
+        pos_x = amplitude_x * np.sin(t_pulses * np.pi / period * 2)
+        pos_y = amplitude_y * np.sin(t_pulses * np.pi / period * 3)
 
     def PH_GetFlags(self, devidx: ctypes.c_int, flags,) -> int:
         flags.value = self._flags
