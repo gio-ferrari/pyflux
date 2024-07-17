@@ -872,6 +872,49 @@ class Backend(QtCore.QObject):
         # El estimador está en píxeles... fraccionarios
 
     def gaussian_fit(self, roi_coordinates) -> (float, float):
+        """Devuelve el centro del fiteo, en nm respecto al origen del ROI.
+
+        Reescrito, a testear
+        """
+        roi_coordinates = np.array(roi_coordinates, dtype=np.int32)
+        xmin, xmax, ymin, ymax = roi_coordinates
+        # xmin_nm, xmax_nm, ymin_nm, ymax_nm = roi_coordinates * PX_SIZE
+
+        # select the data of the image corresponding to the ROI
+        array = self.image[xmin:xmax, ymin:ymax]
+        # find max
+        argmax = np.unravel_index(np.argmax(array, axis=None), array.shape)
+
+        x_sub_nm = np.arange(array.shape[0]) * PX_SIZE
+        y_sub_nm = np.arange(array.shape[1]) * PX_SIZE
+        [Mx_sub, My_sub] = np.meshgrid(x_sub_nm, y_sub_nm, indexing='ij')
+
+        # make initial guess for parameters
+        bkg = np.min(array)
+        A = np.max(array) - bkg
+        σ = 200  # nm, antes era 130nm
+        x0 = argmax[0] * PX_SIZE
+        y0 = argmax[1] * PX_SIZE
+
+        initial_guess_G = [A, x0, y0, σ, σ, bkg]
+
+        poptG, pcovG = opt.curve_fit(PSF.gaussian2D, (Mx_sub, My_sub),
+                                     array.ravel(), p0=initial_guess_G)
+        # perr = np.sqrt(np.diag(pcovG))
+        # print('perr', perr)
+
+        # retrieve results
+        poptG = np.around(poptG, 2)
+        A, x0, y0, σ_x, σ_y, bkg = poptG
+        x = x0 #  + xmin * PX_SIZE
+        y = y0 #  + ymin * PX_SIZE
+
+        currentx = x
+        currenty = y
+
+        return currentx, currenty
+
+    def gaussian_fit2(self, roi_coordinates) -> (float, float):
         """Devuelve el centro del fiteo, en nm respecto al ROI.
 
         TODO: Creo que hay un ida y vuelta ridiculo entre nm y px
@@ -890,7 +933,7 @@ class Backend(QtCore.QObject):
         yrange_nm = ymax_nm - ymin_nm
         x_nm = np.arange(0, xrange_nm, PX_SIZE)
         y_nm = np.arange(0, yrange_nm, PX_SIZE)
-        # PLACE -> ver indexing
+
         (Mx_nm, My_nm) = np.meshgrid(x_nm, y_nm, indexing='ij')
         # find max
         argmax = np.unravel_index(np.argmax(array, axis=None), array.shape)
@@ -912,7 +955,7 @@ class Backend(QtCore.QObject):
 
         x_sub_nm = np.arange(0, xsubsize) * PX_SIZE
         y_sub_nm = np.arange(0, ysubsize) * PX_SIZE
-        # PLACE -> ver indexing
+
         [Mx_sub, My_sub] = np.meshgrid(x_sub_nm, y_sub_nm, indexing='ij')
 
         # make initial guess for parameters
@@ -960,6 +1003,9 @@ class Backend(QtCore.QObject):
                 roi = self.roi_coordinates_list[i]
                 try:
                     self.currentx[i], self.currenty[i] = self.gaussian_fit(roi)
+                    x2, y2 = self.gaussian_fit2(roi)
+                    print("Gaussian_FIT diff    x =", (self.currentx[i]-x2),
+                          " Y = ", (self.currenty[i]-y2))
                 except Exception as e:
                     self.currentx[i] = self.initialx[i]
                     self.currenty[i] = self.initialy[i]
