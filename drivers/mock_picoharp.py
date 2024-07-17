@@ -65,6 +65,7 @@ class libmock:
             Amplitude (in nm) of the movement in x. The default is 40.
         """
         self._PSFs = PSFs  # Copy?
+        PSFs = np.empty((4, 40, 40,))
         self._nmpp = nmpp
         self._x_amp = x_amplitude
         self._y_amp = y_amplitude
@@ -72,7 +73,7 @@ class libmock:
         self._y_freq = 0.5 * np.pi * y_speed / y_amplitude
         # No le damos bola a nada
         # 0.5 s de periodo, 20MHz
-        period = 0.5  # segundos
+        period = 0.1  # segundos
         amplitude_x = 10  # nm
         amplitude_y = 5  # nm
         pulse_freq = 20E6  # Hz, pulso sync
@@ -82,6 +83,14 @@ class libmock:
         t_pulses = t_sync[:, np.newaxis] + shift_pulses
         pos_x = amplitude_x * np.sin(t_pulses * np.pi / period * 2)
         pos_y = amplitude_y * np.sin(t_pulses * np.pi / period * 3)
+        # Pasamos las posiciones a píxeles
+        pos_x_px = (pos_x / nmpp).astype(int)
+        pos_y_px = (pos_y / nmpp).astype(int)
+        if (np.any(pos_x_px >= 0) or np.any(pos_y_px >= 0) or
+            np.any(pos_x_px < PSFs.shape[1]) or np.any(pos_y_px < PSFs.shape[2])):
+            raise ValueError("OOB indexes")
+
+            
 
     def PH_GetFlags(self, devidx: ctypes.c_int, flags,) -> int:
         flags.value = self._flags
