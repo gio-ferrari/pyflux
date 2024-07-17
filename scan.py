@@ -1802,7 +1802,7 @@ class Backend(QtCore.QObject):
     def liveview_stop(self):
         """Finish liveview scan."""
         self.viewtimer.stop()
-        time.sleep(.5)  # Not sure if neccesary, but let's wait
+        # time.sleep(.5)  # Not sure if neccesary, but let's wait
         # self.moveTo(self.x_i + self.scanRange/2,
         #             self.y_i + self.scanRange/2,
         #             self.z_i
@@ -1820,6 +1820,9 @@ class Backend(QtCore.QObject):
                 dz = tools.convert(self.dz, 'ΔXtoU')
                 self.z_offset = int(self.z_offset + dz)
                 self.adw.Set_FPar(2, self.z_offset)
+            # ver si realinear fiduciarias acá
+            # if self.acquisitionMode == 'frame':
+            #     hacer una signle correction
             self.lineData = self.line_acquisition()
 
             if self.full_scan is True:

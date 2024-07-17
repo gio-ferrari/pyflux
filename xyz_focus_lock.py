@@ -1026,12 +1026,12 @@ class Backend(QtCore.QObject):
         security_thr = 0.35  # in µm
 
         # HINT: los signos están acorde a la platina y a la imagen
-        if np.abs(xmean) > threshold:
+        if (np.abs(xmean) > threshold) or (mode == "discrete"):
             dx = -xmean / 1000  # conversion to µm
             if abs(dx) < xy_far_threshold:
                 dx *= xy_correct_factor
 
-        if np.abs(ymean) > threshold:
+        if (np.abs(ymean) > threshold) or (mode == "discrete"):
             dy = -ymean / 1000  # conversion to µm
             if abs(dy) < xy_far_threshold:
                 dy *= xy_correct_factor
