@@ -84,21 +84,19 @@ class libmock:
         pos_x = amplitude_x * np.sin(t_pulses * np.pi / period * 2)
         pos_y = amplitude_y * np.sin(t_pulses * np.pi / period * 3)
         # Pasamos las posiciones a píxeles
-        pos_x_px = (pos_x / nmpp).astype(int)
-        pos_y_px = (pos_y / nmpp).astype(int)
-        if (np.any(pos_x_px >= 0) or np.any(pos_y_px >= 0) or
-            np.any(pos_x_px < PSFs.shape[1]) or np.any(pos_y_px < PSFs.shape[2])):
-            raise ValueError("OOB indexes")
+        # pos_x_px = (pos_x / nmpp).astype(int)
+        # pos_y_px = (pos_y / nmpp).astype(int)
+        # if (np.any(pos_x_px >= 0) or np.any(pos_y_px >= 0) or
+        #     np.any(pos_x_px < PSFs.shape[1]) or np.any(pos_y_px < PSFs.shape[2])):
+        #     raise ValueError("OOB indexes")
 
-            
 
     def PH_GetFlags(self, devidx: ctypes.c_int, flags,) -> int:
-        flags.value = self._flags
+        flags._obj.value = self._flags
         return 0
 
     def PH_CTCStatus(self, devidx: ctypes.c_int, status,) -> int:
-        status.value = int(time.time_ns() - self._start_time > self._tacq * 1E6)
-        print(status.value, flush=True)
+        status._obj.value = int(time.time_ns() - self._start_time > self._tacq * 1E6)
         return 0
 
     def PH_StopMeas(self, devidx: ctypes.c_int) -> int:
@@ -139,11 +137,10 @@ class libmock:
         # si el tiempo y el bufffer de llegada dan para mas, llenar con mas
         # Poner lo que sobra en el buffer y ajustar pos
         # available = self._pos + ...
-        buffer._arr[:] = 1
-        print("asdfsdñglkjbhaskj bgfusaod vbgoua svodu gfuyk vguoy guoig ", flush=True)
-        time.sleep(1.1)
+        # buffer._arr[:] = 1
+        time.sleep(.1)
         self._last_read = time.time_ns()
-        nactual.value = 0
+        nactual._obj.value = 0
         return 0
 
 
@@ -182,8 +179,7 @@ class PicoHarp300:
         self.maxRes = 4  # max res of PicoHarp 300 in ps
 
         self._status = "UNINITIALIZED"
-        self.lib = Mock()
-        self.lib.PH_GetFlags()
+        self.lib = libmock(None, 1)
 
     def getLibraryVersion(self):
         return "False Picoharp"

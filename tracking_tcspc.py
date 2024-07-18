@@ -441,7 +441,6 @@ class PicoHarpReaderThread(_th.Thread):
                  PSFs: np.ndarray, SBR: float, signaler: QtCore.QObject,
                  *args, **kwargs):
         """Prepare.
-        
 
         Parameters
         ----------
@@ -532,12 +531,10 @@ class PicoHarpReaderThread(_th.Thread):
                 continue
             try:
                 buf = buffer_q.pop()
-                print("got buffer")
             except IndexError:
                 _lgr.warning("Not enough buffers, voy a retrasarme un poco...")
                 buf = np.ndarray((MAXRECS,), np.dtype(ctypes.c_uint))
                 buffers.append(buf)
-                measuring = False
             self.ph.PH_ReadFiFo(
                 ctypes.c_int(self._DEV_NUM),
                 buf.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)),
