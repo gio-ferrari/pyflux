@@ -508,6 +508,7 @@ class Backend(QtCore.QObject):
                 if self.scan_flag:
                     if not self.alignMode:
                         self.shutterSignal.emit(shutternum, True)
+                        time.sleep(0.100)  # let the shutter move
                     initialPos = np.array([self.target_x, self.target_y,
                                            self.target_z], dtype=np.float64)
                     self.scanSignal.emit(True, 'frame', initialPos)
