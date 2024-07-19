@@ -44,7 +44,7 @@ class Status(_Enum):
 
     IDLE = 0
     WAITING_XY = 1
-    WAITING_Z = 2
+    # WAITING_Z = 2
     WAITING_SCAN = 3
     WAITING_CORRECTION = 4
     ABORTING = 5
@@ -442,7 +442,7 @@ class Backend(QtCore.QObject):
 
         self.i = 0
         self.xyIsDone = False
-        self.zIsDone = False
+        # self.zIsDone = False
         self.scanIsDone = False
         self.measTimer = QtCore.QTimer()
         self.measTimer.timeout.connect(self.loop)
@@ -462,17 +462,17 @@ class Backend(QtCore.QObject):
             self.progressSignal.emit(0, np.array([]), -1)
             self.shutterSignal.emit(7, False)
             self.shutterSignal.emit(11, False)
-    
+
             _lgr.info('PSF measurement started')
-    
+
             self.xyStopSignal.emit(True)
             # self.zStopSignal.emit(True)
-    
+
             # open IR and tracking shutter
             self.shutterSignal.emit(5, True)
             self.shutterSignal.emit(6, True)
             self.moveToInitialSignal.emit()
-    
+
             self.data = np.zeros((self.totalFrameNum, self.nPixels, self.nPixels))
             _lgr.debug('Data shape is %s', np.shape(self.data))
             # self.xy_flag = True
@@ -487,7 +487,7 @@ class Backend(QtCore.QObject):
     def stop(self):
         # self.measTimer.stop()
         self._status = Status.ABORTING
-        self.progressSignal.emit(100, None, None)  # changed from 0
+        self.progressSignal.emit(100, np.array([]), -1)  # changed from 0
         self.shutterSignal.emit(8, False)
 
         # new filename indicating that getUniqueName() has already found filename
@@ -511,7 +511,6 @@ class Backend(QtCore.QObject):
     #         initial = True
     #     else:
     #         initial = False
-
     #     if self.xy_flag:
     #         self.xySignal.emit(True, initial)
     #         self.xy_flag = False
@@ -537,14 +536,12 @@ class Backend(QtCore.QObject):
     #                 if not self.alignMode:
     #                     self.shutterSignal.emit(shutternum, False)
     #                 completed = ((self.i+1)/self.totalFrameNum) * 100
-
     #                 self.xy_flag = True
     #                 self.z_flag = True
     #                 self.scan_flag = True
     #                 self.xyIsDone = False
     #                 self.zIsDone = False
     #                 self.scanIsDone = False
-
     #                 self.data[self.i, :, :] = self.currentFrame
     #                 self.progressSignal.emit(completed, self.data[self.i, :, :], self.i)
     #                 _lgr.debug('PSF %s of %s', self.i+1, self.totalFrameNum)
@@ -589,31 +586,40 @@ class Backend(QtCore.QObject):
             return
         if self._status != Status.WAITING_XY:
             _lgr.error("unexpected XY done")
-        self._status = Status.WAITING_Z
-        self.zSignal.emit(True, (self.i == 0))
-        _lgr.debug('z signal emitted (%s)', self.i)
-
-    @pyqtSlot(bool, float)
-    def get_z_is_done(self, val, z):
-        """
-        Connection: [focus] zIsDone
-        """
-        # self.zIsDone = True
-        self.target_z = z
-        if self._status == Status.ABORTING:
-            return
-        if self._status != Status.WAITING_Z:
-            _lgr.error("unexpected Z done")
         self._status = Status.WAITING_SCAN
         shutternum = self.i // self.nFrames + 1
-        if self.scan_flag:
-            if not self.alignMode:
-                self.shutterSignal.emit(shutternum, True)
-                time.sleep(0.100)  # give some time to shutter to move
-            initialPos = np.array([self.target_x, self.target_y,
-                                   self.target_z], dtype=np.float64)
-            self.scanSignal.emit(True, 'frame', initialPos)
-            _lgr.debug('scan signal emitted (%s)', self.i)
+        if not self.alignMode:
+            self.shutterSignal.emit(shutternum, True)
+            time.sleep(0.100)  # give some time to shutter to move
+        initialPos = np.array([self.target_x, self.target_y,
+                                self.target_z], dtype=np.float64)
+        self.scanSignal.emit(True, 'frame', initialPos)
+        _lgr.debug('scan signal emitted (%s)', self.i)
+        # self._status = Status.WAITING_Z
+        # self.zSignal.emit(True, (self.i == 0))
+        # _lgr.debug('z signal emitted (%s)', self.i)
+
+    # @pyqtSlot(bool, float)
+    # def get_z_is_done(self, val, z):
+    #     """
+    #     Connection: [focus] zIsDone
+    #     """
+    #     # self.zIsDone = True
+    #     self.target_z = z
+    #     if self._status == Status.ABORTING:
+    #         return
+    #     if self._status != Status.WAITING_Z:
+    #         _lgr.error("unexpected Z done")
+    #     self._status = Status.WAITING_SCAN
+    #     shutternum = self.i // self.nFrames + 1
+    #     if self.scan_flag:
+    #         if not self.alignMode:
+    #             self.shutterSignal.emit(shutternum, True)
+    #             time.sleep(0.100)  # give some time to shutter to move
+    #         initialPos = np.array([self.target_x, self.target_y,
+    #                                 self.target_z], dtype=np.float64)
+    #         self.scanSignal.emit(True, 'frame', initialPos)
+    #         _lgr.debug('scan signal emitted (%s)', self.i)
 
     @pyqtSlot(bool, np.ndarray)
     def get_scan_is_done(self, val, image):
