@@ -196,7 +196,7 @@ class Backend(QtCore.QObject):
     def setup_psf_connections(self):
         self.psfWorker.scanSignal.connect(self.scanWorker.get_scan_signal)
         self.psfWorker.xySignal.connect(self.xyzWorker.single_xy_correction)
-        self.psfWorker.zSignal.connect(self.xyzWorker.single_z_correction)
+        # self.psfWorker.zSignal.connect(self.xyzWorker.single_z_correction)
         self.psfWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
         # self.psfWorker.zStopSignal.connect(self.xyzWorker.get_stop_signal)
         self.psfWorker.moveToInitialSignal.connect(self.scanWorker.get_moveTo_initial_signal)

@@ -410,7 +410,7 @@ class Backend(QtCore.QObject):
     # bool 1: whether you feedback ON or OFF, bool 2: initial position
     xySignal = pyqtSignal(bool, bool)
     xyStopSignal = pyqtSignal(bool)
-    zSignal = pyqtSignal(bool, bool)
+    # zSignal = pyqtSignal(bool, bool)
     # zStopSignal = pyqtSignal(bool)  # Removed since now there is a single worker
     endSignal = pyqtSignal(str)
     scanSignal = pyqtSignal(bool, str, np.ndarray)
