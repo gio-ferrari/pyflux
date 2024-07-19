@@ -427,7 +427,7 @@ class Backend(QtCore.QObject):
 
         self.i = 0
         self.xyIsDone = False
-        self.zIsDone = False
+        # self.zIsDone = False
         self.scanIsDone = False
         self.measTimer = QtCore.QTimer()
         self.measTimer.timeout.connect(self.loop)
@@ -440,7 +440,7 @@ class Backend(QtCore.QObject):
     def start(self):
         self.i = 0
         self.xyIsDone = False
-        self.zIsDone = False
+        # self.zIsDone = False
         self.scanIsDone = False
         try:
             self.progressSignal.emit(0, np.array([]), -1)
@@ -498,12 +498,13 @@ class Backend(QtCore.QObject):
             self.xy_flag = False
             _lgr.debug(' xy signal emitted (%s)', self.i)
         if self.xyIsDone:
-            if self.z_flag:
-                self.zSignal.emit(True, initial)
-                self.z_flag = False
-                _lgr.debug('z signal emitted (%s)', self.i)
+            # if self.z_flag:
+            #     self.zSignal.emit(True, initial)
+            #     self.z_flag = False
+            #     _lgr.debug('z signal emitted (%s)', self.i)
 
-            if self.zIsDone:
+            # if self.zIsDone:
+            if True:  # ahora la estabilización en Z es contiunua
                 shutternum = self.i // self.nFrames + 1
                 if self.scan_flag:
                     if not self.alignMode:
@@ -524,7 +525,7 @@ class Backend(QtCore.QObject):
                     self.z_flag = True
                     self.scan_flag = True
                     self.xyIsDone = False
-                    self.zIsDone = False
+                    # self.zIsDone = False
                     self.scanIsDone = False
 
                     self.data[self.i, :, :] = self.currentFrame
@@ -568,13 +569,13 @@ class Backend(QtCore.QObject):
         self.target_x = x
         self.target_y = y
 
-    @pyqtSlot(bool, float)
-    def get_z_is_done(self, val, z):
-        """
-        Connection: [focus] zIsDone
-        """
-        self.zIsDone = True
-        self.target_z = z
+    # @pyqtSlot(bool, float)
+    # def get_z_is_done(self, val, z):
+    #     """
+    #     Connection: [focus] zIsDone
+    #     """
+    #     self.zIsDone = True
+    #     self.target_z = z
 
     @pyqtSlot(bool, np.ndarray)
     def get_scan_is_done(self, val, image):

@@ -622,7 +622,7 @@ class Backend(QtCore.QObject):
     xyIsDone = pyqtSignal(bool, float, float)
     shuttermodeSignal = pyqtSignal(int, bool)
     liveviewSignal = pyqtSignal(bool)
-    zIsDone = pyqtSignal(bool, float)  # se emite para psf.py script
+    # zIsDone = pyqtSignal(bool, float)  # se emite para psf.py script
     focuslockpositionSignal = pyqtSignal(float)  # se emite para scan.py
     """
     Signals
@@ -1187,7 +1187,6 @@ class Backend(QtCore.QObject):
                 self.j_z += 1
         ...
 
-
     def correct_xy(self, mode='continous'):
         """Corregir posicion xy."""
         # TODO: implementar PI
@@ -1252,7 +1251,6 @@ class Backend(QtCore.QObject):
     def correct_z(self, mode='continous'):
         """Corregir posicion z."""
         # TODO: implementar PI
-        # TODO: implementar Discreto para PSF (para single correction)
         dz = 0
 
         # Thresholds en unidades de self.z (nm)
@@ -1295,7 +1293,7 @@ class Backend(QtCore.QObject):
         feedback_val is unused
         """
         if initial:
-            self.toggle_feedback(True, mode='discrete')
+            self.set_xy_feedback(True, mode='discrete')
             _lgr.info("Initial xy single tracking")
         if not self.camON:
             print(datetime.now(), 'singlexy liveview started')
@@ -1315,25 +1313,29 @@ class Backend(QtCore.QObject):
         self.xyIsDone.emit(True, target_x, target_y)
         _lgr.debug('Single xy correction ended')
 
-    @pyqtSlot(bool, bool)
-    def single_z_correction(self, feedback_val, initial):
-        if initial:
-            if not self.camON:
-                self.camON = True
+    # @pyqtSlot(bool, bool)
+    # def single_z_correction(self, feedback_val, initial):
+    #     """Very likely dead code.
 
-        self.update_view()
-        if initial:
-            self.center_of_mass()  # Esto actualiza la posicion z medida
-            self.initialz = self.currentz
-        self.track('z')
-        self.update_graph_data()
-        self.correct_z(mode='discrete')
-        # if self.save_data_state:
-        #     self.time_array.append(self.currentTime)
-        #     self.z_array[self.j_z] = self.currentz
-        #     self.j_z += 1
-        self.camON = False
-        self.zIsDone.emit(True, self.target_z)
+    #     Z is continuously stabilized in PSF.
+    #     """
+    #     if initial:
+    #         if not self.camON:
+    #             self.camON = True
+
+    #     self.update_view()
+    #     if initial:
+    #         self.center_of_mass()  # Esto actualiza la posicion z medida
+    #         self.initialz = self.currentz
+    #     self.track('z')
+    #     self.update_graph_data()
+    #     self.correct_z(mode='discrete')
+    #     # if self.save_data_state:
+    #     #     self.time_array.append(self.currentTime)
+    #     #     self.z_array[self.j_z] = self.currentz
+    #     #     self.j_z += 1
+    #     self.camON = False
+    #     self.zIsDone.emit(True, self.target_z)
 
     def calibrate_z(self):
         self.viewtimer.stop()
