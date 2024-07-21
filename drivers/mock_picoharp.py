@@ -137,10 +137,10 @@ class libmock:
         # si el tiempo y el bufffer de llegada dan para mas, llenar con mas
         # Poner lo que sobra en el buffer y ajustar pos
         # available = self._pos + ...
-        # buffer._arr[:] = 1
+        buffer._arr[:] = np.random.randint(0, 4096, count.value, dtype=np.uint32)
         time.sleep(.1)
         self._last_read = time.time_ns()
-        nactual._obj.value = 0
+        nactual._obj.value = 4096
         return 0
 
 

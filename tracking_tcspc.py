@@ -56,6 +56,10 @@ class Frontend(QtWidgets.QFrame):
     paramSignal = pyqtSignal(list)
     measureSignal = pyqtSignal()
 
+    # Data
+    _localizations =[[]]  # one list per shift
+    _shifts = [(0,0),]
+
     def __init__(self, *args, **kwargs):
         """No hace nada."""
         super().__init__(*args, **kwargs)
@@ -66,6 +70,7 @@ class Frontend(QtWidgets.QFrame):
 
     def start_measurement(self):
         """Inicia la medida."""
+        self.clear_data()
         self.measureButton.setEnabled(False)
         self.measureSignal.emit()
 
@@ -94,7 +99,6 @@ class Frontend(QtWidgets.QFrame):
 
     @pyqtSlot(float, float)
     def get_backend_parameters(self, cts0, cts1):
-
         # conversion to kHz
         cts0_khz = cts0 / 1000
         cts1_khz = cts1 / 1000
@@ -103,9 +107,8 @@ class Frontend(QtWidgets.QFrame):
 
     @pyqtSlot(np.ndarray, np.ndarray)
     def plot_data(self, relTime, absTime):
-
+        """Receve new data and graph."""
         self.clear_data()
-
         counts, bins = np.histogram(relTime, bins=50)  # TO DO: choose proper binning
         self.histPlot.plot(bins[0:-1], counts)
         #        plt.hist(relTime, bins=300)
@@ -123,15 +126,52 @@ class Frontend(QtWidgets.QFrame):
 
         self.measureButton.setEnabled(True)
 
-    def clear_data(self):
+    @pyqtSlot(float, float)
+    def get_localization(self, pos_x, pos_y):
+        """Receive a new localization from backend."""
+        self._localizations[-1].append((pos_x, pos_y))
+        # data = np.array(list(zip(*self._localizations[-1])))
+        data = np.array(sum(self._localizations, []))
+        # data = np.array(self._localizations)
+        # shifts = np.array(self._shifts)
+        # locs = data + shifts[np.newaxis, :]
+        # TODO: usar numpy
+        if len(self._localizations) != len(self._shifts):
+            _lgr.error("El largo de los shifts y localizaciones no coincide")
+        data = np.empty((sum(len(_) for _ in  self._localizations), 2,))
+        pos = 0
+        for l, s in zip(self._localizations, self._shifts):
+            data[pos: pos + len(l)] = np.array(l) + s
+            pos += len(l)
+        # data = np.vstack(self._localizations)
+        self.posPlot.setData(data)
 
+    @pyqtSlot(float, float)
+    def get_shift(self, shift_x, shift_y):
+        """Receive a shift signal from backend."""
+        self._shifts.append((shift_x, shift_y,))
+        self._localizations.append([])
+
+    @pyqtSlot()
+    def get_measure_end(self):
+        """Receive a shift measure end signal from backend."""
+        self.measureButton.setEnabled(True)
+
+    def clear_data(self):
+        """Clear all data and plots."""
         self.histPlot.clear()
         self.tracePlot.clear()
+        self.posPlot.clear()
+        self._localizations = [[]]
+        self._shifts = [(0, 0),]
 
     def make_connection(self, backend):
-
+        """Make required connections with backend."""
         backend.ctRatesSignal.connect(self.get_backend_parameters)
         backend.plotDataSignal.connect(self.plot_data)
+        backend.localizationSignal.connect(self.get_localization)
+        backend.shiftSignal.connect(self.get_shift)
+        backend.measureEndSignal.connect(self.get_measure_end)
 
     def setup_gui(self):
 
@@ -183,11 +223,14 @@ class Frontend(QtWidgets.QFrame):
         self.tracePlot = self.dataWidget.addPlot(row=1, col=0, title="Time trace")
         self.tracePlot.setLabels(bottom=("s"), left=("counts"))
 
-        self.posPlot = self.dataWidget.addPlot(row=0, col=1, rowspan=2, title="Position")
-        self.posPlot.showGrid(x=True, y=True)
-        self.posPlot.setLabels(
+        self.posPlotItem = self.dataWidget.addPlot(row=0, col=1, rowspan=2, title="Position")
+        self.posPlotItem.showGrid(x=True, y=True)
+        self.posPlotItem.setLabels(
             bottom=("X position", "nm"), left=("Y position", "nm")
         )
+        self.posPlot = self.posPlotItem.plot([], pen=None,
+                                             symbolBrush=(255, 0, 0),
+                                             symbolSize=5, symbolPen=None)
 
         # folder
         # TO DO: move this to backend
@@ -264,6 +307,7 @@ class Backend(QtCore.QObject):
     tcspcDoneSignal = pyqtSignal()
     measureEndSignal = pyqtSignal()  # to self and front, triggered by working thread
     localizationSignal = pyqtSignal(float, float)  # int, int
+    shiftSignal = pyqtSignal(float, float)  # int, int
     _measure_thread: "PicoHarpReaderThread" = None
 
     def __init__(self, ph_device, *args, **kwargs):
@@ -323,7 +367,7 @@ class Backend(QtCore.QObject):
         t1 = time.time()
         _lgr.info("Starting the PH measurement took %s s", (t1 - t0))
         self._measure_thread = PicoHarpReaderThread(self.ph, "Lefilename", None,
-                                                    np.ones((4, 80, 80,)), 18., self)
+                                                    np.random.random((4, 80, 80,)), 18., self)
         self._measure_thread.start()
 
     @pyqtSlot(str, int, int)
@@ -421,6 +465,10 @@ class Backend(QtCore.QObject):
         """Signal new localization to front."""
         self.localizationSignal.emit(x, y)
 
+    def ack_shift(self, x: float, y: float):
+        """Signal new shift to front."""
+        self.shiftSignal.emit(x, y)
+
     def cleanup_measurement(self):
         self._measure_thread.join(10)
         if self._measure_thread.is_alive():
@@ -470,7 +518,7 @@ class PicoHarpReaderThread(_th.Thread):
         self._PSFs = PSFs
         self._SBR = SBR
         self._signaler = signaler
-        self._tacq = 1000  # FIXME: esto debería poder ser infinito o venir del front
+        self._tacq = ph.tacq  # FIXME: esto debería poder ser infinito o venir del front
 
     def run(self):
         try:
@@ -520,7 +568,11 @@ class PicoHarpReaderThread(_th.Thread):
         vec = np.zeros((n_bins,), dtype=np.uint64)
         flags = ctypes.c_int()
         ctcDone = ctypes.c_int()
-        nactual = ctypes.c_int()  # actual number of data in buffer
+        nactual = ctypes.c_int(0)  # actual number of data in buffer
+
+        # TODO borrar
+        t0 = time.time()
+        idx = 0
 
         while measuring:
             self.ph.PH_GetFlags(ctypes.c_int(self._DEV_NUM), ctypes.byref(flags))
@@ -543,19 +595,30 @@ class PicoHarpReaderThread(_th.Thread):
             )
             _lgr.info("records read: %s", nactual.value)
 
+            # testing 
+            # pos = np.random.random_sample((2,))
+            # self._signaler.ack_position(pos[0], pos[1])
+            if time.time()-t0 > self._tacq/5E3:
+                self._signaler.ack_shift(*np.random.random_sample((2,)) + idx*2)
+                t0 = time.time()
+                idx += 1
+                # print(self._tacq)
+            ####################33
+
+            # fuerza reciclado de buffer, podemos no agarrar buffer si nactual.value == 0
+            # data_q.put_nowait((nactual.value, buf, ))  # report async
             if nactual.value > 0:
                 _lgr.info("Current photon count: %s", nactual.value)
                 data_q.put_nowait((nactual.value, buf, ))  # report async
                 if True:  # img_evt.is_set():
                     _rpf.all_in_one(buf[:nactual.value], vec, binwidth)
                     pos = locator(vec)[0]
-                    print(pos)
                     self._signaler.ack_position(pos[0], pos[1])
                     # move
                     # img_evt.clear()
 
                 progress += nactual.value
-            else:
+            if True:  # else:
                 _lgr.info("Calling status")
                 self.ph.PH_CTCStatus(ctypes.c_int(self._DEV_NUM), ctypes.byref(ctcDone))
                 if ctcDone.value > 0:
@@ -601,6 +664,7 @@ class WriterThread(_th.Thread):
             self.buffer_queue.appendleft(buffer)
             total += n_rec
             nv = self.data_queue.get()
+            # _lgr.warning("Grabamos algo")
         _lgr.info("Fin thread de escritura. %s registros escritos.", total)
 
 
