@@ -115,7 +115,7 @@ class libmock:
         return 0
 
     def PH_SetBinning(self, devidx: ctypes.c_int, binning: ctypes.c_int):
-        self._binning = binning
+        self._binning = binning.value
         return 0
 
     def PH_SetSyncOffset(self, devidx: ctypes.c_int, offset: ctypes.c_int):
@@ -137,10 +137,12 @@ class libmock:
         # si el tiempo y el bufffer de llegada dan para mas, llenar con mas
         # Poner lo que sobra en el buffer y ajustar pos
         # available = self._pos + ...
-        buffer._arr[:] = np.random.randint(0, 4096, count.value, dtype=np.uint32)
-        time.sleep(.1)
+        largo = np.random.randint(count.value+1)
+        if largo:
+            buffer._arr[:largo] = np.random.randint(0, 4096, largo, dtype=np.uint32)
         self._last_read = time.time_ns()
-        nactual._obj.value = 4096
+        # time.sleep(1.1)
+        nactual._obj.value = largo
         return 0
 
 

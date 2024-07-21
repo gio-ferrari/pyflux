@@ -57,8 +57,8 @@ class Frontend(QtWidgets.QFrame):
     measureSignal = pyqtSignal()
 
     # Data
-    _localizations =[[]]  # one list per shift
-    _shifts = [(0,0),]
+    _localizations = [[]]  # one list per shift
+    _shifts = [(0, 0),]
 
     def __init__(self, *args, **kwargs):
         """No hace nada."""
@@ -231,7 +231,6 @@ class Frontend(QtWidgets.QFrame):
         self.posPlot = self.posPlotItem.plot([], pen=None,
                                              symbolBrush=(255, 0, 0),
                                              symbolSize=5, symbolPen=None)
-
         # folder
         # TO DO: move this to backend
         today = str(date.today()).replace("-", "")
@@ -402,7 +401,7 @@ class Backend(QtCore.QObject):
         """Stop measurement thread."""
         if self._measure_thread:
             self._measure_thread.stop()
-            _lgr.debug("Asked to stop measure")
+            _lgr.debug("Asked to stop measurement")
         else:
             _lgr.warning("Measurement not running")
 
@@ -562,18 +561,19 @@ class PicoHarpReaderThread(_th.Thread):
         wt.start()
         locator = _analysis.MinFluxLocator(PSF, SBR)
         measuring = True
-        self.ph.PH_StartMeas(ctypes.c_int(self._DEV_NUM), ctypes.c_int(self._tacq))
-        _lgr.info("Tracking TCSPC measurement started")
         n_bins = int(np.ceil(4096 / binwidth))  # (4096+bins-1) / /bins
         vec = np.zeros((n_bins,), dtype=np.uint64)
         flags = ctypes.c_int()
         ctcDone = ctypes.c_int()
         nactual = ctypes.c_int(0)  # actual number of data in buffer
+        self.ph.PH_StartMeas(ctypes.c_int(self._DEV_NUM), ctypes.c_int(self._tacq))
+        _lgr.info("Tracking TCSPC measurement started")
 
-        # TODO borrar
+        # TODO borrar t0, idx, etc.
         t0 = time.time()
         idx = 0
 
+        buf = buffer_q.pop()
         while measuring:
             self.ph.PH_GetFlags(ctypes.c_int(self._DEV_NUM), ctypes.byref(flags))
             if flags.value & FLAG_FIFOFULL > 0:
@@ -581,12 +581,13 @@ class PicoHarpReaderThread(_th.Thread):
                 self.stop_PH_measure()
                 measuring = False
                 continue
-            try:
-                buf = buffer_q.pop()
-            except IndexError:
-                _lgr.warning("Not enough buffers, voy a retrasarme un poco...")
-                buf = np.ndarray((MAXRECS,), np.dtype(ctypes.c_uint))
-                buffers.append(buf)
+            if nactual.value:
+                try:
+                    buf = buffer_q.pop()
+                except IndexError:
+                    _lgr.warning("Not enough buffers, voy a retrasarme un poco...")
+                    buf = np.ndarray((MAXRECS,), np.dtype(ctypes.c_uint))
+                    buffers.append(buf)
             self.ph.PH_ReadFiFo(
                 ctypes.c_int(self._DEV_NUM),
                 buf.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)),
@@ -594,39 +595,32 @@ class PicoHarpReaderThread(_th.Thread):
                 ctypes.byref(nactual),
             )
             _lgr.info("records read: %s", nactual.value)
-
-            # testing 
-            # pos = np.random.random_sample((2,))
-            # self._signaler.ack_position(pos[0], pos[1])
+            # testing
+            ttt0 = time.time_ns()
             if time.time()-t0 > self._tacq/5E3:
-                self._signaler.ack_shift(*np.random.random_sample((2,)) + idx*2)
+                self._signaler.ack_shift(*np.random.random_sample((2,)) + idx)
                 t0 = time.time()
                 idx += 1
-                # print(self._tacq)
-            ####################33
+            #  ###################
 
-            # fuerza reciclado de buffer, podemos no agarrar buffer si nactual.value == 0
-            # data_q.put_nowait((nactual.value, buf, ))  # report async
             if nactual.value > 0:
                 _lgr.info("Current photon count: %s", nactual.value)
                 data_q.put_nowait((nactual.value, buf, ))  # report async
-                if True:  # img_evt.is_set():
-                    _rpf.all_in_one(buf[:nactual.value], vec, binwidth)
-                    pos = locator(vec)[0]
-                    self._signaler.ack_position(pos[0], pos[1])
-                    # move
-                    # img_evt.clear()
-
+                _rpf.all_in_one(buf[:nactual.value], vec, binwidth)
+                pos = locator(vec)[0]
+                self._signaler.ack_position(pos[0], pos[1])
+                # if img_evt.is_set():
+                #     move
+                #     img_evt.clear()
+                #     ...
                 progress += nactual.value
             if True:  # else:
-                _lgr.info("Calling status")
                 self.ph.PH_CTCStatus(ctypes.c_int(self._DEV_NUM), ctypes.byref(ctcDone))
                 if ctcDone.value > 0:
                     _lgr.info("TCSPC Done")
                     self.numRecords = progress
                     self.stop_PH_measure()
-
-                    # save real time for correlating with confocal images for FLIM
+                    # save real time for correlating with confocal images
                     f.write(str(datetime.now()) + "\n")
                     f.write(str(time.time()) + "\n")
                     f.close()
@@ -635,6 +629,7 @@ class PicoHarpReaderThread(_th.Thread):
             if self._stop_event.is_set():
                 # do not use this as a condition as we need to do cleanup.
                 measuring = False
+            _lgr.info(f"{(time.time_ns()-ttt0)/1E6} ms / loop")
         data_q.put(None)
         wt.join()
 
