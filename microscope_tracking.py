@@ -209,7 +209,7 @@ class Backend(QtCore.QObject):
         
         self.scanWorker.frameIsDone.connect(self.psfWorker.get_scan_is_done)
         self.xyzWorker.xyIsDone.connect(self.psfWorker.get_xy_is_done)
-        self.xyzWorker.zIsDone.connect(self.psfWorker.get_z_is_done)
+        #self.xyzWorker.zIsDone.connect(self.psfWorker.get_z_is_done)
          
     def make_connection(self, frontend):
         
@@ -351,4 +351,4 @@ if __name__ == '__main__':
 #    psfThread.start()
     
     gui.showMaximized()
-    #app.exec_()
+    app.exec_()
