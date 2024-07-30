@@ -1005,16 +1005,16 @@ class Backend(QtCore.QObject):
             if self.feedback_xy:
                 _lgr.info("Doble activacion feedback xy")
                 return
-            if (mode == 'continous') and (not self.tracking_xy):
+            if (mode == 'continous') and (not self.tracking_xy): # no entra desde single_xy_correction
                 _lgr.warning("Requested XY feedback without tracking. Enabling tracking")
                 self.toggle_tracking_xy(True)
-            if mode == 'continous':  # set up and start actuator process
+            if mode == 'continous':  # set up and start actuator process # no entra desde single_xy_correction
                 self.set_actuator_param_xy()
                 self.adw.Start_Process(4)  # proceso para xy
                 _lgr.info('Process 4 started. Status: %s', self.adw.Process_Status(4))
                 _lgr.debug('xy Feedback loop ON')
                 self.feedback_xy = True
-        elif val is False:
+        elif val is False: # no entra desde single_xy_correction
             if not self.feedback_xy:
                 _lgr.info("Doble desactivacion feedback xy")
             self.feedback_xy = False
@@ -1230,7 +1230,7 @@ class Backend(QtCore.QObject):
             # dy, dx = np.dot(R, np.asarray([dx, dy]))
 
             # add correction to piezo position
-            currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
+            currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX') # bits to lenght
             currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
             # Sólo xy
             targetZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
@@ -1292,6 +1292,7 @@ class Backend(QtCore.QObject):
         From: [psf] xySignal
         feedback_val is unused
         """
+        ##########
         if initial:
             self.set_xy_feedback(True, mode='discrete')
             _lgr.info("Initial xy single tracking")
@@ -1299,10 +1300,10 @@ class Backend(QtCore.QObject):
             print(datetime.now(), 'singlexy liveview started')
             self.camON = True
         time.sleep(0.200)
-
+        ########## 
         self.update_view()
         if initial:
-            self._initialize_xy_positions()
+            self._initialize_xy_positions() 
 
         self.track('xy')
         self.update_graph_data()

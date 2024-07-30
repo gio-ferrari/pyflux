@@ -1158,7 +1158,7 @@ class Backend(QtCore.QObject):
          Description: 
         
     - frameIsDone:
-         To: [psf]
+         To: [psf] get_scan_is_done
          Description: 
         
     - ROIcenterSignal:
@@ -1369,6 +1369,7 @@ class Backend(QtCore.QObject):
         self.x_i = self.initialPos[0]
         self.y_i = self.initialPos[1]
         self.z_i = self.initialPos[2]
+        print("Los parámetros de inicio del escaneo son:", self.x_i, self.y_i, self.z_i)
 
         self.x_offset = 0
         self.y_offset = 0
@@ -1749,7 +1750,8 @@ class Backend(QtCore.QObject):
         derived parameters (and updates ADwin data)
         """
         self.initialPos = initialPos
-        self.calculate_derived_param()
+        print("Posicion inicial en el escaneo luego de recibir scanSignal desde [psf]", self.initialPos)
+        self.calculate_derived_param() #llama a update_device_param() que carga los nuevos parámetros en la ADwin
 
         self.liveview(lvbool, mode)
         
