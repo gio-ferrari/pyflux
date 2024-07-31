@@ -1780,29 +1780,21 @@ class Backend(QtCore.QObject):
             self.liveview_stop()
 
     def liveview_start(self):
-        
-#        self.plot_scan()
-        
         if self.scantype == 'xy':
-
+            # curr_z = tools.convert(self.adw.Get_FPar(72), 'UtoX')
             self.moveTo(self.x_i, self.y_i, self.z_i)
-
         if self.scantype == 'xz':
-
             self.moveTo(self.x_i, self.y_i + self.scanRange/2,
                         self.z_i - self.scanRange/2)
-
         if self.scantype == 'yz':
-
             self.moveTo(self.x_i + self.scanRange/2, self.y_i,
                         self.z_i - self.scanRange/2)
-
         self.viewtimer.start(self.viewtimer_time)
 
     def liveview_stop(self):
         """Finish liveview scan."""
         self.viewtimer.stop()
-        time.sleep(.5)  # Not sure if neccesary, but let's wait
+        # time.sleep(.5)  # Not sure if neccesary, but let's wait
         # self.moveTo(self.x_i + self.scanRange/2,
         #             self.y_i + self.scanRange/2,
         #             self.z_i
