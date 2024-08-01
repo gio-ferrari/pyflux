@@ -1010,7 +1010,7 @@ class Backend(QtCore.QObject):
                 self.toggle_tracking_xy(True)
             if mode == 'continous':  # set up and start actuator process # no entra desde single_xy_correction
                 self.set_actuator_param_xy()
-                self.adw.Start_Process(4)  # proceso para xy
+                self.adw.Start_Process(4)  # proceso para xy #duda: Acerca de esto, no enciende el proceso en el modo discreto porque nunca lo apagó! FC Check
                 _lgr.info('Process 4 started. Status: %s', self.adw.Process_Status(4))
                 _lgr.debug('xy Feedback loop ON')
                 self.feedback_xy = True
@@ -1019,7 +1019,7 @@ class Backend(QtCore.QObject):
                 _lgr.info("Doble desactivacion feedback xy")
             self.feedback_xy = False
             # FIXME: check condition below
-            if mode == 'continous':
+            if mode == 'continous': #duda FC: Se debería apagar el proceso 4? Creo que no porque no enciende cuando vuelve, asume que quedó encendido
                 self.adw.Stop_Process(4)
                 _lgr.info('Process 4 stopped. Status: %s', self.adw.Process_Status(4))
                 self.displacement = np.array([0.0, 0.0])
@@ -1299,13 +1299,13 @@ class Backend(QtCore.QObject):
             self.camON = True
         #time.sleep(0.200)
 
-        self.update_view()
+        self.update_view() #Llegué aqui, nada tiene que ver con nuevas coordenadas , sólo imagen
         # if initial:
         #     self._initialize_xy_positions() 
 
-        self.track('xy')
+        self.track('xy') #Aquí obtiene las posiciones: self._fit_xy_rois() del centro de la Np, self.x y self.y
         self.update_graph_data()
-        target_x, target_y, target_z = self.correct_xy(mode='discrete')
+        target_x, target_y, target_z = self.correct_xy(mode='discrete') #Ahora correct_xy_ puede actuar porque tiene a self.x y self.y 
         target_x = np.round(target_x, 3)
         target_y = np.round(target_y, 3)
         target_z = np.round(target_z, 3)
@@ -1542,7 +1542,7 @@ class Backend(QtCore.QObject):
         """
         _lgr.debug("Got stop signal with value %s", stoplive)
         self.toggle_feedback(False)
-        self.toggle_tracking(False)
+        self.toggle_tracking(False) #Aquí se podría poner self.toggle_tracking_xy(False) Para que deje funcionando el tracking z FC
 
         # TODO: Ver si no restringir a xy
         self.reset_graph()

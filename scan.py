@@ -1635,9 +1635,13 @@ class Backend(QtCore.QObject):
 
     @pyqtSlot()
     def get_moveTo_initial_signal(self):
-        
+        """
+        Connection: [psf] moveToInitialSignal
+        La señal es lanzada al ejecutarse la función start.
+        Ejecuta la función moveTo que ejecuta set_moveTo_param (configura los params de ADwin) e inicia el proceso 2
+        """
         self.moveTo(*self.initialPos)
-        print("[scan] Posición inicial señal moveToInitialSignal: ", self.initialPos)
+        print("[scan] Posición inicial señal moveToInitialSignal: ", self.initialPos) #Este print sólo que ejecuta al iniciar la medición
     
     def relative_move(self, axis, direction):
         
