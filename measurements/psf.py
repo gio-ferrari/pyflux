@@ -114,8 +114,8 @@ class Frontend(QtGui.QFrame):
             if order >= 0:
                 n_img = order % self._nframes
                 n_donut = order // self._nframes
-                _lgr.debug("Actualizando imagen %s/%s de la dona %s", n_img+1, self._nframes,
-                           n_donut)
+                # _lgr.debug("Actualizando imagen %s/%s de la dona %s", n_img+1, self._nframes,
+                #            n_donut)
                 # PLACE
                 self.update_donut_image(n_donut, image)
         except Exception as e:
@@ -528,9 +528,8 @@ class Backend(QtCore.QObject):
                 if self.scan_flag:
                     if not self.alignMode:
                         self.shutterSignal.emit(shutternum, True)
-                        time.sleep(0.100)  # let the shutter move
-                    initialPos = np.array([self.target_x, self.target_y,
-                                           self.target_z], dtype=np.float64)
+                        time.sleep(0.150)  # let the shutter move
+                    initialPos = np.array([self.target_x, self.target_y, self.target_z], dtype=np.float64)
                     self.scanSignal.emit(True, 'frame', initialPos)
                     self.scan_flag = False
                     _lgr.debug('scan signal emitted (%s)', self.i)
@@ -579,14 +578,16 @@ class Backend(QtCore.QObject):
 
         self.alignMode = params['alignMode']
 
-    @pyqtSlot(bool, float, float)
-    def get_xy_is_done(self, val, x, y):
+    @pyqtSlot(bool, float, float,float)
+    def get_xy_is_done(self, val, x, y, z):
         """
         Connection: [xy_tracking] xyIsDone
         """
         self.xyIsDone = True
         self.target_x = x
         self.target_y = y
+        self.target_z = z
+        print(f"[psf] FUNCION get_xy_is_done: Nuevas coords inicio de escaneo: ({self.target_x},{self.target_y},{self.target_z})")
 
     # @pyqtSlot(bool, float)
     # def get_z_is_done(self, val, z):

@@ -619,7 +619,7 @@ class Backend(QtCore.QObject):
     # changedSetPoint = pyqtSignal(float) #Debería añadir esta señal??? de focus.py
 
     # signal to emit new piezo position after drift correction
-    xyIsDone = pyqtSignal(bool, float, float)
+    xyIsDone = pyqtSignal(bool, float, float,float)
     shuttermodeSignal = pyqtSignal(int, bool)
     liveviewSignal = pyqtSignal(bool)
     # zIsDone = pyqtSignal(bool, float)  # se emite para psf.py script
@@ -982,7 +982,7 @@ class Backend(QtCore.QObject):
                     _lgr.error("Could not enable Z tracking")
                     self.notify_status()
                     return
-            if mode == 'continous':  # set up and start actuator process
+            if True: #mode == 'continous':  # set up and start actuator process
                 self.set_actuator_param_z()
                 self.adw.Start_Process(3)  # proceso para z
                 _lgr.info('Process 3 started. Status: %s', self.adw.Process_Status(3))
@@ -1019,7 +1019,7 @@ class Backend(QtCore.QObject):
                 _lgr.info("Doble desactivacion feedback xy")
             self.feedback_xy = False
             # FIXME: check condition below
-            if True:  # mode == 'continous':
+            if mode == 'continous':
                 self.adw.Stop_Process(4)
                 _lgr.info('Process 4 stopped. Status: %s', self.adw.Process_Status(4))
                 self.displacement = np.array([0.0, 0.0])
@@ -1205,12 +1205,12 @@ class Backend(QtCore.QObject):
         security_thr = 0.35  # in µm
 
         # HINT: los signos están acorde a la platina y a la imagen
-        if np.abs(xmean) > threshold:
+        if np.abs(xmean) > threshold or (mode == "discrete"):
             dx = -xmean / 1000  # conversion to µm
             if abs(dx) < xy_far_threshold:
                 dx *= xy_correct_factor
 
-        if np.abs(ymean) > threshold:
+        if np.abs(ymean) > threshold or (mode == "discrete"):
             dy = -ymean / 1000  # conversion to µm
             if abs(dy) < xy_far_threshold:
                 dy *= xy_correct_factor
@@ -1220,33 +1220,31 @@ class Backend(QtCore.QObject):
                   ' active correction turned OFF')
             self.set_xy_feedback(False, mode)
             self.notify_status()
-        else:
-            # compensate for the mismatch between camera/piezo system of
-            # reference
-            # theta = np.radians(-3.7)   # 86.3 (or 3.7) is the angle between camera and piezo (measured)
-            # c, s = np.cos(theta), np.sin(theta)
-            # R = np.array(((c,-s), (s, c)))
+            dx = 0
+            dy = 0
+        # compensate for the mismatch between camera/piezo system of
+        # reference
+        # theta = np.radians(-3.7)   # 86.3 (or 3.7) is the angle between camera and piezo (measured)
+        # c, s = np.cos(theta), np.sin(theta)
+        # R = np.array(((c,-s), (s, c)))
 
-            # dy, dx = np.dot(R, np.asarray([dx, dy]))
+        # dy, dx = np.dot(R, np.asarray([dx, dy]))
 
-            # add correction to piezo position
-            currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX') # bits to lenght
-            currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
-            # Sólo xy
-            targetZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
+        # add correction to piezo position
+        currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
+        currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
 
-            # TODO: chequear signos acá o arriba
-            targetXposition = currentXposition + dx
-            targetYposition = currentYposition + dy
+        targetZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
+        # Sólo xy
+        targetXposition = currentXposition + dx
+        targetYposition = currentYposition + dy
 
-            if mode == 'continous':
-                # Le mando al actuador las posiciones x,y,z
-                self.actuator_xyz(targetXposition, targetYposition,
-                                  targetZposition)
-            if mode == 'discrete':
-                # self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
-                self.target_x = targetXposition
-                self.target_y = targetYposition
+        if mode == 'continous':
+            # Le mando al actuador las posiciones x,y,z
+            self.actuator_xyz(targetXposition, targetYposition,
+                              targetZposition)
+        return (targetXposition, targetYposition, targetZposition)
+
 
     def correct_z(self, mode='continous'):
         """Corregir posicion z."""
@@ -1292,26 +1290,27 @@ class Backend(QtCore.QObject):
         From: [psf] xySignal
         feedback_val is unused
         """
-        ##########
         if initial:
             self.set_xy_feedback(True, mode='discrete')
+            self.set_z_feedback(True, mode='discrete') #Encienda el feedback en z
             _lgr.info("Initial xy single tracking")
         if not self.camON:
             print(datetime.now(), 'singlexy liveview started')
             self.camON = True
-        time.sleep(0.200)
-        ########## 
+        #time.sleep(0.200)
+
         self.update_view()
-        if initial:
-            self._initialize_xy_positions() 
+        # if initial:
+        #     self._initialize_xy_positions() 
 
         self.track('xy')
         self.update_graph_data()
-        self.correct_xy(mode='discrete')
-        target_x = np.round(self.target_x, 3)
-        target_y = np.round(self.target_y, 3)
-        _lgr.info('Discrete correction to (%s, %s)', target_x, target_y)
-        self.xyIsDone.emit(True, target_x, target_y)
+        target_x, target_y, target_z = self.correct_xy(mode='discrete')
+        target_x = np.round(target_x, 3)
+        target_y = np.round(target_y, 3)
+        target_z = np.round(target_z, 3)
+        _lgr.info('Discrete correction to (%s, %s, %s)', target_x, target_y, target_z)
+        self.xyIsDone.emit(True, target_x, target_y, target_z)
         _lgr.debug('Single xy correction ended')
 
     # @pyqtSlot(bool, bool)
@@ -1417,7 +1416,6 @@ class Backend(QtCore.QObject):
         # Comento porque son cosas viejas (Andi)
         # self.adw.Set_Par(30, 1)
 
-
     def actuator_xyz(self, x_f, y_f, z_f):
         """Setear los parámetros de tracking de la adwin mientras corre.
 
@@ -1436,9 +1434,31 @@ class Backend(QtCore.QObject):
         self.adw.Set_FPar(_FPAR_Y, y_f)
         self.adw.Set_FPar(_FPAR_Z, z_f)
 
-        # Estas dos líneas son de los scripts viejos (ver .bas y .bak)
+    def actuator_z(self, z_f):
+        """Setear los parámetros de tracking de la adwin mientras corre.
+
+        Estos parámetros es usado por el proceso actuator_z.bas: (Proceso 3)
+            FPar_32 es el setpoint z
+        """
+        z_f = tools.convert(z_f, 'XtoU')
+
+        self.adw.Set_FPar(_FPAR_Z, z_f)
+
+    def actuator_xy(self, x_f, y_f):
+        """Setear los parámetros de tracking de la adwin mientras corre.
+
+        Estos parámetros son usados por el proceso actuator_xy.bas: (Proceso 4)
+            FPar_40 es el setpoint x
+            FPar_41 es el setpoint y
+        """
+        x_f = tools.convert(x_f, 'XtoU')
+        y_f = tools.convert(y_f, 'XtoU')
+
+        self.adw.Set_FPar(_FPAR_X, x_f)
+        self.adw.Set_FPar(_FPAR_Y, y_f)
+
+        # Esta línea es de los scripts viejos (ver .bas y .bak)
         # self.adw.Set_Par(40, 1)
-        # self.adw.Set_Par(30, 1) #Añado para z, focus.py
 
     def set_moveTo_param(self, x_f, y_f, z_f, n_pixels_x=128, n_pixels_y=128,
                          n_pixels_z=128, pixeltime=2000):

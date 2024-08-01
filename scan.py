@@ -1249,6 +1249,7 @@ class Backend(QtCore.QObject):
 #        print('[scan] selected ROI coordinates are:', self.selectedCoord)
                 
         self.calculate_derived_param()
+        print(f'[scan FUNCION: get_frontend_params] Posiciones iniciales: {self.x_i}, {self.y_i}, {self.z_i}')
     
     @pyqtSlot(np.ndarray, str)
     def get_ROI_coords_and_fit(self, array, actionType):
@@ -1636,6 +1637,7 @@ class Backend(QtCore.QObject):
     def get_moveTo_initial_signal(self):
         
         self.moveTo(*self.initialPos)
+        print("[scan] Posición inicial señal moveToInitialSignal: ", self.initialPos)
     
     def relative_move(self, axis, direction):
         
@@ -1750,9 +1752,9 @@ class Backend(QtCore.QObject):
         derived parameters (and updates ADwin data)
         """
         self.initialPos = initialPos
-        print("Posicion inicial en el escaneo luego de recibir scanSignal desde [psf]", self.initialPos)
-        self.calculate_derived_param() #llama a update_device_param() que carga los nuevos parámetros en la ADwin
-
+        #print("[scan] posicion inicial que viene de single_xy_correction: ", self.initialPos)
+        self.calculate_derived_param()
+        print(f'[scan FUNCION: get_scan_signal] Posiciones iniciales: {self.x_i}, {self.y_i}, {self.z_i}')
         self.liveview(lvbool, mode)
         
         
@@ -1873,11 +1875,13 @@ class Backend(QtCore.QObject):
                             self.z_i - self.scanRange/2)
             if self.acquisitionMode == 'frame':
                 self.liveview_stop()
-                self.frameIsDone.emit(True, self.image)
-            if self.acquisitionMode == 'chechu':
+                self.frameIsDone.emit(True, self.image) #Pequeño cambio porque no quiero que actualice los parámetros
+            elif self.acquisitionMode == 'chechu':
                 self.liveview_stop()
                 self.frameIsDoneChechu.emit(True, self.imageF_copy, self.imageB_copy)
-            self.update_device_param()
+                self.update_device_param()
+            else: 
+                self.update_device_param()
 
     @pyqtSlot(int, bool)
     def control_shutters(self, num, val):
@@ -2136,4 +2140,4 @@ if __name__ == '__main__':
     gui.setWindowTitle('scan')
     gui.show()
 
-    #app.exec_()
+    app.exec_()
