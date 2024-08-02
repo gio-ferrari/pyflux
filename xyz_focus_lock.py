@@ -979,7 +979,7 @@ class Backend(QtCore.QObject):
             if self.feedback_z:  # esto es para evitar loops por la actualización de back a front
                 _lgr.info("Doble activación de z")
                 return
-            if not self.feedback_z:
+            if not self.tracking_z:
                 _lgr.warning("Requested Z feedback without tracking. Enabling tracking")
                 if not self.toggle_tracking_z(True):
                     _lgr.error("Could not enable Z tracking")
@@ -1358,7 +1358,7 @@ class Backend(QtCore.QObject):
         time.sleep(0.100)
         for i, z in enumerate(zData):
             z_f = tools.convert(z, 'XtoU')
-            self.adw.Set_FPar(32, z_f)
+            self.adw.Set_FPar(_FPAR_Z, z_f)
             time.sleep(.125)  # Ojo con este parámetro
             self.update()
             calibData[i] = self.currentz
@@ -1369,7 +1369,7 @@ class Backend(QtCore.QObject):
         print("z\tcm")
         for z, cm in zip(zData, calibData):
             print(f"{z}\t{cm}")
-        self.adw.Set_FPar(32, old_z_param)
+        self.adw.Set_FPar(_FPAR_Z, old_z_param)
         time.sleep(0.500)
         if not was_running:
             self.adw.Stop_Process(3)
@@ -1413,10 +1413,10 @@ class Backend(QtCore.QObject):
         z_f = tools.convert(currentZposition, 'XtoU')
 
         # set-up actuator initial params
-        self.adw.Set_FPar(32, z_f)
+        self.adw.Set_FPar(_FPAR_Z, z_f)
 
         # Para mi es igual a hacer esto: VERIFICADO
-        # self.adw.Set_FPar(32, self.adw.Get_FPar(72))
+        # self.adw.Set_FPar(_FPAR_Z, self.adw.Get_FPar(72))
 
         # Comento porque son cosas viejas (Andi)
         # self.adw.Set_Par(30, 1)
