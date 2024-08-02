@@ -622,7 +622,7 @@ class Backend(QtCore.QObject):
     # changedSetPoint = pyqtSignal(float) #Debería añadir esta señal??? de focus.py
 
     # signal to emit new piezo position after drift correction
-    xyIsDone = pyqtSignal(bool, float, float)
+    xyIsDone = pyqtSignal(bool, float, float, float)
     shuttermodeSignal = pyqtSignal(int, bool)
     liveviewSignal = pyqtSignal(bool)
     # zIsDone = pyqtSignal(bool, float)  # se emite para psf.py script
@@ -1220,14 +1220,13 @@ class Backend(QtCore.QObject):
 
         if (abs(dx) > security_thr or abs(dy) > security_thr):
             _lgr.error('xy Correction movement larger than 200 nm,'
-                  ' active correction turned OFF')
+                       ' active correction turned OFF')
             self.set_xy_feedback(False, mode)
             self.notify_status()
             dx = 0
             dy = 0
-        # compensate for the mismatch between camera/piezo system of
-        # reference
-        # theta = np.radians(-3.7)   # 86.3 (or 3.7) is the angle between camera and piezo (measured)
+        # compensate for the mismatch between camera/piezo system of reference
+        # theta = np.radians(-3.7)   # measured angle between camera and piezo
         # c, s = np.cos(theta), np.sin(theta)
         # R = np.array(((c,-s), (s, c)))
 
@@ -1287,13 +1286,17 @@ class Backend(QtCore.QObject):
 
     @pyqtSlot(bool, bool)
     def single_xy_correction(self, feedback_val, initial):
-        """
+        """Emit drift corrected XY and Z positions.
+
         From: [psf] xySignal
-        feedback_val is unused
+        feedback_val is unused.
         """
         if initial:
             self.set_xy_feedback(True, mode='discrete')
             _lgr.info("Initial xy single tracking")
+            if not self.feedback_z:
+                _lgr.warning("Single correction without Z feedback. Turning on.")
+                self.set_z_feedback(True, mode='continous')
         if not self.camON:
             print(datetime.now(), 'singlexy liveview started')
             self.camON = True
@@ -1308,8 +1311,11 @@ class Backend(QtCore.QObject):
         target_x, target_y = self.correct_xy(mode='discrete')
         target_x = np.round(target_x, 3)
         target_y = np.round(target_y, 3)
+        # el Z debería estár estabilizado aparte, pero está todo hecho para que el
+        # escaneo requiera un Z de inicio.
+        target_z = tools.convert(self.adw.Get_FPar(_FPAR_Z), 'UtoX')
         _lgr.info('Discrete correction to (%s, %s)', target_x, target_y)
-        self.xyIsDone.emit(True, target_x, target_y)
+        self.xyIsDone.emit(True, target_x, target_y, target_z)
         _lgr.debug('Single xy correction ended')
 
     # @pyqtSlot(bool, bool)
