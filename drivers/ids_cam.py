@@ -11,6 +11,7 @@ The sensor gives us a bayered image that can be debayered using ids_peak_ipl
 The converted image can then be processed to convert raw data to image
 The faster process: taking just 1 channel
 User Manual: https://de.ids-imaging.com/manuals/ids-peak/ids-peak-user-manual/1.3.0/en/basics-bayer-pattern.html
+https://de.ids-imaging.com/manuals/ids-peak/ids-peak-user-manual/1.3.0/en/program-intro.html
 I created this class to introduce camera as an IDS object in a backend class (another program, bigger), otherwise I had problems with threading, on_acquisition_timer can be modified to return 1 channel image
 When running in stand alone mode device.work() gives a camera photo
 """
@@ -18,7 +19,7 @@ When running in stand alone mode device.work() gives a camera photo
 import sys
 from ids_peak import ids_peak
 from ids_peak_ipl import ids_peak_ipl
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from ids_peak import ids_peak_ipl_extension
 import time
 import logging as _lgn
@@ -30,22 +31,22 @@ _lgr = _lgn.getLogger(__name__)
 
 FPS_LIMIT = 30
 
+
 class IDS_U3:
+
     def __init__(self):
-        
         self.__device = None
         self.__nodemap_remote_device = None
         self.__datastream = None
-        
-        #Variables de instancia relacionadas con laadquisición de imágenes
+        # Variables de instancia relacionadas con laadquisición de imágenes
         self.__display = None
-        #self.__acquisition_timer = QTimer() #temporizador para controlar la frecuencia de adquisición,
-        self.counter = 0 #Contador del numero de cuadros
-        self.__error_counter = 0 #Contador del numero de errores
-        self.__acquisition_running = False #bandera para indicar si la adquisición está en curso.
-        
-        ids_peak.Library.Initialize() 
- 
+        # self.__acquisition_timer = QTimer() #temporizador para controlar la frecuencia de adquisición,
+        self.counter = 0  # Contador del numero de cuadros
+        self.__error_counter = 0  # Contador del numero de errores
+        self.__acquisition_running = False  # bandera para indicar si la adquisición está en curso.
+
+        ids_peak.Library.Initialize()
+
     def destroy_all(self):
         # Stop acquisition
         self.stop_acquisition()
@@ -53,21 +54,20 @@ class IDS_U3:
         # Close device and peak library
         self.close_device()
         ids_peak.Library.Close()
-     
+
     def open_device(self):
+        # https://www.1stvision.com/cameras/IDS/IDS-manuals/en/pixel-format.html
         try:
             # Create instance of the device manager
             device_manager = ids_peak.DeviceManager.Instance()
-
             # Update the device manager
             device_manager.Update()
 
             # Return if no device was found
             if device_manager.Devices().empty():
-                print( "Error", "No device found!")
+                _lgr.error("No device found!")
                 return False
-            else:
-                print("Device found")
+            _lgr.debug("Device found")
 
             # Open the first openable device in the managers device list
             for device in device_manager.Devices():
@@ -77,13 +77,15 @@ class IDS_U3:
 
             # Return if no device could be opened
             if self.__device is None:
-                print( "Error", "Device could not be opened!")
+                _lgr.error("Device could not be opened!")
                 return False
+            _lgr.debug("Device opened: %s (S/N %s)", self.__device.DisplayName(),
+                       self.__device.SerialNumber())
 
             # Open standard data stream
             datastreams = self.__device.DataStreams()
             if datastreams.empty():
-                print("Error", "Device has no DataStream!")
+                _lgr.error("Device has no DataStream!")
                 self.__device = None
                 return False
 
@@ -92,8 +94,9 @@ class IDS_U3:
             # Get nodemap of the remote device for all accesses to the genicam nodemap tree
             self.__nodemap_remote_device = self.__device.RemoteDevice().NodeMaps()[0]
 
-            # To prepare for untriggered continuous image acquisition, load the default user set if available and
-            # wait until execution is finished
+            # To prepare for untriggered continuous image acquisition, load the
+            # default user set if available and wait until execution is finished
+            # https://www.1stvision.com/cameras/IDS/IDS-manuals/en/user-set-selector.html
             try:
                 self.__nodemap_remote_device.FindNode("UserSetSelector").SetCurrentEntry("Default")
                 self.__nodemap_remote_device.FindNode("UserSetLoad").Execute()
@@ -105,8 +108,8 @@ class IDS_U3:
             # Setting exposure time
             min_exposure_time = 0
             max_exposure_time = 0
-            exposure_time_value = 50000.0 #us
- 
+            exposure_time_value = 50000.0  # us
+
             # Get exposure range. All values in microseconds
             min_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Minimum()
             max_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Maximum()
@@ -120,8 +123,8 @@ class IDS_U3:
 
              # Set exposure time to exposure_time_value
             self.__nodemap_remote_device.FindNode("ExposureTime").SetValue(exposure_time_value)
-            exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Value() #This is a default value
-            print("NEW Current exposure time: ", exposure_time/1000.0, "ms.")
+            exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Value()
+            _lgr.info("New Current exposure time: %s ms", exposure_time/1E3)
             try:
                 ds = self.__datastream.NodeMaps()
                 ds = ds[0]
@@ -134,95 +137,89 @@ class IDS_U3:
                     if (entry.AccessStatus() != ids_peak.NodeAccessStatus_NotAvailable
                             and entry.AccessStatus() != ids_peak.NodeAccessStatus_NotImplemented):
                         availableEntries.append(entry.SymbolicValue())
-                _lgr.info("Modos disponibles: %s", availableEntries)
+                _lgr.debug("Modos disponibles: %s", availableEntries)
                 ds.FindNode("StreamBufferHandlingMode").SetCurrentEntry("NewestOnly")
             except Exception as e:
                 _lgr.error("Error seteando modo de buffering de la cámara: %s", e)
             return True
         except ids_peak.Exception as e:
-            print( "Exception", str(e))
+            _lgr.error("Exception %s: %s", type(e), str(e))
             return False
 
-    def set_roi(self,x, y, width, height):
+    def set_roi(self, x, y, width, height):
         try:
             # Get the minimum ROI and set it. After that there are no size restrictions anymore
             x_min = self.__nodemap_remote_device.FindNode("OffsetX").Minimum()
-            #print("x_min:", x_min)
             y_min = self.__nodemap_remote_device.FindNode("OffsetY").Minimum()
-            #print("y_min:", y_min)
             w_min = self.__nodemap_remote_device.FindNode("Width").Minimum()
-            #print("w_min:", w_min)
             h_min = self.__nodemap_remote_device.FindNode("Height").Minimum()
-            #print("h_min:", h_min)
-     
+
             self.__nodemap_remote_device.FindNode("OffsetX").SetValue(x_min)
             self.__nodemap_remote_device.FindNode("OffsetY").SetValue(y_min)
             self.__nodemap_remote_device.FindNode("Width").SetValue(w_min)
             self.__nodemap_remote_device.FindNode("Height").SetValue(h_min)
-     
+
             # Get the maximum ROI values
             x_max = self.__nodemap_remote_device.FindNode("OffsetX").Maximum()
-            #print("x_max:", x_max)
             y_max = self.__nodemap_remote_device.FindNode("OffsetY").Maximum()
-            #print("y_max:", y_max)
             w_max = self.__nodemap_remote_device.FindNode("Width").Maximum()
-            #print("w_max:", w_max)
             h_max = self.__nodemap_remote_device.FindNode("Height").Maximum()
-            #print("h_max:", h_max)
-     
+
             if (x < x_min) or (y < y_min) or (x > x_max) or (y > y_max):
+                _lgr.warning("selected ROI origin outside bounds")
                 return False
-            elif (width < w_min) or (height < h_min) or ((x + width) > w_max) or ((y + height) > h_max):
+            elif ((width < w_min) or (height < h_min) or ((x + width) > w_max)
+                  or ((y + height) > h_max)):
+                _lgr.warning("selected ROI dimensions outside bounds")
                 return False
             else:
-                # Now, set final AOI
+                # Now, set final ROI
                 self.__nodemap_remote_device.FindNode("OffsetX").SetValue(x)
                 self.__nodemap_remote_device.FindNode("OffsetY").SetValue(y)
                 self.__nodemap_remote_device.FindNode("Width").SetValue(width)
                 self.__nodemap_remote_device.FindNode("Height").SetValue(height)
                 return True
         except Exception as e:
-            str_error = str(e)
-            print("Error setting roi: ", str_error)
+            _lgr.error("Exception setting roi %s: %s", type(e), e)
             return False
-         
+
     def alloc_and_announce_buffers(self):
         try:
             if self.__datastream:
                 self.revoke_buffers()
                 payload_size = self.__nodemap_remote_device.FindNode("PayloadSize").Value()
-                #print(payload_size, "-> Payload_size") # Payload_size in this case is: 65536 bytes, for width = 256 and height = 256 # 2304000 -> Payload_size for full chip (width:1920, height: 1200)
-     
+                # print(payload_size, "-> Payload_size") # Payload_size in this case is: 65536 bytes, for width = 256 and height = 256 # 2304000 -> Payload_size for full chip (width:1920, height: 1200)
+
                 # Get number of minimum required buffers
-                num_buffers_min_required = self.__datastream.NumBuffersAnnouncedMinRequired() #num_buffers_min_required:  3
-     
+                num_buffers_min_required = self.__datastream.NumBuffersAnnouncedMinRequired()
+
                 # Alloc buffers
                 for i in range(num_buffers_min_required):
                     try:
                         buffer = self.__datastream.AllocAndAnnounceBuffer(payload_size)
                         self.__datastream.QueueBuffer(buffer)
                     except Exception as e:
-                        print("Error en parte nueva de buffers: ", str(e))
+                        _lgr.error("Error allocating and setting buffers: %s",
+                                   str(e))
                 return True
         except Exception as e:
             str_error = str(e)
             print("Error in buffers: ", str_error)
             return False
-                
+
     def revoke_buffers(self):
         try:
             if self.__datastream:
                 # Flush queue and prepare all buffers for revoking
                 self.__datastream.Flush(ids_peak.DataStreamFlushMode_DiscardAll)
-     
                 # Clear all old buffers
                 for buffer in self.__datastream.AnnouncedBuffers():
                     self.__datastream.RevokeBuffer(buffer)
                 return True
         except Exception as e:
-            print("Error revoking buffers: ", str(e))
-            return False     
-    
+            _lgr.error("Exception revoking buffers: %s", str(e))
+            return False
+
     def close_device(self):
         """
         Stop acquisition if still running and close datastream and nodemap of the device
@@ -231,35 +228,39 @@ class IDS_U3:
         self.stop_acquisition()
 
         # If a datastream has been opened, try to revoke its image buffers
-        if self.__datastream is not None:
-            try:
-                for buffer in self.__datastream.AnnouncedBuffers():
-                    self.__datastream.RevokeBuffer(buffer)
-            except Exception as e:
-                print("Exception", str(e))
-    
+        self.revoke_buffers()
+        # if self.__datastream is not None:
+        #     try:
+        #         for buffer in self.__datastream.AnnouncedBuffers():
+        #             self.__datastream.RevokeBuffer(buffer)
+        #     except Exception as e:
+        #         print("Exception", str(e))
+
     def start_acquisition(self):
-        """
+        """Continuous acquisition
+
         Start Acquisition on camera and start the acquisition timer to receive and display images
 
         :return: True/False if acquisition start was successful
         """
+        # https://www.1stvision.com/cameras/IDS/IDS-manuals/en/acquisition-mode.html
         # Check that a device is opened and that the acquisition is NOT running. If not, return.
         if self.__device is None:
             return False
         if self.__acquisition_running is True:
             return True
 
-        # Get the maximum framerate possible, limit it to the configured FPS_LIMIT. If the limit can't be reached, set
-        # acquisition interval to the maximum possible framerate
+        # Get the maximum framerate possible, limit it to the configured
+        # FPS_LIMIT. If the limit can't be reached, set acquisition interval
+        # to the maximum possible framerate
         try:
-            max_fps = self.__nodemap_remote_device.FindNode("AcquisitionFrameRate").Maximum() #Max Frame Rate:  66.49384258032052 FPS_LIMIT:  30
-            #print("Max Frame Rate: ", max_fps, "FPS_LIMIT: ", FPS_LIMIT)
+            # Max Frame Rate:  66.49384258032052 FPS_LIMIT:  30
+            max_fps = self.__nodemap_remote_device.FindNode("AcquisitionFrameRate").Maximum()
             target_fps = min(max_fps, FPS_LIMIT)
             self.__nodemap_remote_device.FindNode("AcquisitionFrameRate").SetValue(target_fps)
         except ids_peak.Exception:
             # AcquisitionFrameRate is not available. Unable to limit fps. Print warning and continue on.
-            print( "Warning: Unable to limit fps, since the AcquisitionFrameRate Node is not supported by the connected camera. Program will continue without limit.")
+            _lgr.warning("Unable to limit fps: AcquisitionFrameRate Node is not supported by the connected camera. Program will continue without limit.")
 
         # Setup acquisition timer accordingly
         #self.cameraTimer.setInterval((1 / target_fps) * 1000) #Same timer than in uc480
@@ -283,7 +284,7 @@ class IDS_U3:
         self.__acquisition_running = True
 
         return True
-    
+
     def stop_acquisition(self):
         """
         Stop acquisition timer and stop acquisition on camera
@@ -315,7 +316,7 @@ class IDS_U3:
         except Exception as e:
             print("Exception", str(e))
 
-    def on_acquisition_timer(self): #this is show_image function
+    def on_acquisition_timer(self):  # this is show_image function
         try:
             # Get buffer from device's DataStream. Wait 5000 ms. The buffer is automatically locked until it is queued again.
             if self.__datastream:
@@ -326,26 +327,27 @@ class IDS_U3:
 
                 # Queue buffer again
                 self.__datastream.QueueBuffer(buffer)
-                
+
                 # Get raw image data from converted image and construct a 3D array
                 self.image_np_array = converted_ipl_image.get_numpy_3D()
-                image_sum = self.image_np_array[:, :, 0]#R channel
-                
+                image_sum = self.image_np_array[:, :, 0]  # R channel
+
                 # 2D array, each element is the sum of the R,G,B,A channels
-                #image_sum = np.sum(self.image_np_array, axis=2)
+                # image_sum = np.sum(self.image_np_array, axis=2)
 
-
-                #plt.imshow(self.image_red)
                 return image_sum.copy() ## Make an extra copy of the to make sure that memory is copied and can't get overwritten later on, this is also done in uc480
-        
-        except Exception as e:
-            print("Error showing image: ", str(e))
 
-     
-    def work(self):     
+        except Exception as e:
+            _lgr.error("Exception acquiring image: %s (%s)", e, str(e))
+
+    def work(self):
+        """Test Function."""
         if self.open_device():
             # error
             print("Success opening device")
+        else:
+            print("error opening device")
+            return
         if not self.set_roi(16, 16, 1920, 1200): # full chip (width:1920, height: 1200)
             # error
             sys.exit(-2)
@@ -355,23 +357,21 @@ class IDS_U3:
         if not self.start_acquisition():
             # error
             sys.exit(-4)
-        #sys.exit(0)
+        # sys.exit(0)
 
-     
+
 if __name__ == '__main__':
-    
     device = IDS_U3()
-    
     value = device.open_device()
-    if value == True:
+    if value:
         print("Big success")
+    else:
+        print("No device")
     device.work()
-    start=time.perf_counter()
-    image= device.on_acquisition_timer()
-    end=time.perf_counter()
-    print("Time on_acquisition_timer execution: ", end-start) #time show_image() execution:  0.05100199999999866
-    #print(type(image)) #<class 'numpy.ndarray'>
-    plt.imshow(image)
+    start = time.perf_counter()
+    image = device.on_acquisition_timer()
+    end = time.perf_counter()
+    print("Time on_acquisition_timer execution: ", end-start)  # time show_image() execution:  0.05100199999999866
+    # print(type(image)) #<class 'numpy.ndarray'>
+    # plt.imshow(image)
     sys.exit(0)
-
-
