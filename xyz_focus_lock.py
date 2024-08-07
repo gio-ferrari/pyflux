@@ -648,6 +648,11 @@ class Backend(QtCore.QObject):
     def __init__(self, camera, adw, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.camera = camera  # no need to setup or initialize camera
+        try:
+            self.camera.start_acquisition()
+        except:
+            self.camera.destroy_all()
+            raise Exception("Start acquisition failed")
 
         self.adw = adw
         # folder
@@ -708,16 +713,16 @@ class Backend(QtCore.QObject):
         self.previous_image = None  # para chequear que la imagen cambie
         self.currentz = 0.0  # Valor en pixeles dentro del roi del z
 
-        if self.camera.open_device():
-            self.camera.set_roi(16, 16, 1920, 1200)
-            try:
-                self.camera.alloc_and_announce_buffers()
-                self.camera.start_acquisition()
-            except Exception as e:
-                print("Exception", str(e))
-        else:
-            self.camera.destroy_all()
-            raise Exception("No pude abrir la cámara")
+        # if self.camera.open_device():
+        #     self.camera.set_roi(16, 16, 1920, 1200)
+        #     try:
+        #         self.camera.alloc_and_announce_buffers()
+        #         self.camera.start_acquisition()
+        #     except Exception as e:
+        #         print("Exception", str(e))
+        # else:
+        #     self.camera.destroy_all()
+        #     raise Exception("No pude abrir la cámara")
 
     @pyqtSlot(int, bool)
     def toggle_tracking_shutter(self, num, val):
@@ -1802,6 +1807,12 @@ if __name__ == '__main__':
         camera = ids_cam.IDS_U3()
     except Exception:
         print("Excepcion inicializando la cámara... seguimos")
+        
+    if not camera.open_device():
+        camera.destroy_all() # Necesito esto aquí o es mejor en el init del back? Chequear por las dudas
+        raise ValueError("Could not open camera")
+    # if not camera.start_acquisition():
+    #     raise ValueError("Could not start camera")
 
     gui = Frontend()
     worker = Backend(camera, adw)
