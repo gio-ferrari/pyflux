@@ -45,8 +45,11 @@ _lgr = _lgn.getLogger(__name__)
 # No grafica xy ni calcula std -> pyqtgraph viejo y NANS
 # ver logica resetgraphs
 
+# Parametros para procesos de estabilizacion continua ADWIN
+# Proceso 4:
 _FPAR_X = 40
 _FPAR_Y = 41
+# Proceso 3:
 _FPAR_Z = 32
 
 PX_SIZE = 23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
@@ -619,7 +622,7 @@ class Backend(QtCore.QObject):
     # changedSetPoint = pyqtSignal(float) #Debería añadir esta señal??? de focus.py
 
     # signal to emit new piezo position after drift correction
-    xyIsDone = pyqtSignal(bool, float, float,float)
+    xyIsDone = pyqtSignal(bool, float, float, float)
     shuttermodeSignal = pyqtSignal(int, bool)
     liveviewSignal = pyqtSignal(bool)
     # zIsDone = pyqtSignal(bool, float)  # se emite para psf.py script
@@ -648,11 +651,14 @@ class Backend(QtCore.QObject):
     def __init__(self, camera, adw, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.camera = camera  # no need to setup or initialize camera
-        try:
-            self.camera.start_acquisition()
-        except:
+        if self.camera.open_device():
+            try:
+                self.camera.start_acquisition()
+            except Exception as e:
+                print("Exception", str(e))
+        else:
             self.camera.destroy_all()
-            raise Exception("Start acquisition failed")
+            raise Exception("No pude abrir la cámara")
 
         self.adw = adw
         # folder
@@ -712,17 +718,6 @@ class Backend(QtCore.QObject):
 
         self.previous_image = None  # para chequear que la imagen cambie
         self.currentz = 0.0  # Valor en pixeles dentro del roi del z
-
-        # if self.camera.open_device():
-        #     self.camera.set_roi(16, 16, 1920, 1200)
-        #     try:
-        #         self.camera.alloc_and_announce_buffers()
-        #         self.camera.start_acquisition()
-        #     except Exception as e:
-        #         print("Exception", str(e))
-        # else:
-        #     self.camera.destroy_all()
-        #     raise Exception("No pude abrir la cámara")
 
     @pyqtSlot(int, bool)
     def toggle_tracking_shutter(self, num, val):
@@ -981,7 +976,7 @@ class Backend(QtCore.QObject):
             if self.feedback_z:  # esto es para evitar loops por la actualización de back a front
                 _lgr.info("Doble activación de z")
                 return
-            if not self.feedback_z:
+            if not self.tracking_z:
                 _lgr.warning("Requested Z feedback without tracking. Enabling tracking")
                 if not self.toggle_tracking_z(True):
                     _lgr.error("Could not enable Z tracking")
@@ -1210,26 +1205,26 @@ class Backend(QtCore.QObject):
         security_thr = 0.35  # in µm
 
         # HINT: los signos están acorde a la platina y a la imagen
-        if np.abs(xmean) > threshold or (mode == "discrete"):
+        if (np.abs(xmean) > threshold) or (mode == "discrete"):
             dx = -xmean / 1000  # conversion to µm
             if abs(dx) < xy_far_threshold:
                 dx *= xy_correct_factor
 
-        if np.abs(ymean) > threshold or (mode == "discrete"):
+        if (np.abs(ymean) > threshold) or (mode == "discrete"):
             dy = -ymean / 1000  # conversion to µm
             if abs(dy) < xy_far_threshold:
                 dy *= xy_correct_factor
 
         if (abs(dx) > security_thr or abs(dy) > security_thr):
             _lgr.error('xy Correction movement larger than 200 nm,'
-                  ' active correction turned OFF')
+                       ' active correction turned OFF')
             self.set_xy_feedback(False, mode)
             self.notify_status()
             dx = 0
             dy = 0
-        # compensate for the mismatch between camera/piezo system of
-        # reference
-        # theta = np.radians(-3.7)   # 86.3 (or 3.7) is the angle between camera and piezo (measured)
+
+        # compensate for the mismatch between camera/piezo system of reference
+        # theta = np.radians(-3.7)   # measured angle between camera and piezo
         # c, s = np.cos(theta), np.sin(theta)
         # R = np.array(((c,-s), (s, c)))
 
@@ -1239,17 +1234,17 @@ class Backend(QtCore.QObject):
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
 
-        targetZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
+        # targetZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         # Sólo xy
         targetXposition = currentXposition + dx
         targetYposition = currentYposition + dy
 
         if mode == 'continous':
             # Le mando al actuador las posiciones x,y,z
-            self.actuator_xyz(targetXposition, targetYposition,
-                              targetZposition)
-        return (targetXposition, targetYposition, targetZposition)
-
+            # self.actuator_xyz(targetXposition, targetYposition,
+            #                   targetZposition)
+            self.actuator_xy(targetXposition, targetYposition)
+        return (targetXposition, targetYposition)
 
     def correct_z(self, mode='continous'):
         """Corregir posicion z."""
@@ -1275,46 +1270,50 @@ class Backend(QtCore.QObject):
             self.set_z_feedback(False, mode)
         else:
             # add correction to piezo position
-            targetXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
-            targetYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
             currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
 
             targetZposition = currentZposition + dz  # in µm
 
             if mode == 'continous':
-                # Le mando al actuador las posiciones x,y,z
-                self.actuator_xyz(targetXposition, targetYposition,
-                                  targetZposition)
+                # Le mando al actuador la posicion z
+                # self.actuator_xyz(targetXposition, targetYposition,
+                #                   targetZposition)
+                self.actuator_z(targetZposition)
             if mode == 'discrete':
-                # self.moveTo(targetXposition, targetYposition, currentZposition, pixeltime=10)
                 self.target_z = targetZposition
 
     @pyqtSlot(bool, bool)
     def single_xy_correction(self, feedback_val, initial):
-        """
+        """Emit drift corrected XY and Z positions.
+
         From: [psf] xySignal
-        feedback_val is unused
+        feedback_val is unused.
         """
         if initial:
             self.set_xy_feedback(True, mode='discrete')
             self.set_z_feedback(True, mode='discrete') #Encienda el feedback en z
             _lgr.info("Initial xy single tracking")
+            if not self.feedback_z:
+                _lgr.warning("Single correction without Z feedback. Turning on.")
+                self.set_z_feedback(True, mode='continous')
         if not self.camON:
             print(datetime.now(), 'singlexy liveview started')
             self.camON = True
-        #time.sleep(0.200)
+        # time.sleep(0.200)
 
-        self.update_view() #Llegué aqui, nada tiene que ver con nuevas coordenadas , sólo imagen
+        self.update_view()
         # if initial:
-        #     self._initialize_xy_positions() 
+        #     self._initialize_xy_positions()
 
         self.track('xy') #Aquí obtiene las posiciones: self._fit_xy_rois() del centro de la Np, self.x y self.y
         self.update_graph_data()
-        target_x, target_y, target_z = self.correct_xy(mode='discrete') #Ahora correct_xy_ puede actuar porque tiene a self.x y self.y 
+        target_x, target_y = self.correct_xy(mode='discrete')
         target_x = np.round(target_x, 3)
         target_y = np.round(target_y, 3)
-        target_z = np.round(target_z, 3)
-        _lgr.info('Discrete correction to (%s, %s, %s)', target_x, target_y, target_z)
+        # el Z debería estár estabilizado aparte, pero está todo hecho para que el
+        # escaneo requiera un Z de inicio.
+        target_z = tools.convert(self.adw.Get_FPar(_FPAR_Z), 'UtoX')
+        _lgr.info('Discrete correction to (%s, %s)', target_x, target_y)
         self.xyIsDone.emit(True, target_x, target_y, target_z)
         _lgr.debug('Single xy correction ended')
 
@@ -1358,7 +1357,7 @@ class Backend(QtCore.QObject):
         time.sleep(0.100)
         for i, z in enumerate(zData):
             z_f = tools.convert(z, 'XtoU')
-            self.adw.Set_FPar(32, z_f)
+            self.adw.Set_FPar(_FPAR_Z, z_f)
             time.sleep(.125)  # Ojo con este parámetro
             self.update()
             calibData[i] = self.currentz
@@ -1369,7 +1368,7 @@ class Backend(QtCore.QObject):
         print("z\tcm")
         for z, cm in zip(zData, calibData):
             print(f"{z}\t{cm}")
-        self.adw.Set_FPar(32, old_z_param)
+        self.adw.Set_FPar(_FPAR_Z, old_z_param)
         time.sleep(0.500)
         if not was_running:
             self.adw.Stop_Process(3)
@@ -1413,31 +1412,31 @@ class Backend(QtCore.QObject):
         z_f = tools.convert(currentZposition, 'XtoU')
 
         # set-up actuator initial params
-        self.adw.Set_FPar(32, z_f)
+        self.adw.Set_FPar(_FPAR_Z, z_f)
 
         # Para mi es igual a hacer esto: VERIFICADO
-        # self.adw.Set_FPar(32, self.adw.Get_FPar(72))
+        # self.adw.Set_FPar(_FPAR_Z, self.adw.Get_FPar(72))
 
         # Comento porque son cosas viejas (Andi)
         # self.adw.Set_Par(30, 1)
 
-    def actuator_xyz(self, x_f, y_f, z_f):
-        """Setear los parámetros de tracking de la adwin mientras corre.
+    # def actuator_xyz(self, x_f, y_f, z_f):
+    #     """Setear los parámetros de tracking de la adwin mientras corre.
 
-        Estos parámetros son usados por los procesos:
-            actuator_z.bas: (Proceso 3)
-                FPar_32 es el setpoint z
-            actuator_xy.bas: (Proceso 4)
-                FPar_40 es el setpoint x
-                FPar_41 es el setpoint y
-        """
-        x_f = tools.convert(x_f, 'XtoU')
-        y_f = tools.convert(y_f, 'XtoU')
-        z_f = tools.convert(z_f, 'XtoU')
+    #     Estos parámetros son usados por los procesos:
+    #         actuator_z.bas: (Proceso 3)
+    #             FPar_32 es el setpoint z
+    #         actuator_xy.bas: (Proceso 4)
+    #             FPar_40 es el setpoint x
+    #             FPar_41 es el setpoint y
+    #     """
+    #     x_f = tools.convert(x_f, 'XtoU')
+    #     y_f = tools.convert(y_f, 'XtoU')
+    #     z_f = tools.convert(z_f, 'XtoU')
 
-        self.adw.Set_FPar(_FPAR_X, x_f)
-        self.adw.Set_FPar(_FPAR_Y, y_f)
-        self.adw.Set_FPar(_FPAR_Z, z_f)
+    #     self.adw.Set_FPar(_FPAR_X, x_f)
+    #     self.adw.Set_FPar(_FPAR_Y, y_f)
+    #     self.adw.Set_FPar(_FPAR_Z, z_f)
 
     def actuator_z(self, z_f):
         """Setear los parámetros de tracking de la adwin mientras corre.
@@ -1667,8 +1666,8 @@ class Backend(QtCore.QObject):
                                           self.feedback_xy, self.feedback_z,
                                           self.save_data_state)
         x_f, y_f = r
-        z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
-        self.actuator_xyz(x_f, y_f, z_f)
+        # z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
+        self.actuator_xy(x_f, y_f)
 
     def start_tracking_pattern(self):
         """Se prepara para hacer un patrón.
@@ -1807,12 +1806,6 @@ if __name__ == '__main__':
         camera = ids_cam.IDS_U3()
     except Exception:
         print("Excepcion inicializando la cámara... seguimos")
-        
-    if not camera.open_device():
-        camera.destroy_all() # Necesito esto aquí o es mejor en el init del back? Chequear por las dudas
-        raise ValueError("Could not open camera")
-    # if not camera.start_acquisition():
-    #     raise ValueError("Could not start camera")
 
     gui = Frontend()
     worker = Backend(camera, adw)

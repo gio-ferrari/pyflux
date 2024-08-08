@@ -578,7 +578,7 @@ class Backend(QtCore.QObject):
 
         self.alignMode = params['alignMode']
 
-    @pyqtSlot(bool, float, float,float)
+    @pyqtSlot(bool, float, float, float)
     def get_xy_is_done(self, val, x, y, z):
         """
         Connection: [xy_tracking] xyIsDone
