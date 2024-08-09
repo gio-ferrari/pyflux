@@ -966,7 +966,7 @@ class Backend(QtCore.QObject):
         if type(val) is not bool:
             _lgr.warning("Toggling feedback mode not boolean; %s", type(val))
 
-        self.set_xy_feedback(val, mode)
+        self.set_xy_feedback(val, mode) #Por qué no le manda el modo discreto cuando proviene de get_stop_signal
         self.set_z_feedback(val, mode)
         _lgr.debug('Feedback loop active: %s', val)
 
@@ -992,7 +992,7 @@ class Backend(QtCore.QObject):
             if not self.feedback_z:
                 _lgr.info("Doble desactivación de z")
             self.feedback_z = False
-            self.adw.Stop_Process(3)
+            self.adw.Stop_Process(3) #Detiene el proceso 3 sea continuous or discrete, distinto a set_xy_feedback
             _lgr.info('Process 3 stopped. Status: %s', self.adw.Process_Status(3))
             _lgr.debug('z Feedback loop Off')
         else:
@@ -1014,15 +1014,18 @@ class Backend(QtCore.QObject):
                 _lgr.info('Process 4 started. Status: %s', self.adw.Process_Status(4))
                 _lgr.debug('xy Feedback loop ON')
                 self.feedback_xy = True
-        elif val is False: # no entra desde single_xy_correction
+        elif val is False: # no entra desde single_xy_correction, sino desde get_stop_signal cuando se emite en start [psf] la señal xySignalStop
+            #entiendo que para [psf] el resultado es apagar el proceso 4 (feedback xy)
             if not self.feedback_xy:
                 _lgr.info("Doble desactivacion feedback xy")
             self.feedback_xy = False
             # FIXME: check condition below
-            if mode == 'continous': #duda FC: Se debería apagar el proceso 4? Creo que no porque no enciende cuando vuelve, asume que quedó encendido
+            if mode == 'continous': #duda FC: el proceso 4 se detiene, pero sólo funciona para modo continuo o en modo discreto también?? Cuando le dije que el modo es discreto en psf [start]???
                 self.adw.Stop_Process(4)
                 _lgr.info('Process 4 stopped. Status: %s', self.adw.Process_Status(4))
+                print("Self.displacement en set_xy_feeedback antes", self.displacement)
                 self.displacement = np.array([0.0, 0.0])
+                print("Self.displacement en set_xy_feedback después", self.displacement)
                 _lgr.debug('xy Feedback loop Off')
         else:
             _lgr.error("Deberías pasar un booleano, no: %s", val)
@@ -1545,7 +1548,7 @@ class Backend(QtCore.QObject):
         to start the psf measurement with discrete xy - z corrections
         """
         _lgr.debug("Got stop signal with value %s", stoplive)
-        self.toggle_feedback(False)
+        self.toggle_feedback(False)# Añadir discrete mode para enviar
         self.toggle_tracking(False) #Aquí se podría poner self.toggle_tracking_xy(False) Para que deje funcionando el tracking z FC
 
         # TODO: Ver si no restringir a xy
