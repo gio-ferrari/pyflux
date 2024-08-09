@@ -961,18 +961,21 @@ class Backend(QtCore.QObject):
         Description: toggles ON/OFF feedback for either continous (TCSPC)
         or discrete (scan imaging) correction
         """
+        _lgr.debug("[xyz_focus_lock] Inside toggle_feedback")
         if mode not in ('discrete', 'continous'):
             _lgr.warning("Invalid feedback mode: %s", mode)
         if type(val) is not bool:
             _lgr.warning("Toggling feedback mode not boolean; %s", type(val))
-
         self.set_xy_feedback(val, mode) #Por qué no le manda el modo discreto cuando proviene de get_stop_signal
+        _lgr.debug("[xyz_focus_lock] pasó set_xy_feedback: val: %s mode: %s.", val, mode)
         self.set_z_feedback(val, mode)
-        _lgr.debug('Feedback loop active: %s', val)
+        _lgr.debug("[xyz_focus_lock] pasó set_z_feedback: val: %s mode: %s.", val, mode)
+        _lgr.debug('[xyz_focus_lock] Feedback loop active: %s', val)
 
     def set_z_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para z."""
         if val is True:
+            _lgr.debug("True set_z_feedback")
             if self.feedback_z:  # esto es para evitar loops por la actualización de back a front
                 _lgr.info("Doble activación de z")
                 return
@@ -983,12 +986,14 @@ class Backend(QtCore.QObject):
                     self.notify_status()
                     return
             if True: #mode == 'continous':  # set up and start actuator process
+                _lgr.debug('going to set_actuator_param_z')
                 self.set_actuator_param_z()
                 self.adw.Start_Process(3)  # proceso para z
                 _lgr.info('Process 3 started. Status: %s', self.adw.Process_Status(3))
                 _lgr.debug('z Feedback loop ON')
                 self.feedback_z = True
         elif val is False:
+            _lgr.debug("False set_z_feedback")
             if not self.feedback_z:
                 _lgr.info("Doble desactivación de z")
             self.feedback_z = False
@@ -1002,20 +1007,25 @@ class Backend(QtCore.QObject):
     def set_xy_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para xy."""
         if val is True:
+            _lgr.debug("True set_xy_feedback")
             if self.feedback_xy:
                 _lgr.info("Doble activacion feedback xy")
+                _lgr.debug("NO DEBE SALIR ESTO EN PSF MEASUREMENT")
                 return
             if (mode == 'continous') and (not self.tracking_xy): # no entra desde single_xy_correction
                 _lgr.warning("Requested XY feedback without tracking. Enabling tracking")
                 self.toggle_tracking_xy(True)
+                _lgr.debug("NO DEBE SALIR ESTO EN PSF MEASUREMENT")
             if mode == 'continous':  # set up and start actuator process # no entra desde single_xy_correction
                 self.set_actuator_param_xy()
                 self.adw.Start_Process(4)  # proceso para xy #duda: Acerca de esto, no enciende el proceso en el modo discreto porque nunca lo apagó! FC Check
                 _lgr.info('Process 4 started. Status: %s', self.adw.Process_Status(4))
                 _lgr.debug('xy Feedback loop ON')
                 self.feedback_xy = True
+                _lgr.debug("NO DEBE SALIR ESTO EN PSF MEASUREMENT")
         elif val is False: # no entra desde single_xy_correction, sino desde get_stop_signal cuando se emite en start [psf] la señal xySignalStop
             #entiendo que para [psf] el resultado es apagar el proceso 4 (feedback xy)
+            _lgr.debug("False set_xy_feedback")
             if not self.feedback_xy:
                 _lgr.info("Doble desactivacion feedback xy")
             self.feedback_xy = False
@@ -1023,9 +1033,9 @@ class Backend(QtCore.QObject):
             if mode == 'continous': #duda FC: el proceso 4 se detiene, pero sólo funciona para modo continuo o en modo discreto también?? Cuando le dije que el modo es discreto en psf [start]???
                 self.adw.Stop_Process(4)
                 _lgr.info('Process 4 stopped. Status: %s', self.adw.Process_Status(4))
-                print("Self.displacement en set_xy_feeedback antes", self.displacement)
+                _lgr.debug("Self.displacement en set_xy_feeedback antes: %s", self.displacement)
                 self.displacement = np.array([0.0, 0.0])
-                print("Self.displacement en set_xy_feedback después", self.displacement)
+                _lgr.debug("Self.displacement en set_xy_feedback después: %s", self.displacement)
                 _lgr.debug('xy Feedback loop Off')
         else:
             _lgr.error("Deberías pasar un booleano, no: %s", val)
@@ -1292,8 +1302,10 @@ class Backend(QtCore.QObject):
         From: [psf] xySignal
         feedback_val is unused.
         """
+        _lgr.info('[xyz_focus_lock] Inside single_xy_correction')
         if initial:
-            self.set_xy_feedback(True, mode='discrete')
+            self.set_xy_feedback(True, mode='discrete') #Notar que aquí sí le mando el modo discreto, pero esta linea no hace nada según yo
+            _lgr.debug("Ahora saldrá el mje doble activación")
             self.set_z_feedback(True, mode='discrete') #Encienda el feedback en z
             _lgr.info("Initial xy single tracking")
             if not self.feedback_z:
@@ -1407,6 +1419,7 @@ class Backend(QtCore.QObject):
 
     def set_actuator_param_z(self, pixeltime=1000):
         """Inicializar los parámetros z antes de arrancar los scripts."""
+        _lgr.debug('Inside set_actuator_param_z')
         self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))
 
         # set-up actuator initial param script

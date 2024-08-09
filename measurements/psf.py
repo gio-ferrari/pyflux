@@ -466,7 +466,7 @@ class Backend(QtCore.QObject):
             self.shutterSignal.emit(7, False)
             self.shutterSignal.emit(11, False)
     
-            _lgr.info('PSF measurement started')
+            _lgr.info('[psf] Inside start ')
     
             self.xyStopSignal.emit(True)
             # self.zStopSignal.emit(True)
@@ -484,6 +484,7 @@ class Backend(QtCore.QObject):
         except Exception as e:
             print("Excepcion en start:", e)
         self.measTimer.start(0)
+        _lgr.info('[psf] PSF measurement started')
 
     def stop(self):
         self.measTimer.stop()
@@ -507,6 +508,7 @@ class Backend(QtCore.QObject):
 
         This would be best implemented using a state machine and no timer.
         """
+        _lgr.info('[psf] Inside loop')
         if self.i == 0:
             initial = True
         else:
@@ -515,7 +517,7 @@ class Backend(QtCore.QObject):
         if self.xy_flag:
             self.xySignal.emit(True, initial)
             self.xy_flag = False
-            _lgr.debug(' xy signal emitted (%s)', self.i)
+            _lgr.debug(' xy signal emitted (%s)', self.i, "going to single_xy_correction [xyz_focus_lock]")
         if self.xyIsDone: 
             # if self.z_flag:
             #     self.zSignal.emit(True, initial)

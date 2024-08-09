@@ -40,7 +40,9 @@ import tools.colormaps as cmaps
 from tools.lineprofile import linePlotWidget
 
 from drivers.minilasevo import MiniLasEvo
+import logging as _lgn
 
+_lgr = _lgn.getLogger(__name__)
 π = np.pi
 
 def setupDevice(adw):
@@ -1430,7 +1432,9 @@ class Backend(QtCore.QObject):
     def moveTo(self, x_f, y_f, z_f):
 
         self.set_moveTo_param(x_f, y_f, z_f)
+        _lgr.debug("[scan] Pasó set moveTo_param")
         self.adw.Start_Process(2)
+        _lgr.info('Process 2 started. Status: %s', self.adw.Process_Status(2)) #Este proceso se ocupa de mandar el piezo al lugar desde donde iniciará el escaneo
 
     def moveTo_action(self):
 
@@ -1641,7 +1645,7 @@ class Backend(QtCore.QObject):
         Ejecuta la función moveTo que ejecuta set_moveTo_param (configura los params de ADwin) e inicia el proceso 2
         """
         self.moveTo(*self.initialPos)
-        print("[scan] Posición inicial señal moveToInitialSignal: ", self.initialPos) #Este print sólo que ejecuta al iniciar la medición
+        _lgr.debug("[scan] Posición inicial señal moveToInitialSignal: %s", self.initialPos) #Este print sólo que ejecuta al iniciar la medición
     
     def relative_move(self, axis, direction):
         
@@ -2112,6 +2116,7 @@ if __name__ == '__main__':
     port = tools.get_MiniLasEvoPort()
     print('[scan] MiniLasEvo diode laser port:', port)
     diodelaser = MiniLasEvo(port)
+    print("Objeto diodelaser creado con éxito")
     
     DEVICENUMBER = 0x1
     adw = ADwin.ADwin(DEVICENUMBER, 1)
