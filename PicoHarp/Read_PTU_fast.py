@@ -195,38 +195,48 @@ def readPT3(inputfile, numRecords):
 #     return rv
 
 
-# @numba.njit(numba.types.UniTuple(numba.int64[:], 2)
-#             (numba.typeof(memoryview(bytes([0]*4)).cast("I"))),
-#             parallel=True)
-# def inner(data):
-#     oflcorrection = 0
-#     T3WRAPAROUND = 65536
+# 4 bits de nro de channel
+# 12 de start-stop time (nro de "bin" después del sync en el que llega la señal)
+# 16 bits de sync counter
 
-#     numRecords = len(data)
-#     dtime_array = np.zeros(numRecords, dtype=np.int64)
-#     truensync_array = np.zeros(numRecords, dtype=np.int64)
-#     recnum = 0
-#     for d in data:
-#         nsync = d & 0b1111111111111111
-#         d = d >> 16
-#         dtime = d & 0b111111111111
-#         d = d >> 12
-#         channel = d  # & 0b1111 No necesario
-#         if channel == 0xF:  # Special record
-#             if dtime == 0:  # Not a marker, so overflow
-#                 oflcorrection += T3WRAPAROUND
-#             else:  # got marker
-#                 truensync = oflcorrection + nsync
-#         else:  # standard record, photon count
-#             truensync = oflcorrection + nsync
-#             dtime_array[recnum] = dtime
-#             truensync_array[recnum] = truensync
-#             recnum += 1
-#     return dtime_array[:recnum], truensync_array[:recnum]
+@numba.njit(numba.types.UniTuple(numba.uint64, 2)
+            (numba.uint32[:], numba.uint64[:], numba.uint64[:], numba.uint64), boundscheck=True)
+def record2time(data: np.ndarray, out_dtime, out_truesync, oflcorrection):
+    """Hace.
+         - en outd_dtime pone los tiempos relativos de llegada de cada fotón
+         - en out_truesync pone los tiempos absolutos de llegada
+
+    Returns
+    -------
+       Number of records, oflcorrection
+    """
+    T3WRAPAROUND = 65536
+
+    numRecords = len(data)
+    dtime_array = out_dtime#np.zeros(numRecords, dtype=np.int64)
+    truensync_array = out_truesync#np.zeros(numRecords, dtype=np.int64)
+    recnum = 0
+    for d in data:
+        nsync = d & 0b1111111111111111
+        d = d >> 16
+        dtime = d & 0b111111111111
+        d = d >> 12
+        channel = d  # & 0b1111 No necesario
+        if channel == 0xF:  # Special record
+            if dtime == 0:  # Not a marker, so overflow
+                oflcorrection += T3WRAPAROUND
+            else:  # got marker
+                truensync = oflcorrection + nsync # ????
+        else:  # standard record, photon count
+            truensync = oflcorrection + nsync
+            dtime_array[recnum] = dtime
+            truensync_array[recnum] = truensync
+            recnum += 1
+    return (recnum, oflcorrection)
 
 
 @numba.njit((numba.uint64[:])(numba.uint32[:], numba.uint64[:], numba.int64),
-            parallel=True)
+            parallel=True, boundscheck=True)
 def all_in_one(data, out, binwidth):
     binwidth = 400
     # nbins = 4

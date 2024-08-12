@@ -18,10 +18,10 @@ except ImportError:
 
 
 if _NUMBA_PRESENT:
-    @numba.njit(nogil=True, parallel=True)
+    @numba.njit(nogil=True, parallel=True, boundscheck=True)
     def _loc_helper(n, logs, likelihood):
         likelihood[:] = n[0] * logs[0]
-        for k in range(n.shape[0]-1):
+        for k in range(3): #n.shape[0]-1):
             likelihood += n[k+1] * logs[k+1]
         # maximum likelihood estimator for the position
         i_max = _np.argmax(likelihood)
@@ -93,12 +93,12 @@ class MinFluxLocator:
         self.l_aux = _np.zeros((K, size, size))
 
     def _numba_precompile(self):  # Not the best way
-        _loc_helper(_np.zeros((self.K,)), self.logs, self.LTot)
+        _loc_helper(_np.zeros((self.K,), dtype=_np.uint64), self.logs, self.LTot)
 
     def __call__(self, n):
         return self._estimate(n)
 
-    def _estimate(self, n):
+    def _estimate(self, n: _np.ndarray):
         """Estimate MINFLUX position.
 
         Parameters
@@ -127,8 +127,12 @@ class MinFluxLocator:
         return indrec, pos_estimator, self.LTot
 
     def _numba_estimate(self, n):
-        indrec = _loc_helper(n, self.logs, self.LTot)
-        pos_estimator = self._idx2pos(indrec)
+        try:
+            indrec = _loc_helper(n, self.logs, self.LTot)
+            pos_estimator = self._idx2pos(indrec)
+        except:
+            print("NUMBAESTIMATEEEEEEEEE")
+            raise
         return indrec, pos_estimator, self.LTot
 
     def _idx2pos(self, indices):

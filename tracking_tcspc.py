@@ -17,7 +17,6 @@ from datetime import date, datetime
 import os
 import tools.filenames as fntools
 from tkinter import Tk, filedialog
-# import tifffile as tiff
 import logging as _lgn
 
 import pyqtgraph as pg
@@ -36,9 +35,9 @@ import PicoHarp.Read_PTU as Read_PTU
 from tools import analysis as _analysis
 from PicoHarp import Read_PTU_fast as _rpf
 
-
 import qdarkstyle
 import ctypes
+
 
 # FIXME: should go to driver
 TTREADMAX = 131072
@@ -54,11 +53,12 @@ class Frontend(QtWidgets.QFrame):
 
     # Signals
     paramSignal = pyqtSignal(list)
-    measureSignal = pyqtSignal()
+    measureSignal = pyqtSignal(np.ndarray)  # basta con esto de los eventos
 
     # Data
     _localizations = [[]]  # one list per shift
     _shifts = [(0, 0),]
+    _PSF = None
 
     def __init__(self, *args, **kwargs):
         """No hace nada."""
@@ -70,9 +70,12 @@ class Frontend(QtWidgets.QFrame):
 
     def start_measurement(self):
         """Inicia la medida."""
+        if self._PSF is None:
+            print("PSFs needed to start measurements")
+            return
         self.clear_data()
         self.measureButton.setEnabled(False)
-        self.measureSignal.emit()
+        self.measureSignal.emit(self._PSF)
 
     def load_folder(self):
         """Muestra una ventana de selección de carpeta."""
@@ -83,6 +86,24 @@ class Frontend(QtWidgets.QFrame):
             root.destroy()
             if folder:
                 self.folderEdit.setText(folder)
+        except OSError:
+            pass
+        
+    def load_PSF(self):
+        """Elegir archivo NPZ (no tiff)."""
+        try:
+            root = Tk()
+            root.withdraw()
+            psffile = filedialog.askopenfile(parent=root, title="Elegir PSF",
+                                             initialdir=self.initialDir, filetypes=(("numpy", "*.npy"),),
+                                             mode="rb")
+            root.destroy()
+            if psffile:
+                try:
+                    self._PSF = np.load(psffile, allow_pickle=False)
+                    psffile.close()
+                except Exception as e:
+                    print("error abriendo PSF", e , type(e))
         except OSError:
             pass
 
@@ -96,35 +117,29 @@ class Frontend(QtWidgets.QFrame):
         offset = float(self.offsetEdit.text())
         paramlist = [name, res, tacq, folder, offset]
         self.paramSignal.emit(paramlist)
+        
 
-    @pyqtSlot(float, float)
-    def get_backend_parameters(self, cts0, cts1):
-        # conversion to kHz
-        cts0_khz = cts0 / 1000
-        cts1_khz = cts1 / 1000
-        self.channel0Value.setText(("{}".format(cts0_khz)))
-        self.channel1Value.setText(("{}".format(cts1_khz)))
-
-    @pyqtSlot(np.ndarray, np.ndarray)
-    def plot_data(self, relTime, absTime):
+    @pyqtSlot(np.ndarray)
+    def get_data(self, data: np.ndarray):
         """Receve new data and graph."""
-        self.clear_data()
-        counts, bins = np.histogram(relTime, bins=50)  # TO DO: choose proper binning
+        relTime = np.ndarray((len(data),), dtype=np.uint64)
+        absTime = np.ndarray((len(data),), dtype=np.uint64)
+        # old_corr = self._oflcorrection
+        n_rec, self._oflcorrection = _rpf.record2time(data, relTime, absTime, self._oflcorrection)
+        counts, bins = np.histogram(relTime, bins=50) # TO DO: choose proper binning
         self.histPlot.plot(bins[0:-1], counts)
         #        plt.hist(relTime, bins=300)
         #        plt.xlabel('time (ns)')
         #        plt.ylabel('ocurrences')
 
-        counts, time = np.histogram(absTime, bins=50)  # timetrace with 50 bins
+        # np.append(self._abstime, absTime)
+        # counts, time = np.histogram(absTime, bins=50)  # timetrace with 50 bins
 
-        binwidth = time[-1] / 50
-        timetrace_khz = counts / binwidth
+        # binwidth = time[-1] / 50
+        # timetrace_khz = counts / binwidth
 
-        self.tracePlot.plot(time[0:-1], timetrace_khz)
-        #        plt.plot(time[0:-1], timetrace)
-        self.tracePlot.setLabels(bottom=("Time", "ms"), left=("Count rate", "kHz"))
-
-        self.measureButton.setEnabled(True)
+        # self.tracePlot.plot(time[0:-1], timetrace_khz)
+        # self.tracePlot.setLabels(bottom=("Time", "ms"), left=("Count rate", "kHz"))
 
     @pyqtSlot(float, float)
     def get_localization(self, pos_x, pos_y):
@@ -140,9 +155,16 @@ class Frontend(QtWidgets.QFrame):
             _lgr.error("El largo de los shifts y localizaciones no coincide")
         data = np.empty((sum(len(_) for _ in  self._localizations), 2,))
         pos = 0
-        for l, s in zip(self._localizations, self._shifts):
-            data[pos: pos + len(l)] = np.array(l) + s
-            pos += len(l)
+        try:
+            for l, s in zip(self._localizations, self._shifts):
+                if len(l):
+                    data[pos: pos + len(l)] = np.array(l) + s
+                    pos += len(l)
+        except:
+            print("**********")
+            print(len(l))
+            print("===========")
+            raise
         # data = np.vstack(self._localizations)
         self.posPlot.setData(data)
 
@@ -154,7 +176,7 @@ class Frontend(QtWidgets.QFrame):
 
     @pyqtSlot()
     def get_measure_end(self):
-        """Receive a shift measure end signal from backend."""
+        """Receive a measure end signal from backend."""
         self.measureButton.setEnabled(True)
 
     def clear_data(self):
@@ -164,11 +186,13 @@ class Frontend(QtWidgets.QFrame):
         self.posPlot.clear()
         self._localizations = [[]]
         self._shifts = [(0, 0),]
+        self._lasttime = 0.0
+        self._oflcorrection = np.uint64(0)
+        self._abstime = np.zeros((1,), dtype=np.uint64)
 
     def make_connection(self, backend):
         """Make required connections with backend."""
-        backend.ctRatesSignal.connect(self.get_backend_parameters)
-        backend.plotDataSignal.connect(self.plot_data)
+        backend.sendDataSignal.connect(self.get_data)
         backend.localizationSignal.connect(self.get_localization)
         backend.shiftSignal.connect(self.get_shift)
         backend.measureEndSignal.connect(self.get_measure_end)
@@ -204,13 +228,13 @@ class Frontend(QtWidgets.QFrame):
         offsetLabel = QtWidgets.QLabel("Offset [ns]")
         self.offsetEdit = QtWidgets.QLineEdit("3")
 
-        self.channel0Label = QtWidgets.QLabel("Input 0 (sync) [kHz]")
-        self.channel0Value = QtWidgets.QLineEdit("")
-        self.channel0Value.setReadOnly(True)
+        # self.channel0Label = QtWidgets.QLabel("Input 0 (sync) [kHz]")
+        # self.channel0Value = QtWidgets.QLineEdit("")
+        # self.channel0Value.setReadOnly(True)
 
-        self.channel1Label = QtWidgets.QLabel("Input 1 (APD) [kHz]")
-        self.channel1Value = QtWidgets.QLineEdit("")
-        self.channel1Value.setReadOnly(True)
+        # self.channel1Label = QtWidgets.QLabel("Input 1 (APD) [kHz]")
+        # self.channel1Value = QtWidgets.QLineEdit("")
+        # self.channel1Value.setReadOnly(True)
 
         self.filenameEdit = QtWidgets.QLineEdit("filename")
 
@@ -247,10 +271,13 @@ class Frontend(QtWidgets.QFrame):
         self.folderEdit = QtWidgets.QLineEdit(folder)
         self.browseFolderButton = QtWidgets.QPushButton("Browse")
         self.browseFolderButton.setCheckable(True)
+        self.browsePSFButton = QtWidgets.QPushButton("PSF")
+        self.browsePSFButton.setCheckable(True)
 
         # GUI connections
         self.measureButton.clicked.connect(self.start_measurement)
         self.browseFolderButton.clicked.connect(self.load_folder)
+        self.browsePSFButton.clicked.connect(self.load_PSF)
         self.clearButton.clicked.connect(self.clear_data)
 
         self.acqtimeEdit.textChanged.connect(self.emit_param)
@@ -274,10 +301,10 @@ class Frontend(QtWidgets.QFrame):
         subgrid.addWidget(self.resolutionEdit, 4, 1)
         subgrid.addWidget(offsetLabel, 6, 0)
         subgrid.addWidget(self.offsetEdit, 6, 1)
-        subgrid.addWidget(self.channel0Label, 8, 0)
-        subgrid.addWidget(self.channel0Value, 8, 1)
-        subgrid.addWidget(self.channel1Label, 9, 0)
-        subgrid.addWidget(self.channel1Value, 9, 1)
+        # subgrid.addWidget(self.channel0Label, 8, 0)
+        # subgrid.addWidget(self.channel0Value, 8, 1)
+        # subgrid.addWidget(self.channel1Label, 9, 0)
+        # subgrid.addWidget(self.channel1Value, 9, 1)
 
         subgrid.addWidget(self.measureButton, 17, 0)
         subgrid.addWidget(self.prepareButton, 18, 0)
@@ -291,6 +318,7 @@ class Frontend(QtWidgets.QFrame):
         file_subgrid.addWidget(self.folderLabel, 1, 0, 1, 2)
         file_subgrid.addWidget(self.folderEdit, 2, 0, 1, 2)
         file_subgrid.addWidget(self.browseFolderButton, 3, 0)
+        file_subgrid.addWidget(self.browsePSFButton, 4, 0)
 
     def closeEvent(self, *args, **kwargs):
 
@@ -301,8 +329,7 @@ class Frontend(QtWidgets.QFrame):
 
 class Backend(QtCore.QObject):
 
-    ctRatesSignal = pyqtSignal(float, float)
-    plotDataSignal = pyqtSignal(np.ndarray, np.ndarray)
+    sendDataSignal = pyqtSignal(np.ndarray,)
     tcspcDoneSignal = pyqtSignal()
     measureEndSignal = pyqtSignal()  # to self and front, triggered by working thread
     localizationSignal = pyqtSignal(float, float)  # int, int
@@ -317,12 +344,6 @@ class Backend(QtCore.QObject):
     def update(self):
         """Placeholder."""
         self.measure_count_rate()
-
-    def measure_count_rate(self):
-        """Sned countrate to front."""
-        self.cts0 = self.ph.countrate(0)
-        self.cts1 = self.ph.countrate(1)
-        self.ctRatesSignal.emit(self.cts0, self.cts1)
 
     def prepare_ph(self):
         """Initialize a measurement.
@@ -356,8 +377,8 @@ class Backend(QtCore.QObject):
         _lgr.info("Offset = %s ps", self.ph.offset)
         _lgr.info("TCSPC prepared for TTTR measurement")
 
-    @pyqtSlot()
-    def measure(self):
+    @pyqtSlot(np.ndarray)
+    def measure(self, PSF: np.ndarray):
         """Called from GUI."""
         t0 = time.time()
         self.prepare_ph()
@@ -366,7 +387,7 @@ class Backend(QtCore.QObject):
         t1 = time.time()
         _lgr.info("Starting the PH measurement took %s s", (t1 - t0))
         self._measure_thread = PicoHarpReaderThread(self.ph, "Lefilename", None,
-                                                    np.random.random((4, 80, 80,)), 18., self)
+                                                    PSF, 18., self)
         self._measure_thread.start()
 
     @pyqtSlot(str, int, int)
@@ -426,7 +447,7 @@ class Backend(QtCore.QObject):
         data = np.zeros((2, datasize))
         data[0, :] = self.relTime[self.absTime != 0]
         data[1, :] = self.absTime[self.absTime != 0]
-        self.plotDataSignal.emit(data[0, :], data[1, :])
+        # self.plotDataSignal.emit(data[0, :], data[1, :])
         np.savetxt(filename, data.T)  # transpose for easier loading
         print(datetime.now(), "[tcspc] tcspc data exported")
         np.savetxt(
@@ -557,11 +578,12 @@ class PicoHarpReaderThread(_th.Thread):
                    for _ in range(N_BUFFERS)]
         buffer_q = _deque(buffers)
         data_q = _Queue()
-        wt = WriterThread(outputfile, data_q, buffer_q)
+        wt = WriterThread(outputfile, data_q, buffer_q, self._signaler)
         wt.start()
-        locator = _analysis.MinFluxLocator(PSF, SBR)
+        locator = _analysis.MinFluxLocator(PSF, SBR, )
         measuring = True
-        n_bins = int(np.ceil(4096 / binwidth))  # (4096+bins-1) / /bins
+        n_bins = 256# int(np.ceil(4096 / binwidth))  # (4096+bins-1) / /bins
+        _lgr.info("Usando %s bines", n_bins)
         vec = np.zeros((n_bins,), dtype=np.uint64)
         flags = ctypes.c_int()
         ctcDone = ctypes.c_int()
@@ -597,8 +619,8 @@ class PicoHarpReaderThread(_th.Thread):
             _lgr.info("records read: %s", nactual.value)
             # testing
             ttt0 = time.time_ns()
-            if time.time()-t0 > self._tacq/5E3:
-                self._signaler.ack_shift(*np.random.random_sample((2,)) + idx)
+            if time.time()-t0 > 7E-3:  #cada 7 ms
+                self._signaler.ack_shift(*np.random.random_sample((2,)) + idx*2)
                 t0 = time.time()
                 idx += 1
             #  ###################
@@ -607,7 +629,14 @@ class PicoHarpReaderThread(_th.Thread):
                 _lgr.info("Current photon count: %s", nactual.value)
                 data_q.put_nowait((nactual.value, buf, ))  # report async
                 _rpf.all_in_one(buf[:nactual.value], vec, binwidth)
-                pos = locator(vec)[0]
+                # _lgr.info(f"{(time.time_ns()-ttt0)/1E6} all in one")
+                try:
+                    pos = locator(vec)
+                    pos = pos[0]
+                    # _lgr.info(f"{(time.time_ns()-ttt0)/1E6} ms locator")
+                except Exception:
+                    _lgr.info("Error en locator con vec= %s (pos=%s)", vec, pos)
+                    raise
                 self._signaler.ack_position(pos[0], pos[1])
                 # if img_evt.is_set():
                 #     move
@@ -639,13 +668,15 @@ class WriterThread(_th.Thread):
 
     data_queue: _Queue = None
     buffer_queue: _deque = None
+    signaler: Backend = None
     fd = None
 
-    def __init__(self, fd, data_q, buffer_q, *args, **kwargs):
+    def __init__(self, fd, data_q, buffer_q, signaler, *args, **kwargs):
         """Guarda los queues y el file descriptor."""
         super().__init__(*args, **kwargs)
         self.data_queue = data_q
         self.buffer_queue = buffer_q
+        self.signaler = signaler
         self.fd = fd
 
     def run(self):
@@ -656,12 +687,30 @@ class WriterThread(_th.Thread):
         while nv is not None:
             n_rec, buffer = nv
             self.fd.write(buffer.data[:n_rec])
+            self.signaler.sendDataSignal.emit(np.array(buffer.data[:n_rec]))  # copiar porque reusamos
             self.buffer_queue.appendleft(buffer)
             total += n_rec
             nv = self.data_queue.get()
             # _lgr.warning("Grabamos algo")
         _lgr.info("Fin thread de escritura. %s registros escritos.", total)
 
+
+##################   For dev
+# from tools.PSF import doughnut2D
+# import tools.PSF_tools as PSF_tools
+# import matplotlib.pyplot as plt
+# centros = PSF_tools.centers_minflux(100, 4)
+# size = 80  # FOV in nm
+# nmppx = 1  # in nm
+# S = int(np.ceil(size/nmppx))
+# d = np.linspace(-size/2, size/2, num=S)
+# Mx, My = np.meshgrid(d, d)
+# PSFs =np.empty((4, S, S))
+# for dona, centro in zip(PSFs, centros):
+#     dona[:] = doughnut2D((Mx, My), 1, centro[0], centro[1], 100, 0).reshape(S, S)
+#     plt.figure()
+#     plt.imshow(dona)
+# np.save("donasfalsas", PSFs)
 
 if __name__ == "__main__":
 
@@ -674,6 +723,7 @@ if __name__ == "__main__":
     app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
 
     ph = picoharp.PicoHarp300()
+
     worker = Backend(ph)
     gui = Frontend()
 

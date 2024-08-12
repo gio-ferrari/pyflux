@@ -538,7 +538,7 @@ class Backend(QtCore.QObject):
     def export_data(self):
         fname = self.filename
         filename = tools.getUniqueName(fname)
-
+        np.save(filename, self.data)
         self.data = np.array(self.data, dtype=np.float32)
         iio.mimwrite(filename + '.tiff', self.data)
         # make scan saving config file

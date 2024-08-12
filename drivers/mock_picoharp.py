@@ -138,8 +138,14 @@ class libmock:
         # Poner lo que sobra en el buffer y ajustar pos
         # available = self._pos + ...
         largo = np.random.randint(count.value+1)
-        if largo:
-            buffer._arr[:largo] = np.random.randint(0, 4096, largo, dtype=np.uint32)
+        # 4 bits de nro de channel
+        # 12 de start-stop time (nro de "bin" después del sync en el que llega la señal)
+        # 16 bits de sync counter
+        # chanel = 0xF es overflow
+        if largo:  # TODO: devolver cosas razonables
+            0x0FFFFFFF
+            buffer._arr[:largo] = np.random.randint(0, 0x0FFFFFFF, largo, dtype=np.uint32)
+            buffer[largo-1] = 0xF0000000
         self._last_read = time.time_ns()
         # time.sleep(1.1)
         nactual._obj.value = largo

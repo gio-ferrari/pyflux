@@ -1764,8 +1764,9 @@ class Backend(QtCore.QObject):
                                      # it should even work without the time.sleep()
 
         time.sleep(wait_time/1000) # in s
-
-        line_data = self.adw.GetData_Long(1, 0, self.tot_pixels)
+        # while self.adw.Process_Status(1):
+        #     time.sleep(0.010)
+        line_data = self.adw.GetData_Long(1, 1, self.tot_pixels)
 
         # line_data[0] = 0  # TO DO: fix the high count error on first element
 
