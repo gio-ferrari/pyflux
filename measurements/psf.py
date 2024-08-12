@@ -410,7 +410,7 @@ class Backend(QtCore.QObject):
     # bool 1: whether you feedback ON or OFF, bool 2: initial position
     xySignal = pyqtSignal(bool, bool)
     xyStopSignal = pyqtSignal(bool)
-    zSignal = pyqtSignal(bool, bool)
+    # zSignal = pyqtSignal(bool, bool)
     # zStopSignal = pyqtSignal(bool)  # Removed since now there is a single worker
     endSignal = pyqtSignal(str)
     scanSignal = pyqtSignal(bool, str, np.ndarray)
@@ -427,7 +427,7 @@ class Backend(QtCore.QObject):
 
         self.i = 0
         self.xyIsDone = False
-        self.zIsDone = False
+        # self.zIsDone = False
         self.scanIsDone = False
         self.measTimer = QtCore.QTimer()
         self.measTimer.timeout.connect(self.loop)
@@ -440,7 +440,7 @@ class Backend(QtCore.QObject):
     def start(self):
         self.i = 0
         self.xyIsDone = False
-        self.zIsDone = False
+        # self.zIsDone = False
         self.scanIsDone = False
         try:
             self.progressSignal.emit(0, np.array([]), -1)
@@ -468,7 +468,7 @@ class Backend(QtCore.QObject):
 
     def stop(self):
         self.measTimer.stop()
-        self.progressSignal.emit(100, None, None)  # changed from 0
+        self.progressSignal.emit(100, np.array([]), -1)  # changed from 0
         self.shutterSignal.emit(8, False)
 
         # new filename indicating that getUniqueName() has already found filename
@@ -498,16 +498,18 @@ class Backend(QtCore.QObject):
             self.xy_flag = False
             _lgr.debug(' xy signal emitted (%s)', self.i)
         if self.xyIsDone:
-            if self.z_flag:
-                self.zSignal.emit(True, initial)
-                self.z_flag = False
-                _lgr.debug('z signal emitted (%s)', self.i)
+            # if self.z_flag:
+            #     self.zSignal.emit(True, initial)
+            #     self.z_flag = False
+            #     _lgr.debug('z signal emitted (%s)', self.i)
 
-            if self.zIsDone:
+            # if self.zIsDone:
+            if True:  # ahora la estabilización en Z es contiunua
                 shutternum = self.i // self.nFrames + 1
                 if self.scan_flag:
                     if not self.alignMode:
                         self.shutterSignal.emit(shutternum, True)
+                        time.sleep(0.100)  # let the shutter move
                     initialPos = np.array([self.target_x, self.target_y,
                                            self.target_z], dtype=np.float64)
                     self.scanSignal.emit(True, 'frame', initialPos)
@@ -523,7 +525,7 @@ class Backend(QtCore.QObject):
                     self.z_flag = True
                     self.scan_flag = True
                     self.xyIsDone = False
-                    self.zIsDone = False
+                    # self.zIsDone = False
                     self.scanIsDone = False
 
                     self.data[self.i, :, :] = self.currentFrame
@@ -558,22 +560,23 @@ class Backend(QtCore.QObject):
 
         self.alignMode = params['alignMode']
 
-    @pyqtSlot(bool, float, float)
-    def get_xy_is_done(self, val, x, y):
+    @pyqtSlot(bool, float, float, float)
+    def get_xy_is_done(self, val, x, y, z):
         """
         Connection: [xy_tracking] xyIsDone
         """
         self.xyIsDone = True
         self.target_x = x
         self.target_y = y
-
-    @pyqtSlot(bool, float)
-    def get_z_is_done(self, val, z):
-        """
-        Connection: [focus] zIsDone
-        """
-        self.zIsDone = True
         self.target_z = z
+
+    # @pyqtSlot(bool, float)
+    # def get_z_is_done(self, val, z):
+    #     """
+    #     Connection: [focus] zIsDone
+    #     """
+    #     self.zIsDone = True
+    #     self.target_z = z
 
     @pyqtSlot(bool, np.ndarray)
     def get_scan_is_done(self, val, image):
