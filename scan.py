@@ -40,9 +40,7 @@ import tools.colormaps as cmaps
 from tools.lineprofile import linePlotWidget
 
 from drivers.minilasevo import MiniLasEvo
-import logging as _lgn
 
-_lgr = _lgn.getLogger(__name__)
 π = np.pi
 
 def setupDevice(adw):
@@ -1160,7 +1158,7 @@ class Backend(QtCore.QObject):
          Description: 
         
     - frameIsDone:
-         To: [psf] get_scan_is_done
+         To: [psf]
          Description: 
         
     - ROIcenterSignal:
@@ -1251,7 +1249,6 @@ class Backend(QtCore.QObject):
 #        print('[scan] selected ROI coordinates are:', self.selectedCoord)
                 
         self.calculate_derived_param()
-        print(f'[scan FUNCION: get_frontend_params] Posiciones iniciales: {self.x_i}, {self.y_i}, {self.z_i}')
     
     @pyqtSlot(np.ndarray, str)
     def get_ROI_coords_and_fit(self, array, actionType):
@@ -1372,7 +1369,6 @@ class Backend(QtCore.QObject):
         self.x_i = self.initialPos[0]
         self.y_i = self.initialPos[1]
         self.z_i = self.initialPos[2]
-        print("Los parámetros de inicio del escaneo son:", self.x_i, self.y_i, self.z_i)
 
         self.x_offset = 0
         self.y_offset = 0
@@ -1432,9 +1428,7 @@ class Backend(QtCore.QObject):
     def moveTo(self, x_f, y_f, z_f):
 
         self.set_moveTo_param(x_f, y_f, z_f)
-        _lgr.debug("[scan] Pasó set moveTo_param")
         self.adw.Start_Process(2)
-        _lgr.info('Process 2 started. Status: %s', self.adw.Process_Status(2)) #Este proceso se ocupa de mandar el piezo al lugar desde donde iniciará el escaneo
 
     def moveTo_action(self):
 
@@ -1639,13 +1633,8 @@ class Backend(QtCore.QObject):
 
     @pyqtSlot()
     def get_moveTo_initial_signal(self):
-        """
-        Connection: [psf] moveToInitialSignal
-        La señal es lanzada al ejecutarse la función start.
-        Ejecuta la función moveTo que ejecuta set_moveTo_param (configura los params de ADwin) e inicia el proceso 2
-        """
+        
         self.moveTo(*self.initialPos)
-        _lgr.debug("[scan] Posición inicial señal moveToInitialSignal: %s", self.initialPos) #Este print sólo que ejecuta al iniciar la medición
     
     def relative_move(self, axis, direction):
         
@@ -1760,9 +1749,8 @@ class Backend(QtCore.QObject):
         derived parameters (and updates ADwin data)
         """
         self.initialPos = initialPos
-        #print("[scan] posicion inicial que viene de single_xy_correction: ", self.initialPos)
         self.calculate_derived_param()
-        print(f'[scan FUNCION: get_scan_signal] Posiciones iniciales: {self.x_i}, {self.y_i}, {self.z_i}')
+
         self.liveview(lvbool, mode)
         
         
@@ -1792,21 +1780,29 @@ class Backend(QtCore.QObject):
             self.liveview_stop()
 
     def liveview_start(self):
+        
+#        self.plot_scan()
+        
         if self.scantype == 'xy':
-            # curr_z = tools.convert(self.adw.Get_FPar(72), 'UtoX')
+
             self.moveTo(self.x_i, self.y_i, self.z_i)
+
         if self.scantype == 'xz':
+
             self.moveTo(self.x_i, self.y_i + self.scanRange/2,
                         self.z_i - self.scanRange/2)
+
         if self.scantype == 'yz':
+
             self.moveTo(self.x_i + self.scanRange/2, self.y_i,
                         self.z_i - self.scanRange/2)
+
         self.viewtimer.start(self.viewtimer_time)
 
     def liveview_stop(self):
         """Finish liveview scan."""
         self.viewtimer.stop()
-        # time.sleep(.5)  # Not sure if neccesary, but let's wait
+        time.sleep(.5)  # Not sure if neccesary, but let's wait
         # self.moveTo(self.x_i + self.scanRange/2,
         #             self.y_i + self.scanRange/2,
         #             self.z_i
@@ -1875,13 +1871,11 @@ class Backend(QtCore.QObject):
                             self.z_i - self.scanRange/2)
             if self.acquisitionMode == 'frame':
                 self.liveview_stop()
-                self.frameIsDone.emit(True, self.image) #Pequeño cambio porque no quiero que actualice los parámetros
-            elif self.acquisitionMode == 'chechu':
+                self.frameIsDone.emit(True, self.image)
+            if self.acquisitionMode == 'chechu':
                 self.liveview_stop()
                 self.frameIsDoneChechu.emit(True, self.imageF_copy, self.imageB_copy)
-                self.update_device_param()
-            else: 
-                self.update_device_param()
+            self.update_device_param()
 
     @pyqtSlot(int, bool)
     def control_shutters(self, num, val):
@@ -2116,7 +2110,6 @@ if __name__ == '__main__':
     port = tools.get_MiniLasEvoPort()
     print('[scan] MiniLasEvo diode laser port:', port)
     diodelaser = MiniLasEvo(port)
-    print("Objeto diodelaser creado con éxito")
     
     DEVICENUMBER = 0x1
     adw = ADwin.ADwin(DEVICENUMBER, 1)

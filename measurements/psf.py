@@ -508,7 +508,6 @@ class Backend(QtCore.QObject):
 
         This would be best implemented using a state machine and no timer.
         """
-        _lgr.info('[psf] Inside loop')
         if self.i == 0:
             initial = True
         else:
