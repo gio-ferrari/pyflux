@@ -961,16 +961,16 @@ class Backend(QtCore.QObject):
         Description: toggles ON/OFF feedback for either continous (TCSPC)
         or discrete (scan imaging) correction
         """
-        _lgr.debug("[xyz_focus_lock] Inside toggle_feedback")
+        _lgr.debug("Inside toggle_feedback")
         if mode not in ('discrete', 'continous'):
             _lgr.warning("Invalid feedback mode: %s", mode)
         if type(val) is not bool:
             _lgr.warning("Toggling feedback mode not boolean; %s", type(val))
         self.set_xy_feedback(val, mode) #Por qué no le manda el modo discreto cuando proviene de get_stop_signal
-        _lgr.debug("[xyz_focus_lock] pasó set_xy_feedback: val: %s mode: %s.", val, mode)
+        _lgr.debug("pasó set_xy_feedback: val: %s mode: %s.", val, mode)
         self.set_z_feedback(val, mode)
-        _lgr.debug("[xyz_focus_lock] pasó set_z_feedback: val: %s mode: %s.", val, mode)
-        _lgr.debug('[xyz_focus_lock] Feedback loop active: %s', val)
+        _lgr.debug("pasó set_z_feedback: val: %s mode: %s.", val, mode)
+        _lgr.debug('Feedback loop active: %s', val)
 
     def set_z_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para z."""
@@ -1012,7 +1012,7 @@ class Backend(QtCore.QObject):
                 _lgr.info("Doble activacion feedback xy")
                 _lgr.debug("NO DEBE SALIR ESTO EN PSF MEASUREMENT")
                 return
-            if (mode == 'continous') and (not self.tracking_xy): # no entra desde single_xy_correction
+            if (mode == 'continous') and (not self.tracking_xy):  # Si no hicimos tracking antes, falla el single 
                 _lgr.warning("Requested XY feedback without tracking. Enabling tracking")
                 self.toggle_tracking_xy(True)
                 _lgr.debug("NO DEBE SALIR ESTO EN PSF MEASUREMENT")
@@ -1024,7 +1024,7 @@ class Backend(QtCore.QObject):
                 self.feedback_xy = True
                 _lgr.debug("NO DEBE SALIR ESTO EN PSF MEASUREMENT")
         elif val is False: # no entra desde single_xy_correction, sino desde get_stop_signal cuando se emite en start [psf] la señal xySignalStop
-            #entiendo que para [psf] el resultado es apagar el proceso 4 (feedback xy)
+            # entiendo que para [psf] el resultado es apagar el proceso 4 (feedback xy)
             _lgr.debug("False set_xy_feedback")
             if not self.feedback_xy:
                 _lgr.info("Doble desactivacion feedback xy")
@@ -1148,7 +1148,7 @@ class Backend(QtCore.QObject):
             except Exception as e:
                 self.currentx[i] = self.initialx[i]
                 self.currenty[i] = self.initialy[i]
-                _lgr.warning("Error en Gaussian_fit: %e", e)
+                _lgr.warning("Error en Gaussian_fit: %s", e)
 
     def _check_xy_fit_limits(self):
         """Chequea que los fiteos no se hayan ido de límite.
@@ -1551,18 +1551,19 @@ class Backend(QtCore.QObject):
         self.j = 0  # iterator on the data arrays
         self.j_z = 0
 
-    # Está en xy y en focus. Creo que no está conectado a nada (A PSF, Andi)
     @pyqtSlot(bool)
     def get_stop_signal(self, stoplive):
-        """Para todo.
+        """Para todo xy, no Z.
 
         Connection: [psf] xyStopSignal
         Description: stops liveview, tracking, feedback if they where running
         to start the psf measurement with discrete xy - z corrections
         """
         _lgr.debug("Got stop signal with value %s", stoplive)
-        self.toggle_feedback(False)# Añadir discrete mode para enviar
-        self.toggle_tracking(False) #Aquí se podría poner self.toggle_tracking_xy(False) Para que deje funcionando el tracking z FC
+        # self.toggle_feedback(False)# Añadir discrete mode para enviar
+        self.set_xy_feedback(False)
+        # self.toggle_tracking(False) #Aquí se podría poner self.toggle_tracking_xy(False) Para que deje funcionando el tracking z FC
+        self.toggle_tracking_xy(False)
 
         # TODO: Ver si no restringir a xy
         self.reset_graph()
@@ -1733,17 +1734,17 @@ class Backend(QtCore.QObject):
         self.xy_filename = fname + 'xy_data'
         self.export_data()
         # TODO: decide whether I want feedback ON/OFF at the end of measurement
-        self.toggle_feedback(False)
+        # self.toggle_feedback(False)
         # check
-        self.toggle_tracking(False)
+        # self.toggle_tracking(False)
         self.pattern = False
         self.reset_graph()
         self.reset_data_arrays()
         # comparar con la funcion de focus: algo que ver con focusTimer
         # TODO: ¿Seguro de que queremos apagar?
-        if self.camON:
-            self.viewtimer.stop()
-            self.liveviewSignal.emit(False)
+        # if self.camON:
+        #     self.viewtimer.stop()
+        #     self.liveviewSignal.emit(False)
 
     @pyqtSlot(float)
     def get_focuslockposition(self, position):

@@ -475,7 +475,7 @@ class Backend(QtCore.QObject):
             self.shutterSignal.emit(5, True)
             self.shutterSignal.emit(6, True)
             self.moveToInitialSignal.emit() # Esta señal es la que modifica las posiciones de inicio
-    
+            time.sleep(.3)  # Dar tiempo a la señal para ir a scan y a la platina para moverse
             self.data = np.zeros((self.totalFrameNum, self.nPixels, self.nPixels))
             _lgr.debug('Data shape is %s', np.shape(self.data))
             self.xy_flag = True
@@ -516,7 +516,7 @@ class Backend(QtCore.QObject):
         if self.xy_flag:
             self.xySignal.emit(True, initial)
             self.xy_flag = False
-            _lgr.debug(' xy signal emitted (%s)', self.i, "going to single_xy_correction [xyz_focus_lock]")
+            _lgr.debug(' xy signal emitted (%s) going to single_xy_correction [xyz_focus_lock]', self.i)
         if self.xyIsDone: 
             # if self.z_flag:
             #     self.zSignal.emit(True, initial)
@@ -525,7 +525,7 @@ class Backend(QtCore.QObject):
 
             # if self.zIsDone:
             if True:  # ahora la estabilización en Z es continua
-                shutternum = self.i // self.nFrames + 1
+                shutternum = self.i // self.nFrames + 1  # self.i % 4 + 1
                 if self.scan_flag:
                     if not self.alignMode:
                         self.shutterSignal.emit(shutternum, True)
