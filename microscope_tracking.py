@@ -29,7 +29,6 @@ from tkinter import Tk, filedialog
 
 import drivers.ADwin as ADwin
 import drivers.ids_cam as ids_cam
-import lantz.drivers.andor.ccd as ccd
 
 import xyz_focus_lock as focus
 import scan #scan works with minilasEvo 632, new_scan to work with another wavelength
@@ -264,8 +263,6 @@ if __name__ == '__main__':
         pass
     
     ph = picoharp.PicoHarp300()
-    #andor = ccd.CCD()  
-    #print("Success creating object ccd for andor")
     
     DEVICENUMBER = 0x1
     adw = ADwin.ADwin(DEVICENUMBER, 1)
