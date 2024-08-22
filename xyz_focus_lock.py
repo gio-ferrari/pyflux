@@ -651,6 +651,14 @@ class Backend(QtCore.QObject):
     def __init__(self, camera, adw, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.camera = camera  # no need to setup or initialize camera
+        if self.camera.open_device():
+            try:
+                self.camera.start_acquisition()
+            except Exception as e:
+                print("Exception", str(e))
+        else:
+            self.camera.destroy_all()
+            raise Exception("No pude abrir la cámara")
 
         self.adw = adw
         # folder
@@ -710,17 +718,6 @@ class Backend(QtCore.QObject):
 
         self.previous_image = None  # para chequear que la imagen cambie
         self.currentz = 0.0  # Valor en pixeles dentro del roi del z
-
-        if self.camera.open_device():
-            self.camera.set_roi(16, 16, 1920, 1200)
-            try:
-                self.camera.alloc_and_announce_buffers()
-                self.camera.start_acquisition()
-            except Exception as e:
-                print("Exception", str(e))
-        else:
-            self.camera.destroy_all()
-            raise Exception("No pude abrir la cámara")
 
     @pyqtSlot(int, bool)
     def toggle_tracking_shutter(self, num, val):
@@ -964,18 +961,21 @@ class Backend(QtCore.QObject):
         Description: toggles ON/OFF feedback for either continous (TCSPC)
         or discrete (scan imaging) correction
         """
+        _lgr.debug("Inside toggle_feedback")
         if mode not in ('discrete', 'continous'):
             _lgr.warning("Invalid feedback mode: %s", mode)
         if type(val) is not bool:
             _lgr.warning("Toggling feedback mode not boolean; %s", type(val))
-
-        self.set_xy_feedback(val, mode)
+        self.set_xy_feedback(val, mode) #Por qué no le manda el modo discreto cuando proviene de get_stop_signal
+        _lgr.debug("pasó set_xy_feedback: val: %s mode: %s.", val, mode)
         self.set_z_feedback(val, mode)
+        _lgr.debug("pasó set_z_feedback: val: %s mode: %s.", val, mode)
         _lgr.debug('Feedback loop active: %s', val)
 
     def set_z_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para z."""
         if val is True:
+            _lgr.debug("True set_z_feedback")
             if self.feedback_z:  # esto es para evitar loops por la actualización de back a front
                 _lgr.info("Doble activación de z")
                 return
@@ -985,17 +985,19 @@ class Backend(QtCore.QObject):
                     _lgr.error("Could not enable Z tracking")
                     self.notify_status()
                     return
-            if mode == 'continous':  # set up and start actuator process
+            if True: #mode == 'continous':  # set up and start actuator process
+                _lgr.debug('going to set_actuator_param_z')
                 self.set_actuator_param_z()
                 self.adw.Start_Process(3)  # proceso para z
                 _lgr.info('Process 3 started. Status: %s', self.adw.Process_Status(3))
                 _lgr.debug('z Feedback loop ON')
                 self.feedback_z = True
         elif val is False:
+            _lgr.debug("False set_z_feedback")
             if not self.feedback_z:
                 _lgr.info("Doble desactivación de z")
             self.feedback_z = False
-            self.adw.Stop_Process(3)
+            self.adw.Stop_Process(3) #Detiene el proceso 3 sea continuous or discrete, distinto a set_xy_feedback
             _lgr.info('Process 3 stopped. Status: %s', self.adw.Process_Status(3))
             _lgr.debug('z Feedback loop Off')
         else:
@@ -1005,27 +1007,35 @@ class Backend(QtCore.QObject):
     def set_xy_feedback(self, val, mode='continous'):
         """Inicia y detiene los procesos de estabilizacion de la ADwin para xy."""
         if val is True:
+            _lgr.debug("True set_xy_feedback")
             if self.feedback_xy:
                 _lgr.info("Doble activacion feedback xy")
+                _lgr.debug("NO DEBE SALIR ESTO EN PSF MEASUREMENT")
                 return
-            if (mode == 'continous') and (not self.tracking_xy):
+            if (mode == 'continous') and (not self.tracking_xy):  # Si no hicimos tracking antes, falla el single 
                 _lgr.warning("Requested XY feedback without tracking. Enabling tracking")
                 self.toggle_tracking_xy(True)
-            if mode == 'continous':  # set up and start actuator process
+                _lgr.debug("NO DEBE SALIR ESTO EN PSF MEASUREMENT")
+            if mode == 'continous':  # set up and start actuator process # no entra desde single_xy_correction
                 self.set_actuator_param_xy()
-                self.adw.Start_Process(4)  # proceso para xy
+                self.adw.Start_Process(4)  # proceso para xy #duda: Acerca de esto, no enciende el proceso en el modo discreto porque nunca lo apagó! FC Check
                 _lgr.info('Process 4 started. Status: %s', self.adw.Process_Status(4))
                 _lgr.debug('xy Feedback loop ON')
                 self.feedback_xy = True
-        elif val is False:
+                _lgr.debug("NO DEBE SALIR ESTO EN PSF MEASUREMENT")
+        elif val is False: # no entra desde single_xy_correction, sino desde get_stop_signal cuando se emite en start [psf] la señal xySignalStop
+            # entiendo que para [psf] el resultado es apagar el proceso 4 (feedback xy)
+            _lgr.debug("False set_xy_feedback")
             if not self.feedback_xy:
                 _lgr.info("Doble desactivacion feedback xy")
             self.feedback_xy = False
             # FIXME: check condition below
-            if True:  # mode == 'continous':
+            if mode == 'continous': #duda FC: el proceso 4 se detiene, pero sólo funciona para modo continuo o en modo discreto también?? Cuando le dije que el modo es discreto en psf [start]???
                 self.adw.Stop_Process(4)
                 _lgr.info('Process 4 stopped. Status: %s', self.adw.Process_Status(4))
+                _lgr.debug("Self.displacement en set_xy_feeedback antes: %s", self.displacement)
                 self.displacement = np.array([0.0, 0.0])
+                _lgr.debug("Self.displacement en set_xy_feedback después: %s", self.displacement)
                 _lgr.debug('xy Feedback loop Off')
         else:
             _lgr.error("Deberías pasar un booleano, no: %s", val)
@@ -1138,7 +1148,7 @@ class Backend(QtCore.QObject):
             except Exception as e:
                 self.currentx[i] = self.initialx[i]
                 self.currenty[i] = self.initialy[i]
-                _lgr.warning("Error en Gaussian_fit: %e", e)
+                _lgr.warning("Error en Gaussian_fit: %s", e)
 
     def _check_xy_fit_limits(self):
         """Chequea que los fiteos no se hayan ido de límite.
@@ -1225,6 +1235,7 @@ class Backend(QtCore.QObject):
             self.notify_status()
             dx = 0
             dy = 0
+
         # compensate for the mismatch between camera/piezo system of reference
         # theta = np.radians(-3.7)   # measured angle between camera and piezo
         # c, s = np.cos(theta), np.sin(theta)
@@ -1291,8 +1302,11 @@ class Backend(QtCore.QObject):
         From: [psf] xySignal
         feedback_val is unused.
         """
+        _lgr.info('[xyz_focus_lock] Inside single_xy_correction')
         if initial:
-            self.set_xy_feedback(True, mode='discrete')
+            self.set_xy_feedback(True, mode='discrete') #Notar que aquí sí le mando el modo discreto, pero esta linea no hace nada según yo
+            _lgr.debug("Ahora saldrá el mje doble activación")
+            self.set_z_feedback(True, mode='discrete') #Encienda el feedback en z
             _lgr.info("Initial xy single tracking")
             if not self.feedback_z:
                 _lgr.warning("Single correction without Z feedback. Turning on.")
@@ -1306,7 +1320,7 @@ class Backend(QtCore.QObject):
         # if initial:
         #     self._initialize_xy_positions()
 
-        self.track('xy')
+        self.track('xy') #Aquí obtiene las posiciones: self._fit_xy_rois() del centro de la Np, self.x y self.y
         self.update_graph_data()
         target_x, target_y = self.correct_xy(mode='discrete')
         target_x = np.round(target_x, 3)
@@ -1405,6 +1419,7 @@ class Backend(QtCore.QObject):
 
     def set_actuator_param_z(self, pixeltime=1000):
         """Inicializar los parámetros z antes de arrancar los scripts."""
+        _lgr.debug('Inside set_actuator_param_z')
         self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))
 
         # set-up actuator initial param script
@@ -1536,18 +1551,19 @@ class Backend(QtCore.QObject):
         self.j = 0  # iterator on the data arrays
         self.j_z = 0
 
-    # Está en xy y en focus. Creo que no está conectado a nada (A PSF, Andi)
     @pyqtSlot(bool)
     def get_stop_signal(self, stoplive):
-        """Para todo.
+        """Para todo xy, no Z.
 
         Connection: [psf] xyStopSignal
         Description: stops liveview, tracking, feedback if they where running
         to start the psf measurement with discrete xy - z corrections
         """
         _lgr.debug("Got stop signal with value %s", stoplive)
-        self.toggle_feedback(False)
-        self.toggle_tracking(False)
+        # self.toggle_feedback(False)# Añadir discrete mode para enviar
+        self.set_xy_feedback(False)
+        # self.toggle_tracking(False) #Aquí se podría poner self.toggle_tracking_xy(False) Para que deje funcionando el tracking z FC
+        self.toggle_tracking_xy(False)
 
         # TODO: Ver si no restringir a xy
         self.reset_graph()
@@ -1718,17 +1734,17 @@ class Backend(QtCore.QObject):
         self.xy_filename = fname + 'xy_data'
         self.export_data()
         # TODO: decide whether I want feedback ON/OFF at the end of measurement
-        self.toggle_feedback(False)
+        # self.toggle_feedback(False)
         # check
-        self.toggle_tracking(False)
+        # self.toggle_tracking(False)
         self.pattern = False
         self.reset_graph()
         self.reset_data_arrays()
         # comparar con la funcion de focus: algo que ver con focusTimer
         # TODO: ¿Seguro de que queremos apagar?
-        if self.camON:
-            self.viewtimer.stop()
-            self.liveviewSignal.emit(False)
+        # if self.camON:
+        #     self.viewtimer.stop()
+        #     self.liveviewSignal.emit(False)
 
     @pyqtSlot(float)
     def get_focuslockposition(self, position):

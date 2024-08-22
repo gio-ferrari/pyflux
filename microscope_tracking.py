@@ -194,7 +194,7 @@ class Backend(QtCore.QObject):
         self.minfluxWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
 
     def setup_psf_connections(self):
-        self.psfWorker.scanSignal.connect(self.scanWorker.get_scan_signal)
+        self.psfWorker.scanSignal.connect(self.scanWorker.get_scan_signal) #Esta es la conexion que permite cambiar el punto de inicio del escaneo
         self.psfWorker.xySignal.connect(self.xyzWorker.single_xy_correction)
         # self.psfWorker.zSignal.connect(self.xyzWorker.single_z_correction)
         self.psfWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
@@ -209,7 +209,7 @@ class Backend(QtCore.QObject):
         
         self.scanWorker.frameIsDone.connect(self.psfWorker.get_scan_is_done)
         self.xyzWorker.xyIsDone.connect(self.psfWorker.get_xy_is_done)
-        self.xyzWorker.zIsDone.connect(self.psfWorker.get_z_is_done)
+        #self.xyzWorker.zIsDone.connect(self.psfWorker.get_z_is_done)
          
     def make_connection(self, frontend):
         
@@ -351,4 +351,4 @@ if __name__ == '__main__':
 #    psfThread.start()
     
     gui.showMaximized()
-    #app.exec_()
+    app.exec_()

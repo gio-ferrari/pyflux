@@ -114,8 +114,8 @@ class Frontend(QtGui.QFrame):
             if order >= 0:
                 n_img = order % self._nframes
                 n_donut = order // self._nframes
-                _lgr.debug("Actualizando imagen %s/%s de la dona %s", n_img+1, self._nframes,
-                           n_donut)
+                # _lgr.debug("Actualizando imagen %s/%s de la dona %s", n_img+1, self._nframes,
+                #            n_donut)
                 # PLACE
                 self.update_donut_image(n_donut, image)
         except Exception as e:
@@ -420,6 +420,25 @@ class Backend(QtCore.QObject):
     saveConfigSignal = pyqtSignal(str)
     """
     Signals
+    
+    xySignal: 
+        Se emite en función loop en [psf]
+        Va a función single_xy_correction en [xyz_focus_lock]
+        
+    xyStopSignal:
+        Se emite en start en [psf]
+        Va a get_stop_signal en [xyz_focus_lock]
+    
+    moveToInitialSignal: 
+        Se emite en start en [psf]
+        Va a la función get_moveTo_initial_signal en scan.py. 
+        Esta función toma coordenadas de posición self.initialPos, los desempaqueta
+        y pasa los parámetros a través de la función moveTo a la función set_moveTo_param, que pasa los parámetros a la adwin.
+        NOTA: self.initialPos sólo se modifica cuando se usan los botones de movimiento relativo,
+        en get_scan_signal, y cuando hay una modificacion desde el teclado.
+    
+
+        
     """
 
     def __init__(self, *args, **kwargs):
@@ -434,7 +453,7 @@ class Backend(QtCore.QObject):
 
         self.checkboxID_old = 7
         self.alignMode = False
-        self.lastFileName = None  # las filename used for saving
+        self.lastFileName = None  # last filename used for saving
         self.data: np.ndarray | None = None  # data
 
     def start(self):
@@ -447,7 +466,7 @@ class Backend(QtCore.QObject):
             self.shutterSignal.emit(7, False)
             self.shutterSignal.emit(11, False)
     
-            _lgr.info('PSF measurement started')
+            _lgr.info('[psf] Inside start ')
     
             self.xyStopSignal.emit(True)
             # self.zStopSignal.emit(True)
@@ -455,8 +474,8 @@ class Backend(QtCore.QObject):
             # open IR and tracking shutter
             self.shutterSignal.emit(5, True)
             self.shutterSignal.emit(6, True)
-            self.moveToInitialSignal.emit()
-    
+            self.moveToInitialSignal.emit() # Esta señal es la que modifica las posiciones de inicio
+            time.sleep(.3)  # Dar tiempo a la señal para ir a scan y a la platina para moverse
             self.data = np.zeros((self.totalFrameNum, self.nPixels, self.nPixels))
             _lgr.debug('Data shape is %s', np.shape(self.data))
             self.xy_flag = True
@@ -465,6 +484,7 @@ class Backend(QtCore.QObject):
         except Exception as e:
             print("Excepcion en start:", e)
         self.measTimer.start(0)
+        _lgr.info('[psf] PSF measurement started')
 
     def stop(self):
         self.measTimer.stop()
@@ -496,22 +516,21 @@ class Backend(QtCore.QObject):
         if self.xy_flag:
             self.xySignal.emit(True, initial)
             self.xy_flag = False
-            _lgr.debug(' xy signal emitted (%s)', self.i)
-        if self.xyIsDone:
+            _lgr.debug(' xy signal emitted (%s) going to single_xy_correction [xyz_focus_lock]', self.i)
+        if self.xyIsDone: 
             # if self.z_flag:
             #     self.zSignal.emit(True, initial)
             #     self.z_flag = False
             #     _lgr.debug('z signal emitted (%s)', self.i)
 
             # if self.zIsDone:
-            if True:  # ahora la estabilización en Z es contiunua
-                shutternum = self.i // self.nFrames + 1
+            if True:  # ahora la estabilización en Z es continua
+                shutternum = self.i // self.nFrames + 1  # self.i % 4 + 1
                 if self.scan_flag:
                     if not self.alignMode:
                         self.shutterSignal.emit(shutternum, True)
-                        time.sleep(0.100)  # let the shutter move
-                    initialPos = np.array([self.target_x, self.target_y,
-                                           self.target_z], dtype=np.float64)
+                        time.sleep(0.150)  # let the shutter move
+                    initialPos = np.array([self.target_x, self.target_y, self.target_z], dtype=np.float64)
                     self.scanSignal.emit(True, 'frame', initialPos)
                     self.scan_flag = False
                     _lgr.debug('scan signal emitted (%s)', self.i)
@@ -569,6 +588,7 @@ class Backend(QtCore.QObject):
         self.target_x = x
         self.target_y = y
         self.target_z = z
+        print(f"[psf] FUNCION get_xy_is_done: Nuevas coords inicio de escaneo: ({self.target_x},{self.target_y},{self.target_z})")
 
     # @pyqtSlot(bool, float)
     # def get_z_is_done(self, val, z):
@@ -589,7 +609,7 @@ class Backend(QtCore.QObject):
     @pyqtSlot(dict)
     def get_scan_parameters(self, params):
         # TO DO: this function is connected to the scan frontend, it should
-        # be connected to a proper funciton in the scan backend
+        # be connected to a proper function in the scan backend
         self.nPixels = int(params['NofPixels'])
         # TO DO: build config file
 

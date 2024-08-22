@@ -197,11 +197,14 @@ class Crosshair():
         self.vLine = pg.InfiniteLine(pos=0, angle=90, movable=False)
         self.hLine = pg.InfiniteLine(pos=0, angle=0,  movable=False)
 
-    def mouseMoved(self, evt):        
-        if self.vb.sceneBoundingRect().contains(evt):
-            mousePoint = self.vb.mapSceneToView(evt)
-            self.vLine.setPos(mousePoint.x())
-            self.hLine.setPos(mousePoint.y())
+    def mouseMoved(self, evt):
+        try:
+            if self.vb.sceneBoundingRect().contains(evt):
+                mousePoint = self.vb.mapSceneToView(evt)
+                self.vLine.setPos(mousePoint.x())
+                self.hLine.setPos(mousePoint.y())
+        except:
+            pass
 
     def mouseClicked(self, evt):
         try:
