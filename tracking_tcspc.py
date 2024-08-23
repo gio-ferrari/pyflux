@@ -34,6 +34,8 @@ import PicoHarp.Read_PTU as Read_PTU
 # import drivers.ADwin as ADwin
 from tools import analysis as _analysis
 from PicoHarp import Read_PTU_fast as _rpf
+import configparser
+from dataclasses import dataclass as _dataclass
 
 import qdarkstyle
 import ctypes
@@ -48,6 +50,21 @@ _lgr = _lgn.getLogger(__name__)
 _lgn.basicConfig(level=_lgn.INFO)
 
 
+@_dataclass
+class PSF_metadata:
+    scan_range: int  # en µm, 'Scan range (µm)'
+    n_pixels:  int  # 'Number of pixels'
+    px_size: int  # 'Pixel size (µm)'
+    scan_type: str  # 'Scan type'
+
+
+# está en tools
+def loadConfig(filename) -> configparser.SectionProxy:
+    """Load a config file and return just the parameters."""
+    config = configparser.ConfigParser()
+    config.read(filename)
+    return config['Scanning parameters']
+
 class Frontend(QtWidgets.QFrame):
     """Frontend para TCSPC con tracking."""
 
@@ -59,6 +76,7 @@ class Frontend(QtWidgets.QFrame):
     _localizations = [[]]  # one list per shift
     _shifts = [(0, 0),]
     _PSF = None
+    _metadata = None
 
     def __init__(self, *args, **kwargs):
         """No hace nada."""
@@ -72,6 +90,9 @@ class Frontend(QtWidgets.QFrame):
         """Inicia la medida."""
         if self._PSF is None:
             print("PSFs needed to start measurements")
+            return
+        if self._config is None:
+            print("config needed to start measurements")
             return
         self.clear_data()
         self.measureButton.setEnabled(False)
@@ -106,6 +127,30 @@ class Frontend(QtWidgets.QFrame):
                     print("error abriendo PSF", e , type(e))
         except OSError:
             pass
+
+    def load_config(self):
+        """Elegir archivo de configuración."""
+        try:
+            root = Tk()
+            root.withdraw()
+            cfgfile = filedialog.askopenfilename(parent=root, title="Elegir configuración",
+                                             initialdir=self.initialDir, filetypes=(("txt", "*.txt"),),
+                                             mode="rt")
+            root.destroy()
+            if cfgfile:
+                try:
+                    config = loadConfig(cfgfile)
+                except Exception as e:
+                    print("error configuración", e , type(e))
+        except OSError:
+            pass
+        metadata = PSF_metadata(config['Scan range (µm)'], config['Number of pixels'],
+                                config['Pixel size (µm)'], config['Scan type'])
+        if metadata.scan_type != 'xy':
+            _lgr.error("Scan invalido")
+        _lgr.info("%s", metadata)
+        self._config = metadata
+
 
     def emit_param(self):
         # TO DO: change for dictionary
@@ -545,7 +590,8 @@ class PicoHarpReaderThread(_th.Thread):
             microbin_duration = 16E-3  # in ns, instrumental, match with front
             macrobin_duration = 12.5  # in ns, match with opticalfibers
             binwidth = int(np.round(macrobin_duration / microbin_duration))  # microbins per macrobin
-            self.startTTTR_Track(self._fname, self._img_evt, self._PSFs, self._SBR, binwidth)
+            locator = _analysis.MinFluxLocator(self._PSFs, 16, 1)
+            self.startTTTR_Track(self._fname, self._img_evt, locator, binwidth)
         except Exception as e:
             _lgr.error("Exception %s measuring: %s", type(e), e)
         self._signaler.ack_measurement_end()
@@ -557,7 +603,7 @@ class PicoHarpReaderThread(_th.Thread):
     def stop_PH_measure(self):
         self.ph.PH_StopMeas(ctypes.c_int(self._DEV_NUM))
 
-    def startTTTR_Track(self, outputfilename: str, img_evt: _th.Event, PSF, SBR,
+    def startTTTR_Track(self, outputfilename: str, img_evt: _th.Event, locator,
                         binwidth: int):
         """Medida TTR lista para tracking.
 
@@ -580,7 +626,6 @@ class PicoHarpReaderThread(_th.Thread):
         data_q = _Queue()
         wt = WriterThread(outputfile, data_q, buffer_q, self._signaler)
         wt.start()
-        locator = _analysis.MinFluxLocator(PSF, SBR, )
         measuring = True
         n_bins = 256# int(np.ceil(4096 / binwidth))  # (4096+bins-1) / /bins
         _lgr.info("Usando %s bines", n_bins)
