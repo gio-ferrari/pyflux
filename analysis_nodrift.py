@@ -42,7 +42,7 @@ examples.run()
 import os
 import copy
 
-os.chdir(r'C:/Users/Cibion/Documents/GithubPRO/pyflux')
+os.chdir(r'C:/Users/Minflux/Documents/GithubPRO/pyflux')
 
 import sys
 import time
