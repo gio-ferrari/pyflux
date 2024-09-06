@@ -238,7 +238,7 @@ def record2time(data: np.ndarray, out_dtime, out_truesync, oflcorrection):
 @numba.njit((numba.uint64[:])(numba.uint32[:], numba.uint64[:], numba.int64),
             parallel=True, boundscheck=True)
 def all_in_one(data, out, binwidth):
-    binwidth = 400
+    # binwidth = 400
     # nbins = 4
     out[:] = 0  # np.zeros((nbins,), dtype=np.uint64)
     for d in data:

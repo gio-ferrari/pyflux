@@ -550,9 +550,9 @@ class Backend(QtCore.QObject):
         _lgr.info("Guardando array de PSFs")
         try:
             npx = self.data.shape[-1]  # shady
-            # esto suma de a 4 juntos, si cambiamos el excaneo hay que hacer
+            # esto suma de a 4 juntos, si cambiamos el escaneo hay que hacer
             # o la suma en axis=0 u otro reshape
-            to_save = np.mean(self.data.reshape((-1, 4, npx, npx)), axis=1)
+            to_save = np.mean(self.data.reshape((4, -1, npx, npx)), axis=1)
             _lgr.debug("data shape: %s", to_save.shape)
             np.save(filename + ".npy", to_save)
         except Exception as e:
