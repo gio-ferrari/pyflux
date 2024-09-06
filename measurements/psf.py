@@ -546,6 +546,17 @@ class Backend(QtCore.QObject):
         # make scan saving config file
         self.lastFileName = filename
         self.saveConfigSignal.emit(filename)
+        self.data = np.array(self.data, dtype=np.float32)
+        _lgr.info("Guardando array de PSFs")
+        try:
+            npx = self.data.shape[-1]  # shady
+            # esto suma de a 4 juntos, si cambiamos el excaneo hay que hacer
+            # o la suma en axis=0 u otro reshape
+            to_save = np.mean(self.data.reshape((-1, 4, npx, npx)), axis=1)
+            _lgr.debug("data shape: %s", to_save.shape)
+            np.save(filename + ".npy", to_save)
+        except Exception as e:
+            _lgr.error("Excepción %s (%s) grabando el arreglo", type(e), e)
 
     @pyqtSlot(dict)
     def get_frontend_param(self, params):
