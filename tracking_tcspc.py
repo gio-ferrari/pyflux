@@ -70,13 +70,13 @@ class Frontend(QtWidgets.QFrame):
 
     # Signals
     paramSignal = pyqtSignal(list)
-    measureSignal = pyqtSignal(np.ndarray)  # basta con esto de los eventos
+    measureSignal = pyqtSignal(np.ndarray, float)  # basta con esto de los eventos
 
     # Data
     _localizations = [[]]  # one list per shift
     _shifts = [(0, 0),]
     _PSF = None
-    _metadata = None
+    _config = None
 
     def __init__(self, *args, **kwargs):
         """No hace nada."""
@@ -96,7 +96,7 @@ class Frontend(QtWidgets.QFrame):
             return
         self.clear_data()
         self.measureButton.setEnabled(False)
-        self.measureSignal.emit(self._PSF)
+        self.measureSignal.emit(self._PSF, float(self._config.px_size)*1E3)
 
     def load_folder(self):
         """Muestra una ventana de selección de carpeta."""
@@ -122,6 +122,7 @@ class Frontend(QtWidgets.QFrame):
             if psffile:
                 try:
                     self._PSF = np.load(psffile, allow_pickle=False)
+                    _lgr.info("Cargadas donas con forma %s", self._PSF.shape)
                     psffile.close()
                 except Exception as e:
                     print("error abriendo PSF", e , type(e))
@@ -135,14 +136,15 @@ class Frontend(QtWidgets.QFrame):
             root.withdraw()
             cfgfile = filedialog.askopenfilename(parent=root, title="Elegir configuración",
                                              initialdir=self.initialDir, filetypes=(("txt", "*.txt"),),
-                                             mode="rt")
+                                             )
             root.destroy()
             if cfgfile:
                 try:
                     config = loadConfig(cfgfile)
                 except Exception as e:
                     print("error configuración", e , type(e))
-        except OSError:
+        except OSError as e:
+            print(e, type(e))
             pass
         metadata = PSF_metadata(config['Scan range (µm)'], config['Number of pixels'],
                                 config['Pixel size (µm)'], config['Scan type'])
@@ -246,8 +248,8 @@ class Frontend(QtWidgets.QFrame):
 
         # widget with tcspc parameters
         self.paramWidget = QGroupBox("TCSPC parameter")
-        self.paramWidget.setFixedHeight(230)
-        self.paramWidget.setFixedWidth(230)
+        self.paramWidget.setFixedHeight(250)
+        self.paramWidget.setFixedWidth(250)
 
         phParamTitle = QtWidgets.QLabel("<h2>TCSPC settings</h2>")
         phParamTitle.setTextFormat(QtCore.Qt.RichText)
@@ -257,8 +259,8 @@ class Frontend(QtWidgets.QFrame):
 
         # file/folder widget
         self.fileWidget = QGroupBox("Save options")
-        self.fileWidget.setFixedHeight(130)
-        self.fileWidget.setFixedWidth(230)
+        self.fileWidget.setFixedHeight(180)
+        self.fileWidget.setFixedWidth(250)
         # Buttons
         self.prepareButton = QtWidgets.QPushButton("Prepare TTTR")
         self.measureButton = QtWidgets.QPushButton("Measure TTTR")
@@ -318,11 +320,14 @@ class Frontend(QtWidgets.QFrame):
         self.browseFolderButton.setCheckable(True)
         self.browsePSFButton = QtWidgets.QPushButton("PSF")
         self.browsePSFButton.setCheckable(True)
+        self.browseConfigButton = QtWidgets.QPushButton("Config")
+        self.browseConfigButton.setCheckable(True)
 
         # GUI connections
         self.measureButton.clicked.connect(self.start_measurement)
         self.browseFolderButton.clicked.connect(self.load_folder)
         self.browsePSFButton.clicked.connect(self.load_PSF)
+        self.browseConfigButton.clicked.connect(self.load_config)
         self.clearButton.clicked.connect(self.clear_data)
 
         self.acqtimeEdit.textChanged.connect(self.emit_param)
@@ -364,6 +369,7 @@ class Frontend(QtWidgets.QFrame):
         file_subgrid.addWidget(self.folderEdit, 2, 0, 1, 2)
         file_subgrid.addWidget(self.browseFolderButton, 3, 0)
         file_subgrid.addWidget(self.browsePSFButton, 4, 0)
+        file_subgrid.addWidget(self.browseConfigButton, 4, 1)
 
     def closeEvent(self, *args, **kwargs):
 
@@ -422,8 +428,8 @@ class Backend(QtCore.QObject):
         _lgr.info("Offset = %s ps", self.ph.offset)
         _lgr.info("TCSPC prepared for TTTR measurement")
 
-    @pyqtSlot(np.ndarray)
-    def measure(self, PSF: np.ndarray):
+    @pyqtSlot(np.ndarray, float)
+    def measure(self, PSF: np.ndarray, nmppx: float):
         """Called from GUI."""
         t0 = time.time()
         self.prepare_ph()
@@ -432,7 +438,7 @@ class Backend(QtCore.QObject):
         t1 = time.time()
         _lgr.info("Starting the PH measurement took %s s", (t1 - t0))
         self._measure_thread = PicoHarpReaderThread(self.ph, "Lefilename", None,
-                                                    PSF, 18., self)
+                                                    PSF, nmppx, 18., self)
         self._measure_thread.start()
 
     @pyqtSlot(str, int, int)
@@ -551,7 +557,7 @@ class PicoHarpReaderThread(_th.Thread):
     _stop_event: _th.Event = _th.Event()
 
     def __init__(self, ph: picoharp.PicoHarp300, fname: str, img_evt: _th.Event,
-                 PSFs: np.ndarray, SBR: float, signaler: QtCore.QObject,
+                 PSFs: np.ndarray, nmppx: float, SBR: float, signaler: QtCore.QObject,
                  *args, **kwargs):
         """Prepare.
 
@@ -565,6 +571,8 @@ class PicoHarpReaderThread(_th.Thread):
             event triggered when a XY image is ready.
         PSFs : np.ndarray
             Array of PSF for locating.
+        nmppx: float
+            nanometers per pixel on the PSFs
         SBR : float
             Signal to background ratio.
         signaler : QtCore.QObject
@@ -581,6 +589,7 @@ class PicoHarpReaderThread(_th.Thread):
         self._fname = fname
         self._img_evt = img_evt
         self._PSFs = PSFs
+        self._nm_per_pixel = nmppx
         self._SBR = SBR
         self._signaler = signaler
         self._tacq = ph.tacq  # FIXME: esto debería poder ser infinito o venir del front
@@ -590,7 +599,7 @@ class PicoHarpReaderThread(_th.Thread):
             microbin_duration = 16E-3  # in ns, instrumental, match with front
             macrobin_duration = 12.5  # in ns, match with opticalfibers
             binwidth = int(np.round(macrobin_duration / microbin_duration))  # microbins per macrobin
-            locator = _analysis.MinFluxLocator(self._PSFs, 16, 1)
+            locator = _analysis.MinFluxLocator(self._PSFs, 16, self._nm_per_pixel)
             self.startTTTR_Track(self._fname, self._img_evt, locator, binwidth)
         except Exception as e:
             _lgr.error("Exception %s measuring: %s", type(e), e)
@@ -662,12 +671,12 @@ class PicoHarpReaderThread(_th.Thread):
                 ctypes.byref(nactual),
             )
             _lgr.info("records read: %s", nactual.value)
-            # testing
             ttt0 = time.time_ns()
-            if time.time()-t0 > 7E-3:  #cada 7 ms
-                self._signaler.ack_shift(*np.random.random_sample((2,)) + idx*2)
-                t0 = time.time()
-                idx += 1
+            # ######################## testing
+            # if time.time()-t0 > 7E-3:  #cada 7 ms
+            #     self._signaler.ack_shift(*np.random.random_sample((2,)) + idx*20)
+            #     t0 = time.time()
+            #     idx += 1
             #  ###################
 
             if nactual.value > 0:
