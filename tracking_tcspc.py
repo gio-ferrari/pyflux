@@ -52,9 +52,9 @@ _lgn.basicConfig(level=_lgn.INFO)
 
 @_dataclass
 class PSF_metadata:
-    scan_range: int  # en µm, 'Scan range (µm)'
+    scan_range: float  # en µm, 'Scan range (µm)'
     n_pixels:  int  # 'Number of pixels'
-    px_size: int  # 'Pixel size (µm)'
+    px_size: float  # 'Pixel size (µm)'
     scan_type: str  # 'Scan type'
 
 
@@ -146,8 +146,8 @@ class Frontend(QtWidgets.QFrame):
         except OSError as e:
             print(e, type(e))
             pass
-        metadata = PSF_metadata(config['Scan range (µm)'], config['Number of pixels'],
-                                config['Pixel size (µm)'], config['Scan type'])
+        metadata = PSF_metadata(float(config['Scan range (µm)']), int(config['Number of pixels']),
+                                float(config['Pixel size (µm)']), config['Scan type'])
         if metadata.scan_type != 'xy':
             _lgr.error("Scan invalido")
         _lgr.info("%s", metadata)
