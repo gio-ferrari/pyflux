@@ -18,7 +18,7 @@ _PERIOD = int(50E3)
 class MinfluxMeasurement(TimeTagger.CustomMeasurement):
     """Swabian measurement that returns localizations."""
 
-    _delays = np.empty((0.), dtype=np.int32)
+    _delays = np.empty((0,), dtype=np.int32)
     _bins = np.zeros((4,), dtype=np.int64)
     _errors: int = 0
     _last_time: int = 0
@@ -77,7 +77,7 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
     @staticmethod
     @numba.jit((numba.uint64)(
         numba.from_dtype(TimeTagger.CustomMeasurement.INCOMING_TAGS_DTYPE)[:],
-        numba.int32[:], numba.int64, numba.int64, numba.int64, numba.int64,
+        numba.int32[:], numba.int64, numba.int64,
         numba.int64[:]),
         nopython=True, nogil=True)
     def process_tags(tags: np.ndarray, data: np.ndarray,
