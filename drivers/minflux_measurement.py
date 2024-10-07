@@ -31,6 +31,10 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
         self._period = period
         self._max_events = max_events
         # Hacemos la cuenta de los delays como vamos a calcularlos después
+        # Exigimos que los delays estén ordenados. No los ordenamos acá para
+        # forzar al caller a hacer bien
+        if sorted(delays) != list(delays):
+            raise ValueError("Delays are not sorted")
         self.delays = period - np.array(delays, dtype=np.int64)
         self._cb = callback
 
@@ -108,11 +112,15 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
 
     @staticmethod
     @numba.jit((numba.int32[:], numba.int64[:], numba.int64[:]),
-        nopython=True, nogil=True)
+               nopython=True, nogil=True, parallel=True)
     def process_delays(data: np.ndarray, delays, bins):
-        """Bin time differences in data, return number of records."""
+        """Bin time differences in data, return number of records.
+
+        WARNING: delays must be ORDERED.
+        """
         bins[:] = 0
-        for td in data: # hardcoded para 4
+        for i in numba.prange(len(data)):  # hardcoded para 4
+            td = data[i]
             if td <= delays[3]:
                 bins[3] += 1
             elif td <= delays[2]:
@@ -156,40 +164,16 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
         # TODO: pasar esta línea a numba
         n_times = max(n_times, 100)  # usar los últimos 100 fotones.
         MinfluxMeasurement.process_delays(self.data[:n_times], self.delays, self._bins)
-        self._cb(self._bins.copy())
+        self._cb(self.data[:n_times].copy(), self._bins.copy())
 
 
 if __name__ == '__main__':
+    def test(*args):
+        print(*args)
 
-    with TimeTagger.createTimeTagger() as tagger:
-        APD_CHANNEL = 4
-        LASER_CHANNEL = 2
-        tagger.setStreamBlockSize(max_events=_MAX_EVENTS, max_latency=2)
-        tagger.setTriggerLevel(channel=APD_CHANNEL, voltage=2.5)
-        test_time = 1E12
-        # Set Test signal frecuency
-
-        tagger.setConditionalFilter(trigger=[APD_CHANNEL], filtered=[LASER_CHANNEL])
-        # We first have to create a SynchronizedMeasurements object to synchronize
-        # several measurements
-        with TimeTagger.SynchronizedMeasurements(tagger) as measurementGroup:
-            TCSPC = MinfluxMeasurement(
-                measurementGroup.getTagger(),
-                APD_CHANNEL,
-                LASER_CHANNEL,
-                _PERIOD,
-                _MAX_EVENTS,
-                delays,
-                callback,
-                )
-            cntrt_measurement = TimeTagger.Countrate(
-                measurementGroup.getTagger(),
-                [APD_CHANNEL],
-                )
-            print("Acquire data...\n")
-            measurementGroup.startFor(int(test_time))
-            measurementGroup.waitUntilFinished()
-            data = TCSPC._delays
-            last_pos = TCSPC._last_pos
-            CPS = cntrt_measurement.get_data()
-        tagger.clearConditionalFilter()
+    delays = np.array([0, 2000, 12000, 25000])
+    # test = MinfluxMeasurement(None, 4, 2, int(50E3), _MAX_EVENTS, delays, test)
+    idelays = int(50E3) - delays
+    data = np.random.randint(0, int(50E3), 100000, dtype=np.int32)
+    bins = np.zeros((4,), dtype=np.int64)
+    MinfluxMeasurement.process_delays(data, idelays, bins)

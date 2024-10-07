@@ -19,7 +19,7 @@ from pyqtgraph.Qt import QtCore
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QGroupBox
 from PyQt5 import QtWidgets
-from TimeTagger import TimeTagger
+import TimeTagger as _TimeTagger
 import tools.swabiantools as _st
 from tools.config_handler import TCSPInstrumentInfo
 
@@ -38,6 +38,7 @@ _lgn.basicConfig(level=_lgn.INFO)
 
 
 _MAX_EVENTS = 131072
+_N_BINS = 50
 
 
 @_dataclass
@@ -58,7 +59,7 @@ def loadConfig(filename) -> configparser.SectionProxy:
     return config['Scanning parameters']
 
 
-def _config_channels(tagger: TimeTagger, IInfo: TCSPInstrumentInfo):
+def _config_channels(tagger: _TimeTagger.TimeTagger, IInfo: TCSPInstrumentInfo):
     """Set delays and filtering according to Info."""
     settings = []
     for APDi in IInfo.APD_info:
@@ -85,6 +86,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
     _shifts = [(0, 0),]
     _PSF = None
     _config = None
+    _measure: "TCSPCBackend" = None
 
     def __init__(self, IInfo: TCSPInstrumentInfo, *args, **kwargs):
         """No hace nada."""
@@ -92,8 +94,17 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
         # initial directory
         self.initialDir = r"C:\Data"
-        self.IInfo = IInfo
+        self.iinfo = IInfo
         self.setup_gui()
+
+        # FIXME: for developing only
+        # self.period = self.iinfo.period
+        self.period = int(50E3)
+        self._init_data()
+        # sorted_shutters = np.argsort(self.iinfo.shutter_delays)
+
+    def _init_data(self):
+        self._hist_data = np.histogram([], range=(0, self.period), bins=_N_BINS)
 
     def start_measurement(self):
         """Inicia la medida."""
@@ -104,8 +115,11 @@ class TCSPCFrontend(QtWidgets.QFrame):
             print("config needed to start measurements")
             return
         self.clear_data()
+        self._init_data()
         self.measureButton.setEnabled(False)
-        self.measureSignal.emit(self._PSF, float(self._config.px_size)*1E3)
+        self._measure = TCSPCBackend(self.tagger, self.iinfo, self.get_data)
+        # TODO: sort PSFs
+        self._measure.start_measure(self._PSF, self._config.px_size)
 
     def load_folder(self):
         """Muestra una ventana de selección de carpeta."""
@@ -170,9 +184,9 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self._config = metadata
 
     @pyqtSlot(np.ndarray)
-    def get_data(self, data: np.ndarray):
-        """Receve new data and graph."""
-        counts, bins = np.histogram(data, bins=50)  # TODO: choose proper binning
+    def get_data(self, delta_t: np.ndarray, binned: np.array):
+        """Recieve new data and graph."""
+        counts, bins = np.histogram(delta_t, range=(0, self.period), bins=50)  # TODO: choose proper binning
         self.histPlot.plot(bins[0:-1], counts)
 
     @pyqtSlot(float, float)
@@ -266,6 +280,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
         self.tracePlot = self.dataWidget.addPlot(row=1, col=0, title="Time trace")
         self.tracePlot.setLabels(bottom=("s"), left=("counts"))
+        self.intplots: list[pg.PlotDataItem] = [
+            self.tracePlot.plot(pen=_) for _ in range(4)]
 
         self.posPlotItem = self.dataWidget.addPlot(row=0, col=1, rowspan=2, title="Position")
         self.posPlotItem.showGrid(x=True, y=True)
@@ -303,7 +319,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.browseConfigButton.clicked.connect(self.load_config)
         self.clearButton.clicked.connect(self.clear_data)
 
-        self.acqtimeEdit.textChanged.connect(self.emit_param)
+        # self.acqtimeEdit.textChanged.connect(self.emit_param)
 
         # general GUI layout
         grid = QtWidgets.QGridLayout()
@@ -345,7 +361,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         # app.quit()
 
 
-class TCSPCBackend:  # (QtCore.QObject):
+class TCSPCBackend:
     """Backend for TCSPC."""
 
     TCSPC_measurement = None
@@ -357,6 +373,7 @@ class TCSPCBackend:  # (QtCore.QObject):
         self.tagger = tagger
         self.iinfo = IInfo
         self._cb = cb
+        # self._PSF = self._PSF[np.argsort(self.iinfo.shutter_delays)]
 
     def start_measure(self, PSF: np.ndarray, nmppx: float):
         """Called from GUI."""
@@ -365,7 +382,7 @@ class TCSPCBackend:  # (QtCore.QObject):
         _config_channels(tagger, self.iinfo)
         # TODO: Adjust latency
         tagger.setStreamBlockSize(max_events=_MAX_EVENTS, max_latency=20)
-        self.measurementGroup = TimeTagger.SynchronizedMeasurements(tagger)
+        self.measurementGroup = _TimeTagger.SynchronizedMeasurements(tagger)
         self.TCSPC_measurement = MinfluxMeasurement(
             self.measurementGroup.getTagger(),
             self.iinfo.APD_info[0].channel,
@@ -375,15 +392,19 @@ class TCSPCBackend:  # (QtCore.QObject):
             self.iinfo.shutter_delays,
             self.report_bins,
         )
-        self.file_measurement = TimeTagger.FileWriter(
+        self.file_measurement = _TimeTagger.FileWriter(
             self.measurementGroup.getTagger(), 'filename.ttbin',
             [self.iinfo.laser_channel] + [APDi.channel for APDi in self.iinfo.APD_info])
         # self.measurementGroup.start()
         # Lo hacemos así por ahora
         self.measurementGroup.startFor(int(.5E12))
 
-    def report_bins(self, bins: np.ndarray):
-        print(bins)
+    def report_bins(self, delta_t: np.ndarray, bins: np.ndarray):
+        try:
+            self._cb(delta_t, bins)
+        except Exception as e:
+            _lgr.error("Excepción %s reportando data: %s", type(e), e)
+            self.stop_measure()
 
     def stop_measure(self):
         """Called from GUI."""
@@ -398,13 +419,15 @@ if __name__ == "__main__":
     tt_data = _st.get_tt_info()
     if not tt_data:
         print("   ******* Enchufá el equipo *******")
-        raise ValueError("POR FAVOR ENCHUFA EL EQUIPO")
+        # raise ValueError("POR FAVOR ENCHUFA EL EQUIPO")
     IInfo = None
     try:
         IInfo = TCSPInstrumentInfo.load()
         serial = IInfo.serial
     except FileNotFoundError:
         _lgr.info("No configuration file found")
+        # FIXME: for testing
+        tt_data = {'aaaaa': {}}
         serial = list(tt_data.keys())[0]
     if not (serial in list(tt_data.keys())):
         _lgr.warning(
@@ -418,7 +441,9 @@ if __name__ == "__main__":
         serial,
     )
     tt_info = tt_data[serial]
-    with TimeTagger.createTimeTagger() as tagger:
+    # with _TimeTagger.createTimeTagger() as tagger:
+    tagger = None
+    if True:
         if not QtWidgets.QApplication.instance():
             app = QtWidgets.QApplication([])
         else:
