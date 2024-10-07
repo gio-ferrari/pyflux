@@ -39,7 +39,7 @@ _lgn.basicConfig(level=_lgn.INFO)
 
 _MAX_EVENTS = 131072
 _N_BINS = 50
-
+_MAX_SAMPLES = int(60*200)  # si es cada 5 ms son 200 por segundo
 
 @_dataclass
 class PSF_metadata:
@@ -78,14 +78,15 @@ class TCSPCFrontend(QtWidgets.QFrame):
     """Frontend para TCSPC con tracking."""
 
     # Signals
-    paramSignal = pyqtSignal(list)
-    measureSignal = pyqtSignal(np.ndarray, float)  # basta con esto de los eventos
+    measureSignal = pyqtSignal(np.ndarray, np.ndarray, tuple)
 
     # Data
     _localizations = [[]]  # one list per shift
     _shifts = [(0, 0),]
+    _intensities = np.zeros((4, _MAX_SAMPLES,), dtype=np.int32)
     _PSF = None
     _config = None
+    _pos_vline: pg.InfiniteLine =  None
     _measure: "TCSPCBackend" = None
 
     def __init__(self, IInfo: TCSPInstrumentInfo, *args, **kwargs):
@@ -95,16 +96,18 @@ class TCSPCFrontend(QtWidgets.QFrame):
         # initial directory
         self.initialDir = r"C:\Data"
         self.iinfo = IInfo
-        self.setup_gui()
-
         # FIXME: for developing only
         # self.period = self.iinfo.period
         self.period = int(50E3)
         self._init_data()
-        # sorted_shutters = np.argsort(self.iinfo.shutter_delays)
+        self.setup_gui()
 
     def _init_data(self):
         self._hist_data = np.histogram([], range=(0, self.period), bins=_N_BINS)
+        self._intensities = np.zeros((4, _MAX_SAMPLES,), dtype=np.int32)
+        self._last_pos = 0
+        self._localizations = [[]]
+        self._shifts = [(0, 0),]
 
     def start_measurement(self):
         """Inicia la medida."""
@@ -183,11 +186,21 @@ class TCSPCFrontend(QtWidgets.QFrame):
         _lgr.info("%s", metadata)
         self._config = metadata
 
-    @pyqtSlot(np.ndarray)
-    def get_data(self, delta_t: np.ndarray, binned: np.array):
-        """Recieve new data and graph."""
-        counts, bins = np.histogram(delta_t, range=(0, self.period), bins=50)  # TODO: choose proper binning
+    def callback(self, delta_t: np.ndarray, binned: np.array, newpos: tuple):
+        self.measureSignal.emit(delta_t, binned, newpos)
+
+    @pyqtSlot(np.ndarray, np.ndarray, tuple)
+    def get_data(self, delta_t: np.ndarray, binned: np.array, new_pos: tuple):
+        """Receive new data and graph."""
+        counts, bins = np.histogram(delta_t, range=(0, self.period), bins=_N_BINS)
+        self._hist_data[0] += counts
         self.histPlot.plot(bins[0:-1], counts)
+        for plot, data, newint in zip(self.intplots, self._intensities, binned):
+            data[self._last_pos] = newint
+            plot.setData(data)
+        self.trace_vline.setValue(self._last_pos)
+        if self._last_pos >= _MAX_SAMPLES:
+            self._last_pos = 0
 
     @pyqtSlot(float, float)
     def get_localization(self, pos_x, pos_y):
@@ -232,8 +245,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.histPlot.clear()
         self.tracePlot.clear()
         self.posPlot.clear()
-        self._localizations = [[]]
-        self._shifts = [(0, 0),]
+        self._init_data()
 
     def setup_gui(self):
         """Initialize the GUI."""
@@ -274,14 +286,17 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
         # microTime histogram and timetrace
         self.histPlot = self.dataWidget.addPlot(
-            row=0, col=0, title="microTime histogram"
+            row=0, col=0, title="microTime histogram", stepMode=True, fillLevel=0,
         )
         self.histPlot.setLabels(bottom=("ns"), left=("counts"))
 
         self.tracePlot = self.dataWidget.addPlot(row=1, col=0, title="Time trace")
         self.tracePlot.setLabels(bottom=("s"), left=("counts"))
         self.intplots: list[pg.PlotDataItem] = [
-            self.tracePlot.plot(pen=_) for _ in range(4)]
+            self.tracePlot.plot(pen=_) for _ in range(4)
+        ]
+        self.trace_vline = pg.InfiniteLine(0)
+        self.tracePlot.addItem(self.trace_vline)
 
         self.posPlotItem = self.dataWidget.addPlot(row=0, col=1, rowspan=2, title="Position")
         self.posPlotItem.showGrid(x=True, y=True)
@@ -373,6 +388,7 @@ class TCSPCBackend:
         self.tagger = tagger
         self.iinfo = IInfo
         self._cb = cb
+        sorted_indexes = np.argsort(self.iinfo.shutter_delays)
         # self._PSF = self._PSF[np.argsort(self.iinfo.shutter_delays)]
 
     def start_measure(self, PSF: np.ndarray, nmppx: float):
