@@ -155,8 +155,9 @@ class TCSPCFrontend(QtWidgets.QFrame):
                 except Exception as e:
                     print("error configuración", e, type(e))
         except OSError as e:
-            print(e, type(e))
-            pass
+            _lgr.error("Error '%s' abriendo archivo de configuracion: %s",
+                       type(e), e)
+            return
         metadata = PSF_metadata(
             float(config['Scan range (µm)']),
             int(config['Number of pixels']),
@@ -246,10 +247,6 @@ class TCSPCFrontend(QtWidgets.QFrame):
         # TCSPC parameters labels and edits
         acqtimeLabel = QtWidgets.QLabel("Acquisition time [s]")
         self.acqtimeEdit = QtWidgets.QLineEdit("1")
-        resolutionLabel = QtWidgets.QLabel("Resolution [ps]")
-        self.resolutionEdit = QtWidgets.QLineEdit("16")
-        offsetLabel = QtWidgets.QLabel("Offset [ns]")
-        self.offsetEdit = QtWidgets.QLineEdit("3")
 
         # self.channel0Label = QtWidgets.QLabel("Input 0 (sync) [kHz]")
         # self.channel0Value = QtWidgets.QLineEdit("")
@@ -307,8 +304,6 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.clearButton.clicked.connect(self.clear_data)
 
         self.acqtimeEdit.textChanged.connect(self.emit_param)
-        self.offsetEdit.textChanged.connect(self.emit_param)
-        self.resolutionEdit.textChanged.connect(self.emit_param)
 
         # general GUI layout
         grid = QtWidgets.QGridLayout()
@@ -323,10 +318,6 @@ class TCSPCFrontend(QtWidgets.QFrame):
         # subgrid.addWidget(phParamTitle, 0, 0, 2, 3)
         subgrid.addWidget(acqtimeLabel, 2, 0)
         subgrid.addWidget(self.acqtimeEdit, 2, 1)
-        subgrid.addWidget(resolutionLabel, 4, 0)
-        subgrid.addWidget(self.resolutionEdit, 4, 1)
-        subgrid.addWidget(offsetLabel, 6, 0)
-        subgrid.addWidget(self.offsetEdit, 6, 1)
         # subgrid.addWidget(self.channel0Label, 8, 0)
         # subgrid.addWidget(self.channel0Value, 8, 1)
         # subgrid.addWidget(self.channel1Label, 9, 0)
