@@ -25,7 +25,7 @@ from tools.config_handler import TCSPInstrumentInfo
 
 
 # import drivers.ADwin as ADwin
-# from tools import analysis as _analysis
+from tools import analysis as _analysis
 import configparser
 from dataclasses import dataclass as _dataclass
 
@@ -42,7 +42,7 @@ _N_BINS = 50
 _MAX_SAMPLES = int(60*200)  # si es cada 5 ms son 200 por segundo
 
 @_dataclass
-class PSF_metadata:
+class PSFMetadata:
     """Metadata of PSFs."""
 
     scan_range: float  # en µm, 'Scan range (µm)'
@@ -85,8 +85,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
     _shifts = [(0, 0),]
     _intensities = np.zeros((4, _MAX_SAMPLES,), dtype=np.int32)
     _PSF = None
-    _config = None
-    _pos_vline: pg.InfiniteLine =  None
+    _config: PSFMetadata = None
+    _pos_vline: pg.InfiniteLine = None
     _measure: "TCSPCBackend" = None
 
     def __init__(self, IInfo: TCSPInstrumentInfo, *args, **kwargs):
@@ -123,6 +123,18 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self._measure = TCSPCBackend(self.tagger, self.iinfo, self.get_data)
         # TODO: sort PSFs
         self._measure.start_measure(self._PSF, self._config.px_size)
+
+    def stop_measurement(self):
+        """Para la medida.
+
+        Sin error checking por hora
+        """
+        self.measureButton.setEnabled(True)
+        if not self._measure:
+            print("Parece no haber measure")
+            return
+        self._measure.stop_measure()
+
 
     def load_folder(self):
         """Muestra una ventana de selección de carpeta."""
@@ -175,7 +187,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
             _lgr.error("Error '%s' abriendo archivo de configuracion: %s",
                        type(e), e)
             return
-        metadata = PSF_metadata(
+        metadata = PSFMetadata(
             float(config['Scan range (µm)']),
             int(config['Number of pixels']),
             float(config['Pixel size (µm)']),
@@ -201,31 +213,30 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.trace_vline.setValue(self._last_pos)
         if self._last_pos >= _MAX_SAMPLES:
             self._last_pos = 0
+        self.add_localization(*new_pos)
 
-    @pyqtSlot(float, float)
-    def get_localization(self, pos_x, pos_y):
+    def add_localization(self, pos_x, pos_y):
         """Receive a new localization from backend."""
         self._localizations[-1].append((pos_x, pos_y))
         # data = np.array(list(zip(*self._localizations[-1])))
         data = np.array(sum(self._localizations, []))
-        # data = np.array(self._localizations)
         # shifts = np.array(self._shifts)
         # locs = data + shifts[np.newaxis, :]
         # TODO: usar numpy
         if len(self._localizations) != len(self._shifts):
             _lgr.error("El largo de los shifts y localizaciones no coincide")
-        data = np.empty((sum(len(_) for _ in self._localizations), 2,))
-        pos = 0
-        try:
-            for loc, s in zip(self._localizations, self._shifts):
-                if len(loc):
-                    data[pos: pos + len(loc)] = np.array(loc) + s
-                    pos += len(loc)
-        except Exception as e:
-            print("**********")
-            print(type(e), e, len(loc))
-            print("===========")
-            raise
+        # data = np.empty((sum(len(_) for _ in self._localizations), 2,))
+        # pos = 0
+        # try:
+        #     for loc, s in zip(self._localizations, self._shifts):
+        #         if len(loc):
+        #             data[pos: pos + len(loc)] = np.array(loc) + s
+        #             pos += len(loc)
+        # except Exception as e:
+        #     print("**********")
+        #     print(type(e), e, len(loc))
+        #     print("===========")
+        #     raise
         # data = np.vstack(self._localizations)
         self.posPlot.setData(data)
 
@@ -329,6 +340,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
         # GUI connections
         self.measureButton.clicked.connect(self.start_measurement)
+        self.stopButton.clicked.connect(self.stop_measurement)
         self.browseFolderButton.clicked.connect(self.load_folder)
         self.browsePSFButton.clicked.connect(self.load_PSF)
         self.browseConfigButton.clicked.connect(self.load_config)
@@ -382,14 +394,19 @@ class TCSPCBackend:
     TCSPC_measurement = None
     measurementGroup = None
 
-    def __init__(self, tagger, IInfo: TCSPInstrumentInfo, cb, *args, **kwargs):
+    def __init__(self, tagger, IInfo: TCSPInstrumentInfo, cb, PSF: np.ndarray,
+                 PSF_info: PSFMetadata, *args, **kwargs):
         """Receive device and config info."""
         super().__init__(*args, **kwargs)
         self.tagger = tagger
         self.iinfo = IInfo
         self._cb = cb
+        # FIXME
+        SBR = 8
         sorted_indexes = np.argsort(self.iinfo.shutter_delays)
-        # self._PSF = self._PSF[np.argsort(self.iinfo.shutter_delays)]
+        self._PSF = PSF[sorted_indexes]
+        self._delays = self.iinfo.shutter_delays[sorted_indexes]
+        self._locator = _analysis.MinFluxLocator(PSF, SBR, PSF_info.px_size)
 
     def start_measure(self, PSF: np.ndarray, nmppx: float):
         """Called from GUI."""
@@ -405,8 +422,8 @@ class TCSPCBackend:
             self.iinfo.laser_channel,
             self.iinfo.period,
             _MAX_EVENTS,
-            self.iinfo.shutter_delays,
-            self.report_bins,
+            self._delays,
+            self.report,
         )
         self.file_measurement = _TimeTagger.FileWriter(
             self.measurementGroup.getTagger(), 'filename.ttbin',
@@ -415,9 +432,9 @@ class TCSPCBackend:
         # Lo hacemos así por ahora
         self.measurementGroup.startFor(int(.5E12))
 
-    def report_bins(self, delta_t: np.ndarray, bins: np.ndarray):
+    def report(self, delta_t: np.ndarray, bins: np.ndarray, pos: tuple):
         try:
-            self._cb(delta_t, bins)
+            self._cb(delta_t, bins, pos)
         except Exception as e:
             _lgr.error("Excepción %s reportando data: %s", type(e), e)
             self.stop_measure()
@@ -457,6 +474,9 @@ if __name__ == "__main__":
         serial,
     )
     tt_info = tt_data[serial]
+    # FIXME: testing
+    tt_info = TCSPInstrumentInfo("serial", 0, 'NIM', int(50E3),
+                                 np.arange(0, 50000, 12500))
     # with _TimeTagger.createTimeTagger() as tagger:
     tagger = None
     if True:

@@ -90,7 +90,7 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
         """Save time differences in data, return number of records."""
         n_errors = 0
         last_pos = 0
-        last_timestamp = 0 # Puede ser que perdamos info, ponerlo en errors[1]
+        last_timestamp = 0  # Puede ser que perdamos info, ponerlo en errors[1]
         for tag in tags:
             # tag.type can be: 0 - TimeTag, 1- Error, 2 - OverflowBegin, 3 -
             # OverflowEnd, 4 - MissedEvents (you can use the TimeTagger.TagType IntEnum)
@@ -162,15 +162,12 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
         if errors[0]:
             print("hubo ", errors[0], "errores")
         # TODO: pasar esta línea a numba
-        n_times = max(n_times, 100)  # usar los últimos 100 fotones.
+        # n_times = max(n_times, 100)  # usar los últimos 100 fotones.
         MinfluxMeasurement.process_delays(self.data[:n_times], self.delays, self._bins)
-        self._cb(self.data[:n_times].copy(), self._bins.copy())
+        self._cb(self.data[:n_times].copy(), self._bins.copy(), (0, 0))
 
 
 if __name__ == '__main__':
-    def test(*args):
-        print(*args)
-
     delays = np.array([0, 2000, 12000, 25000])
     # test = MinfluxMeasurement(None, 4, 2, int(50E3), _MAX_EVENTS, delays, test)
     idelays = int(50E3) - delays
