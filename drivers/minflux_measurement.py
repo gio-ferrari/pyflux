@@ -163,8 +163,8 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
             print("hubo ", errors[0], "errores")
         # TODO: pasar esta línea a numba
         # n_times = max(n_times, 100)  # usar los últimos 100 fotones.
-        MinfluxMeasurement.process_delays(self.data[:n_times], self.delays, self._bins)
-        self._cb(self.data[:n_times].copy(), self._bins.copy(), (0, 0))
+        MinfluxMeasurement.process_delays(self._delays[:n_times], self.delays, self._bins)
+        self._cb(self._delays[:n_times].copy(), self._bins.copy(), (0, 0))
 
 
 if __name__ == '__main__':

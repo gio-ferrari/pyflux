@@ -63,11 +63,11 @@ def _config_channels(tagger: _TimeTagger.TimeTagger, IInfo: TCSPInstrumentInfo):
     """Set delays and filtering according to Info."""
     settings = []
     for APDi in IInfo.APD_info:
-        print(APDi)
+        # print(APDi)
         settings.append((APDi.channel, -APDi.delay,))
         _st.set_channel_level(tagger, APDi.channel, _st.SignalTypeEnum[APDi.signal_type])
     _st.set_channels_delay(tagger, settings)
-    _st.set_channel_level(IInfo.laser_channel, _st.SignalTypeEnum[IInfo.laser_signal])
+    _st.set_channel_level(tagger, IInfo.laser_channel, _st.SignalTypeEnum[IInfo.laser_signal])
     tagger.setConditionalFilter(
         trigger=[APDi.channel for APDi in IInfo.APD_info],
         filtered=[IInfo.laser_channel]
@@ -89,11 +89,12 @@ class TCSPCFrontend(QtWidgets.QFrame):
     _pos_vline: pg.InfiniteLine = None
     _measure: "TCSPCBackend" = None
 
-    def __init__(self, IInfo: TCSPInstrumentInfo, *args, **kwargs):
+    def __init__(self, tagger: _TimeTagger.TimeTagger, IInfo: TCSPInstrumentInfo, *args, **kwargs):
         """No hace nada."""
         super().__init__(*args, **kwargs)
 
         # initial directory
+        self.tagger = tagger
         self.initialDir = r"C:\Data"
         self.iinfo = IInfo
         # FIXME: for developing only
@@ -120,8 +121,9 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.clear_data()
         self._init_data()
         self.measureButton.setEnabled(False)
-        self._measure = TCSPCBackend(self.tagger, self.iinfo, self.get_data)
-        self._measure.start_measure(self._PSF, self._config.px_size)
+        self._measure = TCSPCBackend(self.tagger, self.iinfo, self.get_data, self._PSF,
+                                     self._config)
+        self._measure.start_measure()
 
     def stop_measurement(self):
         """Para la medida.
@@ -206,18 +208,21 @@ class TCSPCFrontend(QtWidgets.QFrame):
             counts, bins = np.histogram(delta_t, range=(0, self.period), bins=_N_BINS)
             self._hist_data[0] += counts
             self.histPlot.setData(bins[0:-1], self._hist_data[0])
-            for plot, data, newint in zip(self.intplots, self._intensities, binned):
-                data[self._last_pos] = newint
-                plot.setData(data)
-            self.trace_vline.setValue(self._last_pos)
+            self._intensities[:, self._last_pos] = binned
+            # print(self._last_pos)
+            if self._last_pos % 100 == 0:
+                for plot, data in zip(self.intplots, self._intensities):
+                    plot.setData(data)
+                # print("Newint=", newint)
+                self.trace_vline.setValue(self._last_pos)
             self._last_pos += 1
             if self._last_pos >= _MAX_SAMPLES:
                 self._last_pos = 0
-            self.add_localization(*new_pos)
+            self.add_localization(*new_pos, (self._last_pos % 100 == 0))
         except Exception as e:
             print(e, type(e))
 
-    def add_localization(self, pos_x, pos_y):
+    def add_localization(self, pos_x, pos_y, update:bool):
         """Receive a new localization from backend."""
         self._localizations[-1].append((pos_x, pos_y))
         # data = np.array(list(zip(*self._localizations[-1])))
@@ -240,7 +245,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
         #     print("===========")
         #     raise
         # data = np.vstack(self._localizations)
-        self.posPlot.setData(data)
+        if update:
+            self.posPlot.setData(data)
 
     @pyqtSlot(float, float)
     def get_shift(self, shift_x, shift_y):
@@ -256,8 +262,9 @@ class TCSPCFrontend(QtWidgets.QFrame):
     def clear_data(self):
         """Clear all data and plots."""
         self.histPlot.clear()
-        self.tracePlot.clear()
-        self.tracePlot.addItem(self.trace_vline)
+        for p in self.intplots:
+            p.clear()
+        # self.tracePlot.addItem(self.trace_vline)
 
         self.posPlot.clear()
         self._init_data()
@@ -418,7 +425,7 @@ class TCSPCBackend:
         SBR = 8
         sorted_indexes = np.argsort(self.iinfo.shutter_delays)
         self._PSF = PSF[sorted_indexes]
-        self._delays = self.iinfo.shutter_delays[sorted_indexes]
+        self._delays = [self.iinfo.shutter_delays[idx] for idx in sorted_indexes]
         self._locator = _analysis.MinFluxLocator(PSF, SBR, PSF_info.px_size)
 
     def start_measure(self):
@@ -427,7 +434,7 @@ class TCSPCBackend:
         self.currentfname = fntools.getUniqueName(self.fname)
         _config_channels(tagger, self.iinfo)
         # TODO: Adjust latency
-        tagger.setStreamBlockSize(max_events=_MAX_EVENTS, max_latency=20)
+        tagger.setStreamBlockSize(max_events=_MAX_EVENTS, max_latency=5)
         self.measurementGroup = _TimeTagger.SynchronizedMeasurements(tagger)
         self.TCSPC_measurement = MinfluxMeasurement(
             self.measurementGroup.getTagger(),
@@ -443,11 +450,11 @@ class TCSPCBackend:
             [self.iinfo.laser_channel] + [APDi.channel for APDi in self.iinfo.APD_info])
         # self.measurementGroup.start()
         # Lo hacemos así por ahora
-        self.measurementGroup.startFor(int(.5E12))
+        self.measurementGroup.startFor(int(15E12))
 
     def report(self, delta_t: np.ndarray, bins: np.ndarray, pos: tuple):
         try:
-            new_pos = self._locator(bins)
+            new_pos = self._locator(bins)[1]
             self._cb(delta_t, bins, new_pos)
         except Exception as e:
             _lgr.error("Excepción %s reportando data: %s", type(e), e)
@@ -457,9 +464,9 @@ class TCSPCBackend:
         """Called from GUI."""
         if self.measurementGroup:
             self.measurementGroup.stop()
-            print("Measrumement finished")
+            print("Measurement finished")
         else:
-            print("no measurement running")
+            print("No measurement running")
 
 
 if __name__ == "__main__":
@@ -501,9 +508,10 @@ if __name__ == "__main__":
 
         app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
 
-        gui = TCSPCFrontend(IInfo)
+        gui = TCSPCFrontend(tagger, IInfo)
 
         gui.setWindowTitle("Time-correlated single-photon counting with tracking")
         gui.show()
         gui.raise_()
         gui.activateWindow()
+        app.exec_()
