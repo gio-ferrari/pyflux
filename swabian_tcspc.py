@@ -81,7 +81,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
     measureSignal = pyqtSignal(np.ndarray, np.ndarray, tuple)
 
     # Data
-    _localizations = [[]]  # one list per shift
+    _localizations_x = [[]]
+    _localizations_y = [[]]  # one list per shift
     _shifts = [(0, 0),]
     _intensities = np.zeros((4, _MAX_SAMPLES,), dtype=np.int32)
     _PSF = None
@@ -107,7 +108,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self._hist_data = list(np.histogram([], range=(0, self.period), bins=_N_BINS))
         self._intensities = np.zeros((4, _MAX_SAMPLES,), dtype=np.int32)
         self._last_pos = 0
-        self._localizations = [[]]
+        self._localizations_x = [[]]
+        self._localizations_y = [[]]
         self._shifts = [(0, 0),]
 
     def start_measurement(self):
@@ -210,27 +212,29 @@ class TCSPCFrontend(QtWidgets.QFrame):
             self.histPlot.setData(bins[0:-1], self._hist_data[0])
             self._intensities[:, self._last_pos] = binned
             # print(self._last_pos)
-            if self._last_pos % 100 == 0:
+            must_update = (self._last_pos % 100 == 0)
+            if must_update:
                 for plot, data in zip(self.intplots, self._intensities):
                     plot.setData(data)
-                # print("Newint=", newint)
                 self.trace_vline.setValue(self._last_pos)
+            self.add_localization(*new_pos, must_update)
+
             self._last_pos += 1
             if self._last_pos >= _MAX_SAMPLES:
                 self._last_pos = 0
-            self.add_localization(*new_pos, (self._last_pos % 100 == 0))
         except Exception as e:
             print(e, type(e))
 
     def add_localization(self, pos_x, pos_y, update:bool):
         """Receive a new localization from backend."""
-        self._localizations[-1].append((pos_x, pos_y))
+        self._localizations_x[-1].append(pos_x)
+        self._localizations_y[-1].append(pos_y)
         # data = np.array(list(zip(*self._localizations[-1])))
-        data = np.array(sum(self._localizations, []))
+        # data = np.array(sum(self._localizations, []))
         # shifts = np.array(self._shifts)
         # locs = data + shifts[np.newaxis, :]
         # TODO: usar numpy
-        if len(self._localizations) != len(self._shifts):
+        if len(self._localizations_x) != len(self._shifts):
             _lgr.error("El largo de los shifts y localizaciones no coincide")
         # data = np.empty((sum(len(_) for _ in self._localizations), 2,))
         # pos = 0
@@ -244,9 +248,10 @@ class TCSPCFrontend(QtWidgets.QFrame):
         #     print(type(e), e, len(loc))
         #     print("===========")
         #     raise
-        # data = np.vstack(self._localizations)
+
+        # data = np.vstack((self._localizations_x, self._localizations_y,))
         if update:
-            self.posPlot.setData(data)
+            self.posPlot.setData(self._localizations_x, self._localizations_y)
 
     @pyqtSlot(float, float)
     def get_shift(self, shift_x, shift_y):
@@ -332,9 +337,9 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.posPlotItem.setLabels(
             bottom=("X position", "nm"), left=("Y position", "nm")
         )
-        self.posPlot = self.posPlotItem.plot([], pen=None,
-                                             symbolBrush=(255, 0, 0),
-                                             symbolSize=5, symbolPen=None)
+        self.posPlot: pg.PlotDataItem = self.posPlotItem.plot(
+            [], pen=None, symbolBrush=(255, 0, 0), symbolSize=5, symbolPen=None
+            )
         # folder
         # TO DO: move this to backend
         today = str(date.today()).replace("-", "")
