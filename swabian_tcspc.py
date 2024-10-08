@@ -7,8 +7,7 @@ TCSPC con tracking.
 
 
 import numpy as np
-import time
-from datetime import date, datetime
+from datetime import date
 import os
 import tools.filenames as fntools
 from tkinter import Tk, filedialog
@@ -40,6 +39,7 @@ _lgn.basicConfig(level=_lgn.INFO)
 _MAX_EVENTS = 131072
 _N_BINS = 50
 _MAX_SAMPLES = int(60*200)  # si es cada 5 ms son 200 por segundo
+
 
 @_dataclass
 class PSFMetadata:
@@ -97,13 +97,13 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.initialDir = r"C:\Data"
         self.iinfo = IInfo
         # FIXME: for developing only
-        # self.period = self.iinfo.period
-        self.period = int(50E3)
+        self.period = self.iinfo.period
+        # self.period = int(50E3)
         self._init_data()
         self.setup_gui()
 
     def _init_data(self):
-        self._hist_data = np.histogram([], range=(0, self.period), bins=_N_BINS)
+        self._hist_data = list(np.histogram([], range=(0, self.period), bins=_N_BINS))
         self._intensities = np.zeros((4, _MAX_SAMPLES,), dtype=np.int32)
         self._last_pos = 0
         self._localizations = [[]]
@@ -121,7 +121,6 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self._init_data()
         self.measureButton.setEnabled(False)
         self._measure = TCSPCBackend(self.tagger, self.iinfo, self.get_data)
-        # TODO: sort PSFs
         self._measure.start_measure(self._PSF, self._config.px_size)
 
     def stop_measurement(self):
@@ -134,7 +133,6 @@ class TCSPCFrontend(QtWidgets.QFrame):
             print("Parece no haber measure")
             return
         self._measure.stop_measure()
-
 
     def load_folder(self):
         """Muestra una ventana de selección de carpeta."""
@@ -204,16 +202,20 @@ class TCSPCFrontend(QtWidgets.QFrame):
     @pyqtSlot(np.ndarray, np.ndarray, tuple)
     def get_data(self, delta_t: np.ndarray, binned: np.array, new_pos: tuple):
         """Receive new data and graph."""
-        counts, bins = np.histogram(delta_t, range=(0, self.period), bins=_N_BINS)
-        self._hist_data[0] += counts
-        self.histPlot.plot(bins[0:-1], counts)
-        for plot, data, newint in zip(self.intplots, self._intensities, binned):
-            data[self._last_pos] = newint
-            plot.setData(data)
-        self.trace_vline.setValue(self._last_pos)
-        if self._last_pos >= _MAX_SAMPLES:
-            self._last_pos = 0
-        self.add_localization(*new_pos)
+        try:
+            counts, bins = np.histogram(delta_t, range=(0, self.period), bins=_N_BINS)
+            self._hist_data[0] += counts
+            self.histPlot.setData(bins[0:-1], self._hist_data[0])
+            for plot, data, newint in zip(self.intplots, self._intensities, binned):
+                data[self._last_pos] = newint
+                plot.setData(data)
+            self.trace_vline.setValue(self._last_pos)
+            self._last_pos += 1
+            if self._last_pos >= _MAX_SAMPLES:
+                self._last_pos = 0
+            self.add_localization(*new_pos)
+        except Exception as e:
+            print(e, type(e))
 
     def add_localization(self, pos_x, pos_y):
         """Receive a new localization from backend."""
@@ -255,6 +257,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
         """Clear all data and plots."""
         self.histPlot.clear()
         self.tracePlot.clear()
+        self.tracePlot.addItem(self.trace_vline)
+
         self.posPlot.clear()
         self._init_data()
 
@@ -280,6 +284,12 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.measureButton = QtWidgets.QPushButton("Measure TTTR")
         self.stopButton = QtWidgets.QPushButton("Stop")
         self.exportDataButton = QtWidgets.QPushButton("Export data")
+
+        # self.exportDataButton.clicked.connect(
+        #     lambda: self.get_data(
+        #         np.random.randint(0, 49999, 100),
+        #         np.random.randint(0, 100, size=4), np.random.random(2)))
+
         self.clearButton = QtWidgets.QPushButton("Clear data")
         # TCSPC parameters labels and edits
         acqtimeLabel = QtWidgets.QLabel("Acquisition time [s]")
@@ -296,10 +306,11 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.filenameEdit = QtWidgets.QLineEdit("filename")
 
         # microTime histogram and timetrace
-        self.histPlot = self.dataWidget.addPlot(
+        self.histWidg = self.dataWidget.addPlot(
             row=0, col=0, title="microTime histogram", stepMode=True, fillLevel=0,
         )
-        self.histPlot.setLabels(bottom=("ns"), left=("counts"))
+        self.histWidg.setLabels(bottom=("ps"), left=("counts"))
+        self.histPlot  = self.histWidg.plot()
 
         self.tracePlot = self.dataWidget.addPlot(row=1, col=0, title="Time trace")
         self.tracePlot.setLabels(bottom=("s"), left=("counts"))
@@ -366,6 +377,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
         # subgrid.addWidget(self.channel1Label, 9, 0)
         # subgrid.addWidget(self.channel1Value, 9, 1)
 
+        subgrid.addWidget(self.exportDataButton, 16, 1)
+
         subgrid.addWidget(self.measureButton, 17, 0)
         subgrid.addWidget(self.prepareButton, 18, 0)
         subgrid.addWidget(self.stopButton, 17, 1)
@@ -408,7 +421,7 @@ class TCSPCBackend:
         self._delays = self.iinfo.shutter_delays[sorted_indexes]
         self._locator = _analysis.MinFluxLocator(PSF, SBR, PSF_info.px_size)
 
-    def start_measure(self, PSF: np.ndarray, nmppx: float):
+    def start_measure(self):
         """Called from GUI."""
         self.fname = "Fantasia_filename"
         self.currentfname = fntools.getUniqueName(self.fname)
@@ -434,7 +447,8 @@ class TCSPCBackend:
 
     def report(self, delta_t: np.ndarray, bins: np.ndarray, pos: tuple):
         try:
-            self._cb(delta_t, bins, pos)
+            new_pos = self._locator(bins)
+            self._cb(delta_t, bins, new_pos)
         except Exception as e:
             _lgr.error("Excepción %s reportando data: %s", type(e), e)
             self.stop_measure()
@@ -452,7 +466,7 @@ if __name__ == "__main__":
     tt_data = _st.get_tt_info()
     if not tt_data:
         print("   ******* Enchufá el equipo *******")
-        # raise ValueError("POR FAVOR ENCHUFA EL EQUIPO")
+        raise ValueError("POR FAVOR ENCHUFA EL EQUIPO")
     IInfo = None
     try:
         IInfo = TCSPInstrumentInfo.load()
@@ -460,7 +474,7 @@ if __name__ == "__main__":
     except FileNotFoundError:
         _lgr.info("No configuration file found")
         # FIXME: for testing
-        tt_data = {'aaaaa': {}}
+        # tt_data = {'aaaaa': {}}
         serial = list(tt_data.keys())[0]
     if not (serial in list(tt_data.keys())):
         _lgr.warning(
@@ -475,11 +489,11 @@ if __name__ == "__main__":
     )
     tt_info = tt_data[serial]
     # FIXME: testing
-    tt_info = TCSPInstrumentInfo("serial", 0, 'NIM', int(50E3),
-                                 np.arange(0, 50000, 12500))
-    # with _TimeTagger.createTimeTagger() as tagger:
-    tagger = None
-    if True:
+    # tt_info = TCSPInstrumentInfo("serial", 0, 'NIM', int(50E3),
+    #                              np.arange(0, 50000, 12500))
+    with _TimeTagger.createTimeTagger() as tagger:
+    # tagger = None
+    # if True:
         if not QtWidgets.QApplication.instance():
             app = QtWidgets.QApplication([])
         else:
