@@ -50,23 +50,24 @@ class MiniLasEvo:
         
         code = int(write_return)
         if code != 0:
-            if code == '1':
+            if code == 1:
                 print('[MiniLasEvo] Command invalid')
-            elif code == '2':
+            elif code == 2:
                 print('[MiniLasEvo] Wrong number of parameters')
-            elif code == '3':
+            elif code == 3:
                 print('[MiniLasEvo] Parameter value is out of range')
-            elif code == '4':
+            elif code == 4:
                 print('[MiniLasEvo] Unlocking code is wrong')
-            elif code == '5':
+            elif code == 5:
                 print('[MiniLasEvo] Device is locked for this command')
-            elif code == '6':
+            elif code == 6:
                 print('[MiniLasEvo] This function is not supported')
-            elif code == '7':
+            elif code == 7:
                 print('[MiniLasEvo] Timeout while reading command (60 s)')
-            elif code == '8':
+            elif code == 8:
                 print('[MiniLasEvo] This value is currently not available')
-                
+            else:
+                print('[MiniLasEvo] Unknown return value')
         message = self.serial.readline().decode()
         message = message.replace('0 ', '')
         message = message.replace(MSG_SUFFIX, '')
