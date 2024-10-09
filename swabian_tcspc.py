@@ -122,7 +122,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.clear_data()
         self._init_data()
         self.measureButton.setEnabled(False)
-        self._measure = TCSPCBackend(self.tagger, self.iinfo, self.get_data, self._PSF,
+        self._measure = TCSPCBackend(self.tagger, self.iinfo, self.callback, self._PSF,
                                      self._config)
         self._measure.start_measure()
 
@@ -199,11 +199,11 @@ class TCSPCFrontend(QtWidgets.QFrame):
         _lgr.info("%s", metadata)
         self._config = metadata
 
-    def callback(self, delta_t: np.ndarray, binned: np.array, newpos: tuple):
+    def callback(self, delta_t: np.ndarray, binned: np.array, newpos: np.array):
         self.measureSignal.emit(delta_t, binned, newpos)
 
-    @pyqtSlot(np.ndarray, np.ndarray, tuple)
-    def get_data(self, delta_t: np.ndarray, binned: np.array, new_pos: tuple):
+    @pyqtSlot(np.ndarray, np.ndarray, np.array)
+    def get_data(self, delta_t: np.ndarray, binned: np.array, new_pos: np.array):
         """Receive new data and graph."""
         try:
             counts, bins = np.histogram(delta_t, range=(0, self.period), bins=_N_BINS)
@@ -228,8 +228,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
     def add_localization(self, pos_x, pos_y, last_pos, update: bool):
         """Receive a new localization from backend."""
-        self._localizations_x[last_pos] = pos_x
-        self._localizations_y[last_pos] = pos_y
+        self._localizations_x[last_pos] = pos_x  # + self._shifts[-1][0]
+        self._localizations_y[last_pos] = pos_y  # + self._shifts[-1][1]
         if update:
             self.posPlot.setData(self._localizations_x, self._localizations_y)
 
