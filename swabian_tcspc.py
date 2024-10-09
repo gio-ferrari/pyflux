@@ -431,7 +431,7 @@ class TCSPCBackend:
         sorted_indexes = np.argsort(self.iinfo.shutter_delays)
         self._PSF = PSF[sorted_indexes]
         self._delays = [self.iinfo.shutter_delays[idx] for idx in sorted_indexes]
-        self._locator = _analysis.MinFluxLocator(PSF, SBR, PSF_info.px_size)
+        self._locator = _analysis.MinFluxLocator(PSF, SBR, PSF_info.px_size * 1E3)
 
     def start_measure(self):
         """Called from GUI."""
