@@ -35,7 +35,7 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
         # forzar al caller a hacer bien
         if sorted(delays) != list(delays):
             raise ValueError("Delays are not sorted")
-        self.delays = period - np.array(delays, dtype=np.int64)
+        self.shutter_delays = period - np.array(delays, dtype=np.int64)
         self._cb = callback
 
         # The method register_channel(channel) activates
@@ -163,7 +163,8 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
             print("hubo ", errors[0], "errores")
         # TODO: pasar esta línea a numba
         # n_times = max(n_times, 100)  # usar los últimos 100 fotones.
-        MinfluxMeasurement.process_delays(self._delays[:n_times], self.delays, self._bins)
+        MinfluxMeasurement.process_delays(self._delays[:n_times],
+                                          self.shutter_delays, self._bins)
         self._cb(self._delays[:n_times].copy(), self._bins.copy(), (0, 0))
 
 

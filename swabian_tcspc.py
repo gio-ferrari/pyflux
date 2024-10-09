@@ -225,7 +225,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         except Exception as e:
             print(e, type(e))
 
-    def add_localization(self, pos_x, pos_y, update:bool):
+    def add_localization(self, pos_x, pos_y, update: bool):
         """Receive a new localization from backend."""
         self._localizations_x[-1].append(pos_x)
         self._localizations_y[-1].append(pos_y)
