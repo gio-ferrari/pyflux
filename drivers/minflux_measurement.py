@@ -112,23 +112,25 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
 
     @staticmethod
     @numba.jit((numba.int32[:], numba.int64[:], numba.int64[:]),
-               nopython=True, nogil=True, parallel=True)
+               nopython=True, nogil=True,) # parallel=True)
     def process_delays(data: np.ndarray, delays, bins):
         """Bin time differences in data, return number of records.
 
         WARNING: delays must be ORDERED.
         """
         bins[:] = 0
-        for i in numba.prange(len(data)):  # hardcoded para 4
-            td = data[i]
-            if td <= delays[3]:
-                bins[3] += 1
-            elif td <= delays[2]:
-                bins[2] += 1
-            elif td <= delays[1]:
-                bins[1] += 1
-            else:
-                bins[0] += 1
+        for td in data:  #i in numba.prange(len(data)):  # hardcoded para 4
+            # td = data[i]
+            bins[3 - td // 12500] += 1
+            # bins[0]+=1
+            # if td <= delays[3]:
+            #     bins[3] += 1
+            # elif td <= delays[2]:
+            #     bins[2] += 1
+            # elif td <= delays[1]:
+            #     bins[1] += 1
+            # else:
+            #     bins[0] += 1
 
     def process(self, incoming_tags, begin_time, end_time):
         """

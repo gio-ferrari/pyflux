@@ -81,8 +81,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
     measureSignal = pyqtSignal(np.ndarray, np.ndarray, tuple)
 
     # Data
-    _localizations_x = [[]]
-    _localizations_y = [[]]  # one list per shift
+    _localizations_x = np.full((_MAX_SAMPLES,), 0)
+    _localizations_y = np.full((_MAX_SAMPLES,), 0)
     _shifts = [(0, 0),]
     _intensities = np.zeros((4, _MAX_SAMPLES,), dtype=np.int32)
     _PSF = None
@@ -100,7 +100,6 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.iinfo = IInfo
         # FIXME: for developing only
         self.period = self.iinfo.period
-        # self.period = int(50E3)
         self._init_data()
         self.setup_gui()
 
@@ -108,8 +107,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self._hist_data = list(np.histogram([], range=(0, self.period), bins=_N_BINS))
         self._intensities = np.zeros((4, _MAX_SAMPLES,), dtype=np.int32)
         self._last_pos = 0
-        self._localizations_x = [[]]
-        self._localizations_y = [[]]
+        self._localizations_x = np.full((_MAX_SAMPLES,), 0)
+        self._localizations_y = np.full((_MAX_SAMPLES,), 0)
         self._shifts = [(0, 0),]
 
     def start_measurement(self):
@@ -209,15 +208,17 @@ class TCSPCFrontend(QtWidgets.QFrame):
         try:
             counts, bins = np.histogram(delta_t, range=(0, self.period), bins=_N_BINS)
             self._hist_data[0] += counts
-            self.histPlot.setData(bins[0:-1], self._hist_data[0])
+            # self.histPlot.setData(bins[0:-1], self._hist_data[0])
             self._intensities[:, self._last_pos] = binned
             # print(self._last_pos)
             must_update = (self._last_pos % 100 == 0)
             if must_update:
                 for plot, data in zip(self.intplots, self._intensities):
-                    plot.setData(data)
+                    plot.setData(data)  #, connect="finite")
                 self.trace_vline.setValue(self._last_pos)
-            self.add_localization(*new_pos, must_update)
+                self.histPlot.setData(bins[0:-1], counts)
+            self.add_localization(*new_pos, self._last_pos, must_update)
+            print(new_pos)
 
             self._last_pos += 1
             if self._last_pos >= _MAX_SAMPLES:
@@ -225,31 +226,10 @@ class TCSPCFrontend(QtWidgets.QFrame):
         except Exception as e:
             print(e, type(e))
 
-    def add_localization(self, pos_x, pos_y, update: bool):
+    def add_localization(self, pos_x, pos_y, last_pos, update: bool):
         """Receive a new localization from backend."""
-        self._localizations_x[-1].append(pos_x)
-        self._localizations_y[-1].append(pos_y)
-        # data = np.array(list(zip(*self._localizations[-1])))
-        # data = np.array(sum(self._localizations, []))
-        # shifts = np.array(self._shifts)
-        # locs = data + shifts[np.newaxis, :]
-        # TODO: usar numpy
-        if len(self._localizations_x) != len(self._shifts):
-            _lgr.error("El largo de los shifts y localizaciones no coincide")
-        # data = np.empty((sum(len(_) for _ in self._localizations), 2,))
-        # pos = 0
-        # try:
-        #     for loc, s in zip(self._localizations, self._shifts):
-        #         if len(loc):
-        #             data[pos: pos + len(loc)] = np.array(loc) + s
-        #             pos += len(loc)
-        # except Exception as e:
-        #     print("**********")
-        #     print(type(e), e, len(loc))
-        #     print("===========")
-        #     raise
-
-        # data = np.vstack((self._localizations_x, self._localizations_y,))
+        self._localizations_x[last_pos] = pos_x
+        self._localizations_y[last_pos] = pos_y
         if update:
             self.posPlot.setData(self._localizations_x, self._localizations_y)
 
@@ -338,7 +318,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
             bottom=("X position", "nm"), left=("Y position", "nm")
         )
         self.posPlot: pg.PlotDataItem = self.posPlotItem.plot(
-            [], pen=None, symbolBrush=(255, 0, 0), symbolSize=5, symbolPen=None
+            [], [], pen=None, symbolBrush=(255, 0, 0), symbolSize=5, symbolPen=None
             )
         # folder
         # TO DO: move this to backend
@@ -430,7 +410,7 @@ class TCSPCBackend:
         SBR = 8
         sorted_indexes = np.argsort(self.iinfo.shutter_delays)
         self._PSF = PSF[sorted_indexes]
-        self._delays = [self.iinfo.shutter_delays[idx] for idx in sorted_indexes]
+        self._shutter_delays = [self.iinfo.shutter_delays[idx] for idx in sorted_indexes]
         self._locator = _analysis.MinFluxLocator(PSF, SBR, PSF_info.px_size * 1E3)
 
     def start_measure(self):
@@ -447,15 +427,15 @@ class TCSPCBackend:
             self.iinfo.laser_channel,
             self.iinfo.period,
             _MAX_EVENTS,
-            self._delays,
+            self._shutter_delays,
             self.report,
         )
         self.file_measurement = _TimeTagger.FileWriter(
             self.measurementGroup.getTagger(), 'filename.ttbin',
             [self.iinfo.laser_channel] + [APDi.channel for APDi in self.iinfo.APD_info])
-        # self.measurementGroup.start()
+        self.measurementGroup.start()
         # Lo hacemos así por ahora
-        self.measurementGroup.startFor(int(15E12))
+        # self.measurementGroup.startFor(int(15E12))
 
     def report(self, delta_t: np.ndarray, bins: np.ndarray, pos: tuple):
         try:

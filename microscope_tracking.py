@@ -252,7 +252,7 @@ if __name__ == '__main__':
     
     #initialize devices
     
-    port = tools.get_MiniLasEvoPort()
+    port = 'COM5'  # tools.get_MiniLasEvoPort('ML069719')
     print('MiniLasEvo diode laser port:', port)
     diodelaser = MiniLasEvo(port)
     
