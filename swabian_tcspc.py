@@ -78,7 +78,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
     """Frontend para TCSPC con tracking."""
 
     # Signals
-    measureSignal = pyqtSignal(np.ndarray, np.ndarray, tuple)
+    measureSignal = pyqtSignal(np.ndarray, np.ndarray, np.ndarray)
 
     # Data
     _localizations_x = np.full((_MAX_SAMPLES,), 0)
@@ -102,6 +102,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.period = self.iinfo.period
         self._init_data()
         self.setup_gui()
+        self.measureSignal.connect(self.get_data)
 
     def _init_data(self):
         self._hist_data = list(np.histogram([], range=(0, self.period), bins=_N_BINS))
@@ -202,7 +203,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
     def callback(self, delta_t: np.ndarray, binned: np.array, newpos: np.array):
         self.measureSignal.emit(delta_t, binned, newpos)
 
-    @pyqtSlot(np.ndarray, np.ndarray, np.array)
+    @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
     def get_data(self, delta_t: np.ndarray, binned: np.array, new_pos: np.array):
         """Receive new data and graph."""
         try:
@@ -211,14 +212,14 @@ class TCSPCFrontend(QtWidgets.QFrame):
             # self.histPlot.setData(bins[0:-1], self._hist_data[0])
             self._intensities[:, self._last_pos] = binned
             # print(self._last_pos)
-            must_update = (self._last_pos % 100 == 0)
+            must_update = (self._last_pos % 10 == 0)
             if must_update:
                 for plot, data in zip(self.intplots, self._intensities):
                     plot.setData(data)  #, connect="finite")
                 self.trace_vline.setValue(self._last_pos)
                 self.histPlot.setData(bins[0:-1], counts)
             self.add_localization(*new_pos, self._last_pos, must_update)
-            print(new_pos)
+            # print(new_pos)
 
             self._last_pos += 1
             if self._last_pos >= _MAX_SAMPLES:

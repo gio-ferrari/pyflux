@@ -66,7 +66,7 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
         # The lock is already acquired within the backend.
         self._last_time = 0
         self._delays = np.empty(self._max_events, dtype=np.int32)
-        self._bins[:] = 0
+        self._bins = np.zeros((4,), dtype=np.int64)
 
     def on_start(self):
         # The lock is already acquired within the backend.
@@ -112,25 +112,23 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
 
     @staticmethod
     @numba.jit((numba.int32[:], numba.int64[:], numba.int64[:]),
-               nopython=True, nogil=True,) # parallel=True)
+               nopython=True, nogil=True)# , boundscheck=True)
     def process_delays(data: np.ndarray, delays, bins):
         """Bin time differences in data, return number of records.
 
         WARNING: delays must be ORDERED.
         """
         bins[:] = 0
-        for td in data:  #i in numba.prange(len(data)):  # hardcoded para 4
-            # td = data[i]
-            bins[3 - td // 12500] += 1
-            # bins[0]+=1
-            # if td <= delays[3]:
-            #     bins[3] += 1
-            # elif td <= delays[2]:
-            #     bins[2] += 1
-            # elif td <= delays[1]:
-            #     bins[1] += 1
-            # else:
-            #     bins[0] += 1
+        for td in data:  # hardcoded para 4
+            # bins[3 - td // 12500] += 1
+            if td <= delays[3]:
+                bins[3] += 1
+            elif td <= delays[2]:
+                bins[2] += 1
+            elif td <= delays[1]:
+                bins[1] += 1
+            else:
+                bins[0] += 1
 
     def process(self, incoming_tags, begin_time, end_time):
         """
