@@ -40,7 +40,7 @@ EXPOSURE_TIME_VALUE = 50000.0  # us
 class IDS_U3:
     """IDS Camera."""
 
-    def __init__(self, exposure_time: int = EXPOSURE_TIME_VALUE) -> None:
+    def __init__(self, exposure_time = EXPOSURE_TIME_VALUE):
         """Init Camera."""
         self.exposure_time = exposure_time
         self.__device = None
@@ -382,7 +382,7 @@ class IDS_U3:
 
 
 if __name__ == '__main__':
-    device = IDS_U3(exposure_time = '50000')
+    device = IDS_U3(30000) #us
     if device.open_device():
         print("Big success, device configured")
     else:

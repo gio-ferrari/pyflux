@@ -94,6 +94,7 @@ class Frontend(QtGui.QFrame):
     closeSignal = pyqtSignal()
     saveDataSignal = pyqtSignal(bool)
     exposureTimeChanged = pyqtSignal(int)
+    saveVideoSignal = pyqtSignal(bool)
     """
     Signals
     - roiInfoSignal: emmited when a ROI changes
@@ -106,6 +107,8 @@ class Frontend(QtGui.QFrame):
          To: [backend] get_save_data_state
     - exposureTimeChanged:
          To: [backend] update_exposure_time
+    - saveVideoSignal
+         To: [backend] start_saving_video
     """
 
     def __init__(self, *args, **kwargs):
@@ -191,17 +194,17 @@ class Frontend(QtGui.QFrame):
     def on_exposure_time_changed(self):
         try:
             """Emite la señal con el nuevo tiempo de exposición."""
-            new_exposure_time = int(self.IdsExpTimeEdit.text())
+            new_exposure_time = int(self.exposureTimeEdit.text())
             self.exposureTimeChanged.emit(new_exposure_time)
         except ValueError:
             print("Error en valor ingresado para el tiempo de exposición.")
     
     def video_checkbox_changed(self, state):
         if state == QtCore.Qt.Checked:
-            self.backend.start_saving_video()  
+            self.saveVideoSignal.emit(True)
         else:
-            self.backend.stop_saving_video() 
-
+            self.saveVideoSignal.emit(False)
+            
     @pyqtSlot(bool)
     def toggle_liveview(self, on):
         """Cambia el estado del botón al elegirlo.
@@ -673,9 +676,12 @@ class Backend(QtCore.QObject):
     def __init__(self, camera, adw, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.camera = camera  # no need to setup or initialize camera
+        print("hola0")
         if self.camera.open_device():
+            print("hola")
             try:
                 self.camera.start_acquisition()
+                print("hola2")
             except Exception as e:
                 print("Exception", str(e))
         else:
@@ -847,13 +853,14 @@ class Backend(QtCore.QObject):
         # send image to gui
         # self.changedImage.emit(self.image)  # ahora esta en update_graph_data
     
-    def start_saving_video(self):
-        self.saving_video = True
-        self.frames.clear()  # Limpia la lista de frames si ya había imágenes guardadas
-
-    def stop_saving_video(self):
-        self.saving_video = False
-        self.save_video()
+    @pyqtSlot(bool)
+    def start_saving_video(self, val):
+        if val:
+            self.saving_video = True
+            self.frames.clear()  # Limpia la lista de frames si ya había imágenes guardadas
+        else:
+            self.saving_video = False
+            self.save_video()
 
     def save_video(self):
         if self.frames:
@@ -861,6 +868,7 @@ class Backend(QtCore.QObject):
             #     imwrite(f'frame_{i:04d}.tiff', frame)  # Guarda cada frame como TIFF
             stack = np.array(self.frames)
             imwrite('output_video.tiff', stack)
+            
     # Incorporo cambios con vistas a añadir data actualizada de z
     def update_graph_data(self):
         """Update the data displayed in the graphs and pass around."""
@@ -1808,6 +1816,7 @@ class Backend(QtCore.QObject):
         frontend.roiInfoSignal.connect(self.get_roi_info)
         frontend.closeSignal.connect(self.stop)
         frontend.saveDataSignal.connect(self.get_save_data_state)
+        frontend.saveVideoSignal.connect(self.start_saving_video)
         frontend.exposureTimeChanged.connect(self.update_exposure_time)
         frontend.exportDataButton.clicked.connect(self.export_data)
         frontend.clearDataButton.clicked.connect(self.reset_graph)
@@ -1866,7 +1875,7 @@ if __name__ == '__main__':
 
     # if camera wasnt closed properly just keep using it without opening new one
     try:
-        camera = ids_cam.IDS_U3(exposure_time = '50000') #Trato de colocar un valor de default, check this!
+        camera = ids_cam.IDS_U3(exposure_time = 50000) #Trato de colocar un valor de default, check this!
     except Exception:
         print("Excepcion inicializando la cámara... seguimos")
 
