@@ -14,6 +14,7 @@ import scipy.ndimage as ndi
 from datetime import date, datetime
 
 from scipy import optimize as opt
+from tifffile import imwrite
 from tools import customLog  # NOQA Para inicializar el logging
 import tools.viewbox_tools as viewbox_tools
 import tools.PSF as PSF
@@ -29,7 +30,7 @@ from pyqtgraph.Qt import QtCore, QtGui
 import qdarkstyle
 
 import drivers.ADwin as ADwin
-# Is it necessary to modify expousure time and gain in driver ids_cam? FC
+# Is it necessary to modify exposure time and gain in driver ids_cam? FC YES
 import drivers.ids_cam as ids_cam
 
 import logging as _lgn
@@ -88,10 +89,11 @@ class GroupedCheckBoxes:
 
 class Frontend(QtGui.QFrame):
     """FrontEnd para estabilización XY, y Z."""
-
+    
     roiInfoSignal = pyqtSignal(str, int, list)
     closeSignal = pyqtSignal()
     saveDataSignal = pyqtSignal(bool)
+    exposureTimeChanged = pyqtSignal(int)
     """
     Signals
     - roiInfoSignal: emmited when a ROI changes
@@ -102,6 +104,8 @@ class Frontend(QtGui.QFrame):
          To: [backend] stop
     - saveDataSignal:
          To: [backend] get_save_data_state
+    - exposureTimeChanged:
+         To: [backend] update_exposure_time
     """
 
     def __init__(self, *args, **kwargs):
@@ -183,6 +187,20 @@ class Frontend(QtGui.QFrame):
         del roi
         self.ROInumber -= 1
         self.emit_roi_info('xy')
+    
+    def on_exposure_time_changed(self):
+        try:
+            """Emite la señal con el nuevo tiempo de exposición."""
+            new_exposure_time = int(self.IdsExpTimeEdit.text())
+            self.exposureTimeChanged.emit(new_exposure_time)
+        except ValueError:
+            print("Error en valor ingresado para el tiempo de exposición.")
+    
+    def video_checkbox_changed(self, state):
+        if state == QtCore.Qt.Checked:
+            self.backend.start_saving_video()  
+        else:
+            self.backend.stop_saving_video() 
 
     @pyqtSlot(bool)
     def toggle_liveview(self, on):
@@ -476,10 +494,6 @@ class Frontend(QtGui.QFrame):
         self.delete_roiButton = QtGui.QPushButton('delete ROIs')
         self.delete_roiButton.clicked.connect(self.delete_roi)
 
-        # Aquí se debería agregar delete_roi_zButton
-        # self.delete_roi_zButton = QtGui.QPushButton('delete ROI z')
-        # self.delete_roi_zButton.clicked.connect(self.delete_roi_z)
-
         # export data checkbox
         self.exportDataButton = QtGui.QPushButton('Export current data')
 
@@ -520,8 +534,13 @@ class Frontend(QtGui.QFrame):
                                                  self.feedbackZBox,
                                                  )
         #Set exposure time
-        self.IdsExpTimeLabel = QtGui.QLabel('IDS Exp Time (µs)')
-        self.IdsExpTimeEdit = QtGui.QLineEdit('50000')
+        self.exposureTimeLabel = QtGui.QLabel('IDS Exp Time (µs)')
+        self.exposureTimeEdit = QtGui.QLineEdit('50000') #us
+        self.exposureTimeEdit.textChanged.connect(self.on_exposure_time_changed)
+        # save video
+        self.saveVideoBox = QtGui.QCheckBox("Save Video")
+        self.saveVideoBox.stateChanged.connect(self.video_checkbox_changed)
+
         # save data signal
         self.saveDataBox = QtGui.QCheckBox("Save data")
         self.saveDataBox.stateChanged.connect(self.emit_save_data_state)
@@ -560,9 +579,10 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(trackgb, 0, 1, 2, 3)
         # subgrid.addWidget(self.feedbackLoopBox, 2, 1)
         subgrid.addWidget(feedbackgb, 2, 1, 2, 3)
-        subgrid.addWidget(self.IdsExpTimeLabel, 4, 1)
-        subgrid.addWidget(self.IdsExpTimeEdit, 4, 2)
+        subgrid.addWidget(self.exposureTimeLabel, 4, 1)
+        subgrid.addWidget(self.exposureTimeEdit, 4, 2)
         subgrid.addWidget(self.saveDataBox, 5, 1)
+        subgrid.addWidget(self.saveVideoBox, 6, 1)
         subgrid.addWidget(self.shutterLabel, 9, 0)
         subgrid.addWidget(self.shutterCheckbox, 9, 1)
 
@@ -663,6 +683,8 @@ class Backend(QtCore.QObject):
             raise Exception("No pude abrir la cámara")
 
         self.adw = adw
+        self.saving_video = False
+        self.frames = []
         # folder
         # TODO: change to get folder from microscope
         today = str(date.today()).replace('-', '')
@@ -720,7 +742,11 @@ class Backend(QtCore.QObject):
 
         self.previous_image = None  # para chequear que la imagen cambie
         self.currentz = 0.0  # Valor en pixeles dentro del roi del z
-
+    
+    @pyqtSlot(int) 
+    def update_exposure_time(self, exposure_time):
+        self.camera.set_exposure_time(exposure_time)
+    
     @pyqtSlot(int, bool)
     def toggle_tracking_shutter(self, num, val):
         """Toma acciones con los shutters que lo involucran. DESACTIVADO.
@@ -814,10 +840,27 @@ class Backend(QtCore.QObject):
         if np.all(self.previous_image == self.image):
             _lgr.error('Latest_frame equal to previous frame')
         self.previous_image = self.image
+        
+        if self.saving_video:
+            self.frames.append(self.image) 
 
         # send image to gui
         # self.changedImage.emit(self.image)  # ahora esta en update_graph_data
+    
+    def start_saving_video(self):
+        self.saving_video = True
+        self.frames.clear()  # Limpia la lista de frames si ya había imágenes guardadas
 
+    def stop_saving_video(self):
+        self.saving_video = False
+        self.save_video()
+
+    def save_video(self):
+        if self.frames:
+            # for i, frame in enumerate(self.frames):
+            #     imwrite(f'frame_{i:04d}.tiff', frame)  # Guarda cada frame como TIFF
+            stack = np.array(self.frames)
+            imwrite('output_video.tiff', stack)
     # Incorporo cambios con vistas a añadir data actualizada de z
     def update_graph_data(self):
         """Update the data displayed in the graphs and pass around."""
@@ -1765,6 +1808,7 @@ class Backend(QtCore.QObject):
         frontend.roiInfoSignal.connect(self.get_roi_info)
         frontend.closeSignal.connect(self.stop)
         frontend.saveDataSignal.connect(self.get_save_data_state)
+        frontend.exposureTimeChanged.connect(self.update_exposure_time)
         frontend.exportDataButton.clicked.connect(self.export_data)
         frontend.clearDataButton.clicked.connect(self.reset_graph)
         frontend.clearDataButton.clicked.connect(self.reset_data_arrays)
@@ -1822,13 +1866,13 @@ if __name__ == '__main__':
 
     # if camera wasnt closed properly just keep using it without opening new one
     try:
-        camera = ids_cam.IDS_U3()
+        camera = ids_cam.IDS_U3(exposure_time = '50000') #Trato de colocar un valor de default, check this!
     except Exception:
         print("Excepcion inicializando la cámara... seguimos")
 
     gui = Frontend()
     worker = Backend(camera, adw)
-
+    
     gui.make_connection(worker)
     worker.make_connection(gui)
 
