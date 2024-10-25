@@ -519,7 +519,9 @@ class Frontend(QtGui.QFrame):
                                                  self.feedbackXYBox,
                                                  self.feedbackZBox,
                                                  )
-
+        #Set exposure time
+        self.IdsExpTimeLabel = QtGui.QLabel('IDS Exp Time (µs)')
+        self.IdsExpTimeEdit = QtGui.QLineEdit('50000')
         # save data signal
         self.saveDataBox = QtGui.QCheckBox("Save data")
         self.saveDataBox.stateChanged.connect(self.emit_save_data_state)
@@ -551,8 +553,6 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.selectxyROIbutton, 3, 0)
         subgrid.addWidget(self.selectzROIbutton, 4, 0)
         subgrid.addWidget(self.delete_roiButton, 5, 0)
-        # también añadir algo así
-        # subgrid.addWidget(self.delete_roi_zButton, 6, 0)
         subgrid.addWidget(self.exportDataButton, 6, 0)
         subgrid.addWidget(self.clearDataButton, 7, 0)
         subgrid.addWidget(self.xyPatternButton, 8, 0)
@@ -560,7 +560,9 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(trackgb, 0, 1, 2, 3)
         # subgrid.addWidget(self.feedbackLoopBox, 2, 1)
         subgrid.addWidget(feedbackgb, 2, 1, 2, 3)
-        subgrid.addWidget(self.saveDataBox, 4, 1)
+        subgrid.addWidget(self.IdsExpTimeLabel, 4, 1)
+        subgrid.addWidget(self.IdsExpTimeEdit, 4, 2)
+        subgrid.addWidget(self.saveDataBox, 5, 1)
         subgrid.addWidget(self.shutterLabel, 9, 0)
         subgrid.addWidget(self.shutterCheckbox, 9, 1)
 
