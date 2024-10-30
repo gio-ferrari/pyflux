@@ -307,15 +307,16 @@ class Frontend(QtGui.QFrame):
         if (num == 5) or (num == 6) or (num == 8):
             self.shutterCheckbox.setChecked(on)
 
-    @pyqtSlot(bool, bool, bool, bool, bool)
+    @pyqtSlot(bool, bool, bool, bool, bool, bool)
     def get_backend_states(self, tracking_xy, tracking_z, feedback_xy, feedback_z,
-                           savedata):
+                           savedata, savevideo):
         """Actualizar el frontend de acuerdo al estado del backend."""
         self.trackXYBox.setChecked(tracking_xy)
         self.trackZBox.setChecked(tracking_z)
         self.feedbackXYBox.setChecked(feedback_xy)
         self.feedbackZBox.setChecked(feedback_z)
         self.saveDataBox.setChecked(savedata)
+        self.saveVideoBox.setChecked(savevideo)
 
     def emit_save_data_state(self):
         """Informa al backend si hay que grabar data xy o no."""
@@ -536,7 +537,7 @@ class Frontend(QtGui.QFrame):
                                                  self.feedbackXYBox,
                                                  self.feedbackZBox,
                                                  )
-        #Set exposure time
+        # set exposure time
         self.exposureTimeLabel = QtGui.QLabel('IDS Exp Time (µs)')
         self.exposureTimeEdit = QtGui.QLineEdit('50000') #us
         self.exposureTimeEdit.textChanged.connect(self.on_exposure_time_changed)
@@ -643,7 +644,7 @@ class Backend(QtCore.QObject):
     changedXYData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, )
     changedZData = pyqtSignal(np.ndarray, np.ndarray, )
     # no se usa en xyz_tracking
-    updateGUIcheckboxSignal = pyqtSignal(bool, bool, bool, bool, bool)
+    updateGUIcheckboxSignal = pyqtSignal(bool, bool, bool, bool, bool, bool)
     # changedSetPoint = pyqtSignal(float) #Debería añadir esta señal??? de focus.py
 
     # signal to emit new piezo position after drift correction
@@ -676,12 +677,9 @@ class Backend(QtCore.QObject):
     def __init__(self, camera, adw, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.camera = camera  # no need to setup or initialize camera
-        print("hola0")
         if self.camera.open_device():
-            print("hola")
             try:
                 self.camera.start_acquisition()
-                print("hola2")
             except Exception as e:
                 print("Exception", str(e))
         else:
@@ -691,6 +689,7 @@ class Backend(QtCore.QObject):
         self.adw = adw
         self.saving_video = False
         self.frames = []
+        self.frame_counter = 0
         # folder
         # TODO: change to get folder from microscope
         today = str(date.today()).replace('-', '')
@@ -796,7 +795,7 @@ class Backend(QtCore.QObject):
             self.camON = False
         self.camON = True
         self.viewtimer.start(self.xyz_time)
-        # self.startTime = time.time()
+        # self.startTime = time.time() ##############Creo que debo descomentar
 
     def liveview_stop(self):
         self.viewtimer.stop()
@@ -836,7 +835,6 @@ class Backend(QtCore.QObject):
 
     def update_view(self):
         """Image/data update while in Liveview mode."""
-        # acquire image
         # This is a 2D array, (only R channel)
         self.image = self.camera.on_acquisition_timer()
         self.currentTime = time.time() - self.startTime
@@ -846,18 +844,24 @@ class Backend(QtCore.QObject):
         if np.all(self.previous_image == self.image):
             _lgr.error('Latest_frame equal to previous frame')
         self.previous_image = self.image
-        
-        if self.saving_video:
-            self.frames.append(self.image) 
 
         # send image to gui
         # self.changedImage.emit(self.image)  # ahora esta en update_graph_data
-    
+
+        # if self.saving_video:
+        #     self.frames.append(self.image)
+        if self.saving_video:
+            self.frame_counter += 1
+            if self.frame_counter >= 2:
+                self.frames.append(self.image)
+                self.frame_counter = 0
+            
     @pyqtSlot(bool)
     def start_saving_video(self, val):
         if val:
             self.saving_video = True
-            self.frames.clear()  # Limpia la lista de frames si ya había imágenes guardadas
+            self.frames.clear()
+            QtCore.QTimer.singleShot(120000, lambda: self.start_saving_video(False)) # ms
         else:
             self.saving_video = False
             self.save_video()
@@ -868,6 +872,11 @@ class Backend(QtCore.QObject):
             #     imwrite(f'frame_{i:04d}.tiff', frame)  # Guarda cada frame como TIFF
             stack = np.array(self.frames)
             imwrite('output_video.tiff', stack)
+            print("Recording video finished and saved.")
+            self.frames.clear()
+            self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
+                                              self.feedback_xy, self.feedback_z,
+                                              self.save_data_state, self.saving_video)
             
     # Incorporo cambios con vistas a añadir data actualizada de z
     def update_graph_data(self):
@@ -1098,7 +1107,7 @@ class Backend(QtCore.QObject):
         """Send a notification to frontend about status."""
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
-                                          self.save_data_state)
+                                          self.save_data_state, self.saving_video)
 
     def center_of_mass(self):
         """Calculate z image center of mass."""
@@ -1716,10 +1725,9 @@ class Backend(QtCore.QObject):
         self.toggle_tracking(True)
         self.toggle_feedback(True)
         self.save_data_state = True
-        # Esto está comentado en focus pero no en xy
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
-                                          self.save_data_state)
+                                          self.save_data_state, self.saving_video)
         _lgr.debug('System xy locked')
 
     @pyqtSlot(np.ndarray, np.ndarray)
@@ -1734,7 +1742,7 @@ class Backend(QtCore.QObject):
         # self.toggle_tracking(True)
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
-                                          self.save_data_state)
+                                          self.save_data_state, self.saving_video)
         x_f, y_f = r
         # z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         self.actuator_xy(x_f, y_f)
