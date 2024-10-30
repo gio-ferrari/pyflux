@@ -12,6 +12,7 @@ import numpy as np
 import time
 import scipy.ndimage as ndi
 from datetime import date, datetime
+import csv
 
 from scipy import optimize as opt
 from tifffile import imwrite
@@ -692,6 +693,7 @@ class Backend(QtCore.QObject):
         self.frame_counter = 0
         self.total_frames = 2*60 #2 fps #CHANGE THIS
         self.time_log_file = None
+        self.csv_writer = None
         # folder
         # TODO: change to get folder from microscope
         today = str(date.today()).replace('-', '')
@@ -849,16 +851,16 @@ class Backend(QtCore.QObject):
 
         # send image to gui
         # self.changedImage.emit(self.image)  # ahora esta en update_graph_data
-
-        if self.saving_video: #and len(self.frames) < self.total_frames:
+        #Forma 1 el Qtimer es quien regula
+        if self.saving_video: #and len(self.frames) < self.total_frames: #Forma 2, funciona por conteo de numero de frames
             self.frames.append(self.image)
-            # if self.time_log_file:  # Verificar que el archivo esté abierto
-            #     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            #     self.time_log_file.write(f"Frame {len(self.frames)}: {current_time}\n")
-            #     self.time_log_file.flush()
-        # if len(self.frames) >= self.total_frames:
+            if self.csv_writer:  # Verificar que el escritor esté configurado
+                current_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                self.csv_writer.writerow([len(self.frames), current_time])  # Escribir fila en CSV
+        
+        # if len(self.frames) >= self.total_frames: #Forma 2
         #     self.start_saving_video(False)
-            
+        #Forma 3: Toma un frame cada tanto 
         # if self.saving_video:
         #     self.frame_counter += 1
         #     if self.frame_counter >= 2:
@@ -870,7 +872,10 @@ class Backend(QtCore.QObject):
         if val:
             self.saving_video = True
             self.frames.clear()
-            #self.time_log_file = open("frame_timestamps.txt", "w")
+            self.time_log_file = open("frame_timestamps.csv", mode="w", newline="")
+            self.csv_writer = csv.writer(self.time_log_file)
+            self.csv_writer.writerow(["frame", "time"])  # Escribir encabezado
+
             QtCore.QTimer.singleShot(60000, lambda: self.start_saving_video(False)) # ms
         else:
             self.saving_video = False
@@ -885,9 +890,10 @@ class Backend(QtCore.QObject):
             print("Recording video finished and saved.")
             self.frames.clear()
             
-            # if self.time_log_file:
-            #     self.time_log_file.close()
-            #     # self.time_log_file = None
+            if self.time_log_file:
+                self.time_log_file.close()
+                self.time_log_file = None
+                self.csv_writer = None
                 
             self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                               self.feedback_xy, self.feedback_z,
