@@ -690,6 +690,8 @@ class Backend(QtCore.QObject):
         self.saving_video = False
         self.frames = []
         self.frame_counter = 0
+        self.total_frames = 2*60 #2 fps #CHANGE THIS
+        self.time_log_file = None
         # folder
         # TODO: change to get folder from microscope
         today = str(date.today()).replace('-', '')
@@ -714,7 +716,7 @@ class Backend(QtCore.QObject):
         self.viewtimer = QtCore.QTimer()
         # TODO: overload de movetothread para que se mueva con sus timers
         # self.viewtimer.timeout.connect(self.update)
-        self.xyz_time = 200  # 200 ms per acquisition + fit + correction
+        self.xyz_time = 1000  # 200 ms per acquisition + fit + correction
 
         # Si trackear (NO si corregir)
         self.tracking_xy = False
@@ -848,20 +850,28 @@ class Backend(QtCore.QObject):
         # send image to gui
         # self.changedImage.emit(self.image)  # ahora esta en update_graph_data
 
+        if self.saving_video: #and len(self.frames) < self.total_frames:
+            self.frames.append(self.image)
+            # if self.time_log_file:  # Verificar que el archivo esté abierto
+            #     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            #     self.time_log_file.write(f"Frame {len(self.frames)}: {current_time}\n")
+            #     self.time_log_file.flush()
+        # if len(self.frames) >= self.total_frames:
+        #     self.start_saving_video(False)
+            
         # if self.saving_video:
-        #     self.frames.append(self.image)
-        if self.saving_video:
-            self.frame_counter += 1
-            if self.frame_counter >= 2:
-                self.frames.append(self.image)
-                self.frame_counter = 0
+        #     self.frame_counter += 1
+        #     if self.frame_counter >= 2:
+        #         self.frames.append(self.image)
+        #         self.frame_counter = 0
             
     @pyqtSlot(bool)
     def start_saving_video(self, val):
         if val:
             self.saving_video = True
             self.frames.clear()
-            QtCore.QTimer.singleShot(120000, lambda: self.start_saving_video(False)) # ms
+            #self.time_log_file = open("frame_timestamps.txt", "w")
+            QtCore.QTimer.singleShot(60000, lambda: self.start_saving_video(False)) # ms
         else:
             self.saving_video = False
             self.save_video()
@@ -874,6 +884,11 @@ class Backend(QtCore.QObject):
             imwrite('output_video.tiff', stack)
             print("Recording video finished and saved.")
             self.frames.clear()
+            
+            # if self.time_log_file:
+            #     self.time_log_file.close()
+            #     # self.time_log_file = None
+                
             self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                               self.feedback_xy, self.feedback_z,
                                               self.save_data_state, self.saving_video)
