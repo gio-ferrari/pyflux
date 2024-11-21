@@ -16,6 +16,7 @@ I created this class to introduce camera as an IDS object in a backend class (an
 on_acquisition_timer function can be modified to return 1 channel image
 When running in stand alone mode device.take_image() displays a camera photo.
 TriggerSoftware:To trigger the capture of an image.
+TODO: Add gain control
 
 """
 
@@ -34,7 +35,7 @@ _lgr = _lgn.getLogger(__name__)
 _lgr.setLevel(_lgn.DEBUG)
 
 FPS_LIMIT = 30.0  # Hz, FPS: Acquisition Frame Rate to meet the desirable application's speed.
-EXPOSURE_TIME_VALUE = 50000.0  # us
+EXPOSURE_TIME_VALUE = 50000.0  # µs # Default exposure time
 
 
 class IDS_U3:
@@ -382,7 +383,7 @@ class IDS_U3:
 
 
 if __name__ == '__main__':
-    device = IDS_U3(30000) #us
+    device = IDS_U3()
     if device.open_device():
         print("Big success, device configured")
     else:

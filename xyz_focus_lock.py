@@ -539,7 +539,7 @@ class Frontend(QtGui.QFrame):
                                                  self.feedbackZBox,
                                                  )
         # set exposure time
-        self.exposureTimeLabel = QtGui.QLabel('IDS Exp Time (µs)')
+        self.exposureTimeLabel = QtGui.QLabel('IDS ExpTime (µs)')
         self.exposureTimeEdit = QtGui.QLineEdit('50000') #us
         self.exposureTimeEdit.textChanged.connect(self.on_exposure_time_changed)
         # save video
@@ -718,7 +718,7 @@ class Backend(QtCore.QObject):
         self.viewtimer = QtCore.QTimer()
         # TODO: overload de movetothread para que se mueva con sus timers
         # self.viewtimer.timeout.connect(self.update)
-        self.xyz_time = 1000  # 200 ms per acquisition + fit + correction
+        self.xyz_time = 200  # 200 ms per acquisition + fit + correction
 
         # Si trackear (NO si corregir)
         self.tracking_xy = False
@@ -1904,7 +1904,7 @@ if __name__ == '__main__':
 
     # if camera wasnt closed properly just keep using it without opening new one
     try:
-        camera = ids_cam.IDS_U3(exposure_time = 50000) #Trato de colocar un valor de default, check this!
+        camera = ids_cam.IDS_U3() # Default exposure time: 50000.0 µs
     except Exception:
         print("Excepcion inicializando la cámara... seguimos")
 
