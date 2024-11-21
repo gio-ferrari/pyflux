@@ -318,7 +318,7 @@ class Backend(QtCore.QObject):
         self.ph.lib.PH_SetBinning(ctypes.c_int(0), 
                                   ctypes.c_int(2)) # TO DO: fix this in a clean way (Check Library driver, 0= 4ps, 1 = 8ps, 2 = 16ps resolution)
              
-        self.ph.offset = int(self.offset * 1000) # time in ps
+        self.ph.offset = int(self.offset * 1000) # time in ps #Esto no hace nada
         self.ph.lib.PH_SetSyncOffset(ctypes.c_int(0), ctypes.c_int(3000))
 
         self.ph.tacq = int(self.tacq * 1000) # time in ms

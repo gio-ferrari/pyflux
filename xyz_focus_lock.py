@@ -535,7 +535,7 @@ class Frontend(QtGui.QFrame):
 
         # Button to make custom pattern
         # es start pattern en linea 500 en xyz_tracking
-        self.xyPatternButton = QtGui.QPushButton('Move')
+        self.xyPatternButton = QtGui.QPushButton('Move') #Debería llamarse: Start pattern
 
         # buttons and param layout
         grid.addWidget(self.paramWidget, 0, 1)
@@ -1562,7 +1562,8 @@ class Backend(QtCore.QObject):
         _lgr.debug("Got stop signal with value %s", stoplive)
         # self.toggle_feedback(False)# Añadir discrete mode para enviar
         self.set_xy_feedback(False)
-        # self.toggle_tracking(False) #Aquí se podría poner self.toggle_tracking_xy(False) Para que deje funcionando el tracking z FC
+        # self.toggle_tracking(False)
+        # Estabilización en Z queda encendida
         self.toggle_tracking_xy(False)
 
         # TODO: Ver si no restringir a xy
@@ -1664,6 +1665,7 @@ class Backend(QtCore.QObject):
         self.toggle_feedback(True)
         self.save_data_state = True
         # Esto está comentado en focus pero no en xy
+        #TODO: better call: self.notify_status()
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
                                           self.save_data_state)
@@ -1678,7 +1680,8 @@ class Backend(QtCore.QObject):
         TODO: si FPar_72 no está bien seteado esto se va a cualquier posición
         """
         self.toggle_feedback(False)
-        # self.toggle_tracking(True)
+        # self.toggle_tracking(True) #Imagino que esto es para ver el track
+        #TODO: better call: self.notify_status()
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
                                           self.save_data_state)
@@ -1691,8 +1694,10 @@ class Backend(QtCore.QObject):
 
         Ver módulo Minflux
 
-        TODO: Terminar de entender
+        TODO: Check! Le falta el decorador, según yo: esta conexión nunca se realizaría con minflux.py, pero sí ocurre.
+        Sí funcionaría al apretar el boton Move
         """
+        print("Estoy en start_tracking_pattern")
         self.pattern = True
         self.initcounter = self.counter
         self.save_data_state = True
@@ -1700,7 +1705,8 @@ class Backend(QtCore.QObject):
     def make_tracking_pattern(self, step):
         """Poner las posiciones de referencia en un cuadrado.
 
-        TODO: Ver cómo se concilia con start_tracking_pattern.
+        TODO: Check! start_tracking_pattern permite que se llame a make_tracking_pattern, cuando se usa el módulo minflux
+        
         """
         if step < 2:
             return
@@ -1782,10 +1788,10 @@ class Backend(QtCore.QObject):
             lambda: self.set_xy_feedback(frontend.feedbackXYBox.isChecked()))
         frontend.feedbackZBox.stateChanged.connect(
             lambda: self.set_z_feedback(frontend.feedbackZBox.isChecked()))
-        frontend.xyPatternButton.clicked.connect(
-            lambda: self.start_tracking_pattern
-            )  # duda con esto, comparar con línea análoga en xyz_tracking
-
+        # frontend.xyPatternButton.clicked.connect(
+        #     lambda: self.start_tracking_pattern
+        #     )  # duda con esto, comparar con línea análoga en xyz_tracking
+        frontend.xyPatternButton.clicked.connect(self.start_tracking_pattern) 
         # TO DO: clean-up checkbox create continous and discrete feedback loop
 
     @pyqtSlot()

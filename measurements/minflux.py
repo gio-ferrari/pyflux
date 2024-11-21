@@ -306,23 +306,27 @@ class Backend(QtCore.QObject):
         
         self.i = 0
         self.shutterSignal.emit(8, True)
-        
+        print("inside Start")
         if self.measType == 'Standard':
             print('[minflux] self.n, self.acqtime', self.n, self.acqtime)
             self.tcspcPrepareSignal.emit(self.filename, self.acqtime, self.n) # signal emitted to tcspc module to start the measurement
+            print("tcspcPrepareSignal emitted in Standard mode")
 #            phtime = 4.0  # in s, it takes 4 s for the PH to start the measurement, TO DO: check if this can be reduced (send email to Picoquant, etc)
 #            time.sleep(phtime)
             self.tcspcStartSignal.emit()
+            print("tcspcstartSignal emitted in Standard mode")
             self.t0 = time.time()
             
-        if self.measType == 'Predefined positions':
+        if self.measType == 'Predefined positions': #No ingreso a este if , por?
             print(datetime.now(), '[minflux] Predefined positions')
             self.update_param()
             time.sleep(0.2)
             self.tcspcPrepareSignal.emit(self.filename, self.acqtime, self.n) # signal emitted to tcspc module to start the measurement
+            print("tcspcPrepareSignal emitted in Predefined positions")
 #            phtime = 4.0  # in s, it takes 4 s for the PH to start the measurement, TO DO: check if this can be reduced (send email to Picoquant, etc)
 #            time.sleep(phtime)
             self.tcspcStartSignal.emit()
+            print("tcspcPrepareSignal emitted in Predefined positions")
             self.t0 = time.time()
             self.measTimer.start(0)
     

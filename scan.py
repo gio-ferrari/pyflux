@@ -1003,7 +1003,7 @@ class Frontend(QtGui.QFrame):
         
         subgrid.addWidget(self.ROIButton, 8, 2)
         subgrid.addWidget(self.select_ROIButton, 9, 2)
-#        subgrid.addWidget(self.moveToROIcenterButton, 10, 2)
+        subgrid.addWidget(self.moveToROIcenterButton, 10, 2)
         subgrid.addWidget(self.mainROIButton, 11, 2)
         
         subgrid.addWidget(self.lineProfButton, 8, 3)
@@ -2044,7 +2044,7 @@ class Backend(QtCore.QObject):
     def make_connection(self, frontend):
         
         frontend.liveviewSignal.connect(self.liveview)
-#        frontend.moveToROIcenterButton.clicked.connect(self.moveTo_roi_center)
+        frontend.moveToROIcenterButton.clicked.connect(self.moveTo_roi_center)
         frontend.currentFrameButton.clicked.connect(self.save_current_frame)
         frontend.moveToButton.clicked.connect(self.moveTo_action)
         frontend.paramSignal.connect(self.get_frontend_param)
