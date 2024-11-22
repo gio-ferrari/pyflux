@@ -535,7 +535,7 @@ class Frontend(QtGui.QFrame):
 
         # Button to make custom pattern
         # es start pattern en linea 500 en xyz_tracking
-        self.xyPatternButton = QtGui.QPushButton('Move') #Debería llamarse: Start pattern
+        self.xyPatternButton = QtGui.QPushButton('Start pattern OnlySquare')
 
         # buttons and param layout
         grid.addWidget(self.paramWidget, 0, 1)
@@ -791,7 +791,6 @@ class Backend(QtCore.QObject):
                 self.correct_z()
         self.update_graph_data()
 
-        # De acá para abajo es para hacer un patrón para algún test
         if self.pattern:
             val = (self.counter - self.initcounter)
             reprate = 10  # Antes era 10 para andor
@@ -813,9 +812,6 @@ class Backend(QtCore.QObject):
             _lgr.error('Latest_frame equal to previous frame')
         self.previous_image = self.image
 
-        # send image to gui
-        # self.changedImage.emit(self.image)  # ahora esta en update_graph_data
-
     # Incorporo cambios con vistas a añadir data actualizada de z
     def update_graph_data(self):
         """Update the data displayed in the graphs and pass around."""
@@ -834,6 +830,7 @@ class Backend(QtCore.QObject):
                                        self.zData[0:self.ptr + 1],
                                        )
             self.avgIntData[self.ptr] = self.avgInt
+            # send image to gui
             self.changedImage.emit(self.image,
                                    self.avgIntData[0:self.ptr + 1],
                                    )
@@ -1675,7 +1672,7 @@ class Backend(QtCore.QObject):
     def get_move_signal(self, r, r_rel):
         """Recibe de módulo Minflux para hacer patterns.
 
-        TODO: entender qué bien qué hacer. Parece que recibe posiciones a las
+        TODO: entender bien qué hace. Parece que recibe posiciones a las
         que moverse.
         TODO: si FPar_72 no está bien seteado esto se va a cualquier posición
         """
@@ -1688,39 +1685,78 @@ class Backend(QtCore.QObject):
         x_f, y_f = r
         # z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         self.actuator_xy(x_f, y_f)
-
-    def start_tracking_pattern(self):
+    
+    @pyqtSlot(str)
+    def start_tracking_pattern(self, patternType: str):
         """Se prepara para hacer un patrón.
 
         Ver módulo Minflux
-
-        TODO: Check! Le falta el decorador, según yo: esta conexión nunca se realizaría con minflux.py, pero sí ocurre.
-        Sí funcionaría al apretar el boton Move
+        Recibe señal de módulo minflux.
+        También funciona al apretar el boton "Start pattern"
         """
-        print("Estoy en start_tracking_pattern")
-        self.pattern = True
-        self.initcounter = self.counter
-        self.save_data_state = True
+        print("Estoy en start_tracking_pattern modo: ", patternType)
+        if patternType == 'Standard':
+            print("Static mode detected, no pattern movement will start.")
+            return 
+        else:
+            self.pattern = True
+            self.initcounter = self.counter
+            self.save_data_state = True
+            self.forma = patternType
 
     def make_tracking_pattern(self, step):
-        """Poner las posiciones de referencia en un cuadrado.
+        """Poner las posiciones de referencia en un patrón.
 
-        TODO: Check! start_tracking_pattern permite que se llame a make_tracking_pattern, cuando se usa el módulo minflux
+        TODO: Con este cambio, chequear cómo queda el módulo minflux
         
         """
-        if step < 2:
-            return
-        elif step == 2:
-            dist = np.array([0.0, 20.0])
-        elif step == 3:
-            dist = np.array([20.0, 0.0])
-        elif step == 4:
-            dist = np.array([0.0, -20.0])
-        elif step == 5:
-            dist = np.array([-20.0, 0.0])
-        else:
-            self.pattern = False
-            return
+        L = 20.0  # nm
+        H = L * (3/2)**.5
+        if self.forma == 'Row':
+            if step < 2:
+                return
+            elif step == 2:
+                dist = np.array([0.0, -L])
+            elif step == 3:
+                dist = np.array([0.0, 0.0])
+            elif step == 4:
+                dist = np.array([0.0, L])
+            else:
+                self.pattern = False
+                print("ROW")
+                return
+                
+        if self.forma == "Square":
+            if step < 2:
+                return
+            elif step == 2:
+                dist = np.array([0.0, L])
+            elif step == 3:
+                dist = np.array([L, 0.0])
+            elif step == 4:
+                dist = np.array([0.0, -L])
+            elif step == 5:
+                dist = np.array([-L, 0.0])
+            else:
+                self.pattern = False
+                print("Square")
+                return
+            
+        elif self.forma == "Triangle":
+            if step < 2:
+                return
+            elif step == 2:
+                dist = np.array([0.0, 2/3*H])
+            elif step == 3:
+                dist = np.array([L/2, -H])
+            elif step == 4:
+                dist = np.array([-L, 0.0])
+            elif step == 5:
+                dist = np.array([L/2, H/3])
+            else:
+                self.pattern = False
+                print("Triangle")
+                return
 
         self.initialx = self.initialx + dist[0]
         self.initialy = self.initialy + dist[1]
@@ -1788,10 +1824,7 @@ class Backend(QtCore.QObject):
             lambda: self.set_xy_feedback(frontend.feedbackXYBox.isChecked()))
         frontend.feedbackZBox.stateChanged.connect(
             lambda: self.set_z_feedback(frontend.feedbackZBox.isChecked()))
-        # frontend.xyPatternButton.clicked.connect(
-        #     lambda: self.start_tracking_pattern
-        #     )  # duda con esto, comparar con línea análoga en xyz_tracking
-        frontend.xyPatternButton.clicked.connect(self.start_tracking_pattern) 
+        frontend.xyPatternButton.clicked.connect(lambda: self.start_tracking_pattern("Square")) 
         # TO DO: clean-up checkbox create continous and discrete feedback loop
 
     @pyqtSlot()

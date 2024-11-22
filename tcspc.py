@@ -379,8 +379,8 @@ class Backend(QtCore.QObject):
         
         print(datetime.now(), '[tcspc] preparing the PH measurement took {} s'.format(t1-t0))
         
-    @pyqtSlot()
-    def measure_minflux(self):
+    @pyqtSlot(str)
+    def measure_minflux(self, ignore_variable):
 
         self.ph.startTTTR(self.currentfname)
         
