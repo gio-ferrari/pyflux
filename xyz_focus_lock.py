@@ -535,7 +535,7 @@ class Frontend(QtGui.QFrame):
 
         # Button to make custom pattern
         # es start pattern en linea 500 en xyz_tracking
-        self.xyPatternButton = QtGui.QPushButton('Move')
+        self.xyPatternButton = QtGui.QPushButton('Start pattern')
 
         # buttons and param layout
         grid.addWidget(self.paramWidget, 0, 1)
@@ -1673,8 +1673,7 @@ class Backend(QtCore.QObject):
     def get_move_signal(self, r, r_rel):
         """Recibe de módulo Minflux para hacer patterns.
 
-        TODO: entender qué bien qué hacer. Parece que recibe posiciones a las
-        que moverse.
+        Recibe posiciones a las que moverse.
         TODO: si FPar_72 no está bien seteado esto se va a cualquier posición
         """
         self.toggle_feedback(False)
@@ -1689,21 +1688,22 @@ class Backend(QtCore.QObject):
     def start_tracking_pattern(self):
         """Se prepara para hacer un patrón.
 
-        Ver módulo Minflux
-
-        TODO: Terminar de entender
+        Modificado de start_tracking_pattern
         """
-        self.pattern = True
-        self.initcounter = self.counter
-        self.save_data_state = True
+        if self.pattern:
+            self.pattern = False
+        else:
+            self.pattern = True
+            self.initcounter = self.counter
+            self.save_data_state = True
 
     def make_tracking_pattern(self, step):
         """Poner las posiciones de referencia en un cuadrado.
 
-        TODO: Ver cómo se concilia con start_tracking_pattern.
+        Lo llama la función de update cada n (hardcoded a 10) loops
         """
         if step < 2:
-            return
+            dist = np.array([0.0, 0.0])
         elif step == 2:
             dist = np.array([0.0, 20.0])
         elif step == 3:
