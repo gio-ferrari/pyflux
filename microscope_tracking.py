@@ -175,7 +175,7 @@ class Backend(QtCore.QObject):
         self.scanWorker.ROIcenterSignal.connect(self.minfluxWorker.get_ROI_center)
         
         self.minfluxWorker.tcspcPrepareSignal.connect(self.tcspcWorker.prepare_minflux)
-        self.minfluxWorker.tcspcStartSignal.connect(self.xyzWorker.start_tracking_pattern) #Esto no ocurre! Falta decorador
+        self.minfluxWorker.tcspcStartSignal.connect(self.xyzWorker.start_tracking_pattern)
         self.minfluxWorker.tcspcStartSignal.connect(self.tcspcWorker.measure_minflux)
         
         self.minfluxWorker.xyzStartSignal.connect(self.xyzWorker.get_lock_signal)
