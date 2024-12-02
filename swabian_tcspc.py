@@ -33,7 +33,7 @@ import qdarkstyle
 from drivers.minflux_measurement import MinfluxMeasurement
 
 _lgr = _lgn.getLogger(__name__)
-_lgn.basicConfig(level=_lgn.INFO)
+_lgn.basicConfig(level=_lgn.DEBUG)
 
 
 _MAX_EVENTS = 131072
@@ -128,15 +128,16 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self._measure.start_measure()
 
     def stop_measurement(self):
-        """Para la medida.
+        """Detiene la medida.
 
         Sin error checking por hora
         """
         self.measureButton.setEnabled(True)
         if not self._measure:
-            print("Parece no haber measure")
+            _lgr.warning("Se pidió parar la medida pero no parece haber una activa")
             return
         self._measure.stop_measure()
+        self._measure = None
 
     def load_folder(self):
         """Muestra una ventana de selección de carpeta."""
@@ -201,6 +202,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self._config = metadata
 
     def callback(self, delta_t: np.ndarray, binned: np.array, newpos: np.array):
+        """Calbback -> signal translator."""
         self.measureSignal.emit(delta_t, binned, newpos)
 
     @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
@@ -215,7 +217,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
             must_update = (self._last_pos % 10 == 0)
             if must_update:
                 for plot, data in zip(self.intplots, self._intensities):
-                    plot.setData(data)  #, connect="finite")
+                    plot.setData(data)  # , connect="finite")
                 self.trace_vline.setValue(self._last_pos)
                 self.histPlot.setData(bins[0:-1], counts)
             self.add_localization(*new_pos, self._last_pos, must_update)
@@ -225,10 +227,10 @@ class TCSPCFrontend(QtWidgets.QFrame):
             if self._last_pos >= _MAX_SAMPLES:
                 self._last_pos = 0
         except Exception as e:
-            print(e, type(e))
+            _lgr.error("Excepción %s recibiendo la información: %s", type(e), e)
 
     def add_localization(self, pos_x, pos_y, last_pos, update: bool):
-        """Receive a new localization from backend."""
+        """Receive a new localization from backend (_via_ callback)."""
         self._localizations_x[last_pos] = pos_x  # + self._shifts[-1][0]
         self._localizations_y[last_pos] = pos_y  # + self._shifts[-1][1]
         if update:
@@ -388,8 +390,9 @@ class TCSPCFrontend(QtWidgets.QFrame):
         file_subgrid.addWidget(self.browseConfigButton, 4, 1)
 
     def closeEvent(self, *args, **kwargs):
+        """Handle close event."""
+        
 
-        # workerThread.exit()
         super().closeEvent(*args, **kwargs)
         # app.quit()
 
@@ -415,7 +418,13 @@ class TCSPCBackend:
         self._locator = _analysis.MinFluxLocator(PSF, SBR, PSF_info.px_size * 1E3)
 
     def start_measure(self):
-        """Called from GUI."""
+        """Start the measurement.
+
+        Called from GUI.
+        """
+        if self.measurementGroup:
+            _lgr.error("A measurement is already running")
+            return
         self.fname = "Fantasia_filename"
         self.currentfname = fntools.getUniqueName(self.fname)
         _config_channels(tagger, self.iinfo)
@@ -439,6 +448,7 @@ class TCSPCBackend:
         # self.measurementGroup.startFor(int(15E12))
 
     def report(self, delta_t: np.ndarray, bins: np.ndarray, pos: tuple):
+        """Receive data from Swabian driver and call callback."""
         try:
             new_pos = self._locator(bins)[1]
             self._cb(delta_t, bins, new_pos)
@@ -447,12 +457,16 @@ class TCSPCBackend:
             self.stop_measure()
 
     def stop_measure(self):
-        """Called from GUI."""
+        """Stop measure.
+
+        Called from GUI.
+        """
         if self.measurementGroup:
             self.measurementGroup.stop()
-            print("Measurement finished")
+            _lgr.info("Measurement finished")
+            self.measurementGroup = None
         else:
-            print("No measurement running")
+            _lgr.info("No measurement active")
 
 
 if __name__ == "__main__":

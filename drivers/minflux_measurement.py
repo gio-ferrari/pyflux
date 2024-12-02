@@ -10,10 +10,14 @@ import TimeTagger
 import numpy as np
 import numba
 import time
-
+import logging as _lgn
 
 _MAX_EVENTS = 131072
 _PERIOD = int(50E3)
+
+_lgr = _lgn.getLogger(__name__)
+_lgn.basicConfig(level=_lgn.DEBUG)
+
 
 class MinfluxMeasurement(TimeTagger.CustomMeasurement):
     """Swabian measurement that returns localizations."""
@@ -51,6 +55,7 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
         self.finalize_init()
 
     def __del__(self):
+        """Stop measurement in case it is running."""
         # Inherited from example... del is not a good place to do this
         # The measurement must be stopped before deconstruction to avoid
         # concurrent process() calls.
@@ -63,6 +68,7 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
     #         return self._delays[:self._last_pos].copy()
 
     def clear_impl(self):
+        """Reset."""
         # The lock is already acquired within the backend.
         self._last_time = 0
         self._delays = np.empty(self._max_events, dtype=np.int32)
@@ -70,13 +76,13 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
 
     def on_start(self):
         # The lock is already acquired within the backend.
-        print("starting")
-        pass
+        _lgr.info("Starting TCSPC aquisition")
+        ...
 
     def on_stop(self):
         # The lock is already acquired within the backend.
-        print("Finishing")
-        pass
+        _lgr.info("Stoping TCSPC aquisition")
+        ...
 
     @staticmethod
     @numba.jit((numba.uint64)(
@@ -88,6 +94,7 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
                      APD_channel: int, laser_channel: int,
                      errors: np.ndarray):
         """Save time differences in data, return number of records."""
+        # FIXME: a veces td puede ser negativo, hay que ver qué hacer con esos casos
         n_errors = 0
         last_pos = 0
         last_timestamp = 0  # Puede ser que perdamos info, ponerlo en errors[1]
@@ -112,11 +119,13 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
 
     @staticmethod
     @numba.jit((numba.int32[:], numba.int64[:], numba.int64[:]),
-               nopython=True, nogil=True)# , boundscheck=True)
+               nopython=True, nogil=True)  # , boundscheck=True)
     def process_delays(data: np.ndarray, delays, bins):
         """Bin time differences in data, return number of records.
 
         WARNING: delays must be ORDERED.
+
+        FIXME: a veces td puede ser negativo, hay que ver qué hacer con esos casos
         """
         bins[:] = 0
         for td in data:  # hardcoded para 4
@@ -142,10 +151,10 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
         ----------
         incoming_tags
             The incoming raw time tag stream provided as a read-only reference.
-            The storage will be deallocated after this call, so you must not store a reference to
-            this object. Make a copy instead.
-            Please note that the time tag stream of all channels is passed to the process method,
-            not only the ones from register_channel(...).
+            The storage will be deallocated after this call, so you must not store a
+            reference to this object. Make a copy instead.
+            Please note that the time tag stream of all channels is passed to the
+            process method, not only the ones from register_channel(...).
         begin_time
             Begin timestamp of the of the current data block.
         end_time
@@ -160,7 +169,8 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
             self._laser_channel,
             errors)
         if errors[0]:
-            print("hubo ", errors[0], "errores")
+            _lgr.error("Hubo %s errores", errors[0])
+        # TODO: usar delta-t = end_time - begin_time para normalizar.
         # TODO: pasar esta línea a numba
         # n_times = max(n_times, 100)  # usar los últimos 100 fotones.
         MinfluxMeasurement.process_delays(self._delays[:n_times],
