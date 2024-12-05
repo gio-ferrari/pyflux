@@ -411,7 +411,7 @@ def get_MiniLasEvoPort():
        
 #    print(savei, savej)
     if savei<savej:
-        port = 'COM7'
+        port = 'COM5'
     else:
         port = 'COM3'
     
