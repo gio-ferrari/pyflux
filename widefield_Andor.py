@@ -65,15 +65,15 @@ class Frontend(QtGui.QFrame):
         self.setup_gui()
         
         # initial ROI parameters        
-        self.NofPixels = 200
+        self.NofPixels = 50
         self.roi = None
         self.ROInumber = 0
         self.roilist = []
 
     def create_roi(self):
         ROIpen = pg.mkPen(color='r')
-        ROIpos = (0.5 * self.NofPixels - 64, 0.5 * self.NofPixels - 64)
-        self.roi = viewbox_tools.ROI2(self.NofPixels/2, self.vb, ROIpos,
+        ROIpos = (150,210) #These hardcoded values fit the confocal beam for minflux
+        self.roi = viewbox_tools.ROI2(self.NofPixels, self.vb, ROIpos,
                                      handlePos=(1, 0),
                                      handleCenter=(0, 1),
                                      scaleSnap=True,
