@@ -111,7 +111,7 @@ class Frontend(QtGui.QFrame):
             print(datetime.now(), 'Live view started')
         else:
             self.liveviewButton.setChecked(False)
-            self.emit_roi_info()
+            self.emit_roi_info() #Check if it is necessary to put this here
             self.img.setImage(np.zeros((512,512)), autoLevels=False)
             print(datetime.now(), 'Live view stopped')
         
@@ -467,7 +467,7 @@ class Backend(QtCore.QObject):
     def setup_camera(self): #TODO: Check if it is necesary to move this to another module
         
         self.shape = (512, 512) # TO DO: change to 256 x 256
-        self.expTime = 0.050   # in sec
+        self.expTime = 0.100   # in sec
         
         self.andor.set_exposure(self.expTime)
         self.andor.set_roi(0, 512, 0, 512, 1, 1) #This one could be a parameter like self.shape above
@@ -476,10 +476,11 @@ class Backend(QtCore.QObject):
         # Temperature
         self.andor.set_cooler(True)
         self.andor.set_temperature(-20)   # in °C
-        
+        self.andor.set_acquisition_mode('cont')
+
         # Frame transfer mode
         self.andor.enable_frame_transfer_mode(True)
-        print(datetime.now(), 'Frame transfer mode =', self.andor.enable_frame_transfer_mode())
+        # print(datetime.now(), 'Frame transfer mode =', self.andor.enable_frame_transfer_mode())
     
         #Horizontal Pixel Shift
         channel = 0 #channel_bitdepth = 14
@@ -540,7 +541,6 @@ class Backend(QtCore.QObject):
         print("Andor temperature status: ", self.andor.get_temperature_status())
         
         # Initial image
-        self.andor.set_acquisition_mode('cont')
         print(datetime.now(), 'Acquisition mode:', self.andor.get_acquisition_mode())
         # self.andor.setup_shutter("open",ttl_mode=1) #No need to use shutter
         self.andor.start_acquisition()
@@ -558,8 +558,13 @@ class Backend(QtCore.QObject):
                     
     def update_view(self):
         """ Image update while in Liveview mode """
-        self.andor.wait_for_frame() 
+        if not self.andor.wait_for_frame():
+            print("Wait for frame fallo")
+            return
         self.image = self.andor.read_newest_image()
+        if self.image is None:
+            print("No hay imagen")
+            return
         self.changedImage.emit(self.image)
         if self.is_recording:
             elapsed_time = time.time() - self.recording_start_time
