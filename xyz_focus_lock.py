@@ -561,7 +561,7 @@ class Frontend(QtGui.QFrame):
 
         # Button to make custom pattern
         # es start pattern en linea 500 en xyz_tracking
-        self.xyPatternButton = QtGui.QPushButton('Move')
+        self.xyPatternButton = QtGui.QPushButton('Start pattern OnlySquare')
 
         # buttons and param layout
         grid.addWidget(self.paramWidget, 0, 1)
@@ -828,7 +828,6 @@ class Backend(QtCore.QObject):
                 self.correct_z()
         self.update_graph_data()
 
-        # De acá para abajo es para hacer un patrón para algún test
         if self.pattern:
             val = (self.counter - self.initcounter)
             reprate = 10  # Antes era 10 para andor
@@ -898,7 +897,7 @@ class Backend(QtCore.QObject):
             self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                               self.feedback_xy, self.feedback_z,
                                               self.save_data_state, self.saving_video)
-            
+
     # Incorporo cambios con vistas a añadir data actualizada de z
     def update_graph_data(self):
         """Update the data displayed in the graphs and pass around."""
@@ -917,6 +916,7 @@ class Backend(QtCore.QObject):
                                        self.zData[0:self.ptr + 1],
                                        )
             self.avgIntData[self.ptr] = self.avgInt
+            # send image to gui
             self.changedImage.emit(self.image,
                                    self.avgIntData[0:self.ptr + 1],
                                    )
@@ -1645,7 +1645,8 @@ class Backend(QtCore.QObject):
         _lgr.debug("Got stop signal with value %s", stoplive)
         # self.toggle_feedback(False)# Añadir discrete mode para enviar
         self.set_xy_feedback(False)
-        # self.toggle_tracking(False) #Aquí se podría poner self.toggle_tracking_xy(False) Para que deje funcionando el tracking z FC
+        # self.toggle_tracking(False)
+        # Estabilización en Z queda encendida
         self.toggle_tracking_xy(False)
 
         # TODO: Ver si no restringir a xy
@@ -1686,8 +1687,7 @@ class Backend(QtCore.QObject):
 
         # TODO: guardar frame final
         # self.export_image()
-        
-        filename = self.z_filename + '.txt'
+        filename = tools.getUniqueName(self.z_filename) + '.txt'
 
         size = self.j_z
         savedData = np.zeros((2, size))
@@ -1746,6 +1746,7 @@ class Backend(QtCore.QObject):
         self.toggle_tracking(True)
         self.toggle_feedback(True)
         self.save_data_state = True
+        #TODO: better call: self.notify_status()
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
                                           self.save_data_state, self.saving_video)
@@ -1755,48 +1756,91 @@ class Backend(QtCore.QObject):
     def get_move_signal(self, r, r_rel):
         """Recibe de módulo Minflux para hacer patterns.
 
-        TODO: entender qué bien qué hacer. Parece que recibe posiciones a las
+        TODO: entender bien qué hace. Parece que recibe posiciones a las
         que moverse.
         TODO: si FPar_72 no está bien seteado esto se va a cualquier posición
         """
         self.toggle_feedback(False)
-        # self.toggle_tracking(True)
+        # self.toggle_tracking(True) #Imagino que esto es para ver el track
+        #TODO: better call: self.notify_status()
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
                                           self.save_data_state, self.saving_video)
         x_f, y_f = r
         # z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         self.actuator_xy(x_f, y_f)
-
-    def start_tracking_pattern(self):
+    
+    @pyqtSlot(str)
+    def start_tracking_pattern(self, patternType: str):
         """Se prepara para hacer un patrón.
 
         Ver módulo Minflux
-
-        TODO: Terminar de entender
+        Recibe señal de módulo minflux.
+        También funciona al apretar el boton "Start pattern"
         """
-        self.pattern = True
-        self.initcounter = self.counter
-        self.save_data_state = True
+        print("Estoy en start_tracking_pattern modo: ", patternType)
+        if patternType == 'Standard':
+            print("Static mode detected, no pattern movement will start.")
+            return 
+        else:
+            self.pattern = True
+            self.initcounter = self.counter
+            self.save_data_state = True
+            self.forma = patternType
 
     def make_tracking_pattern(self, step):
-        """Poner las posiciones de referencia en un cuadrado.
+        """Poner las posiciones de referencia en un patrón.
 
-        TODO: Ver cómo se concilia con start_tracking_pattern.
+        TODO: Con este cambio, chequear cómo queda el módulo minflux
+        
         """
-        if step < 2:
-            return
-        elif step == 2:
-            dist = np.array([0.0, 20.0])
-        elif step == 3:
-            dist = np.array([20.0, 0.0])
-        elif step == 4:
-            dist = np.array([0.0, -20.0])
-        elif step == 5:
-            dist = np.array([-20.0, 0.0])
-        else:
-            self.pattern = False
-            return
+        L = 20.0  # nm
+        H = L * (3/2)**.5
+        if self.forma == 'Row':
+            if step < 2:
+                return
+            elif step == 2:
+                dist = np.array([0.0, -L])
+            elif step == 3:
+                dist = np.array([0.0, 0.0])
+            elif step == 4:
+                dist = np.array([0.0, L])
+            else:
+                self.pattern = False
+                print("ROW")
+                return
+                
+        if self.forma == "Square":
+            if step < 2:
+                return
+            elif step == 2:
+                dist = np.array([0.0, L])
+            elif step == 3:
+                dist = np.array([L, 0.0])
+            elif step == 4:
+                dist = np.array([0.0, -L])
+            elif step == 5:
+                dist = np.array([-L, 0.0])
+            else:
+                self.pattern = False
+                print("Square")
+                return
+            
+        elif self.forma == "Triangle":
+            if step < 2:
+                return
+            elif step == 2:
+                dist = np.array([0.0, 2/3*H])
+            elif step == 3:
+                dist = np.array([L/2, -H])
+            elif step == 4:
+                dist = np.array([-L, 0.0])
+            elif step == 5:
+                dist = np.array([L/2, H/3])
+            else:
+                self.pattern = False
+                print("Triangle")
+                return
 
         self.initialx = self.initialx + dist[0]
         self.initialy = self.initialy + dist[1]
@@ -1866,10 +1910,7 @@ class Backend(QtCore.QObject):
             lambda: self.set_xy_feedback(frontend.feedbackXYBox.isChecked()))
         frontend.feedbackZBox.stateChanged.connect(
             lambda: self.set_z_feedback(frontend.feedbackZBox.isChecked()))
-        frontend.xyPatternButton.clicked.connect(
-            lambda: self.start_tracking_pattern
-            )  # duda con esto, comparar con línea análoga en xyz_tracking
-
+        frontend.xyPatternButton.clicked.connect(lambda: self.start_tracking_pattern("Square")) 
         # TO DO: clean-up checkbox create continous and discrete feedback loop
 
     @pyqtSlot()

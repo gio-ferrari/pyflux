@@ -180,8 +180,7 @@ class Backend(QtCore.QObject):
         
         self.minfluxWorker.xyzStartSignal.connect(self.xyzWorker.get_lock_signal)
         
-        # TO DO: check if this is compatible with both psf and minflux measurement
-        self.minfluxWorker.moveToSignal.connect(self.xyzWorker.get_move_signal)
+        self.minfluxWorker.moveToSignal.connect(self.xyzWorker.get_move_signal) #esta señal sólo se emite en modo: 'Predefined positions', que arranca el loop
         
         self.minfluxWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
         self.minfluxWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
@@ -191,7 +190,7 @@ class Backend(QtCore.QObject):
         self.minfluxWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
         self.minfluxWorker.xyzEndSignal.connect(self.xyzWorker.get_end_measurement_signal)
         # TODO: check before use
-        self.minfluxWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
+        self.minfluxWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal) #Esta señal jamás se emite desde minflux.py
 
     def setup_psf_connections(self):
         self.psfWorker.scanSignal.connect(self.scanWorker.get_scan_signal) #Esta es la conexion que permite cambiar el punto de inicio del escaneo
@@ -252,7 +251,7 @@ if __name__ == '__main__':
     
     #initialize devices
     
-    port = tools.get_MiniLasEvoPort()
+    port = 'COM5' #tools.get_MiniLasEvoPort() #Fix this -> Laser control
     print('MiniLasEvo diode laser port:', port)
     diodelaser = MiniLasEvo(port)
     
