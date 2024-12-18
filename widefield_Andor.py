@@ -467,7 +467,7 @@ class Backend(QtCore.QObject):
     def setup_camera(self): #TODO: Check if it is necesary to move this to another module
         
         self.shape = (512, 512) # TO DO: change to 256 x 256
-        self.expTime = 0.100   # in sec
+        self.expTime = 0.05   # in sec
         
         self.andor.set_exposure(self.expTime)
         self.andor.set_roi(0, 512, 0, 512, 1, 1) #This one could be a parameter like self.shape above
@@ -486,13 +486,13 @@ class Backend(QtCore.QObject):
         channel = 0 #channel_bitdepth = 14
         oamp = 0 #oamp_kind = 'Electron Multiplying' (output amplifier description)
         hsspeed = 1 # hsspeed_MHz = 5.0 (horizontal scan frequency corresponding to the given hsspeed index)
-        preamp = 1 # preamp_gain=2.4000000953674316 #OJO: antes se usaba 4.7, con indice 2, chequear cómo se ve la imagen con un mayor preamp, puedo usar preamp = 2 y el cambio está en preamp_gain=5.099999904632568
+        preamp = 2 # preamp_gain=2.4000000953674316 #OJO: antes se usaba 4.7, con indice 2, chequear cómo se ve la imagen con un mayor preamp, puedo usar preamp = 2 y el cambio está en preamp_gain=5.099999904632568
     
         self.andor.set_amp_mode(channel, oamp, hsspeed, preamp)
         print("Current Amp mode: ", self.andor.get_amp_mode())
         
         # EM GAIN
-        EM_gain = 1  # EM gain set to 100
+        EM_gain = 10  #EM gain set to 100
         self.andor.set_EMCCD_gain(EM_gain) #Check I'm not sure about units (indexes???)
         print(datetime.now(), 'EM gain: ', self.andor.get_EMCCD_gain())
         
