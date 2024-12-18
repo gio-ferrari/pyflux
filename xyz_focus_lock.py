@@ -12,8 +12,10 @@ import numpy as np
 import time
 import scipy.ndimage as ndi
 from datetime import date, datetime
+import csv
 
 from scipy import optimize as opt
+from tifffile import imwrite
 from tools import customLog  # NOQA Para inicializar el logging
 import tools.viewbox_tools as viewbox_tools
 import tools.PSF as PSF
@@ -29,7 +31,7 @@ from pyqtgraph.Qt import QtCore, QtGui
 import qdarkstyle
 
 import drivers.ADwin as ADwin
-# Is it necessary to modify expousure time and gain in driver ids_cam? FC
+# Is it necessary to modify exposure time and gain in driver ids_cam? FC YES
 import drivers.ids_cam as ids_cam
 
 import logging as _lgn
@@ -88,10 +90,12 @@ class GroupedCheckBoxes:
 
 class Frontend(QtGui.QFrame):
     """FrontEnd para estabilización XY, y Z."""
-
+    
     roiInfoSignal = pyqtSignal(str, int, list)
     closeSignal = pyqtSignal()
     saveDataSignal = pyqtSignal(bool)
+    exposureTimeChanged = pyqtSignal(int)
+    saveVideoSignal = pyqtSignal(bool)
     """
     Signals
     - roiInfoSignal: emmited when a ROI changes
@@ -102,6 +106,10 @@ class Frontend(QtGui.QFrame):
          To: [backend] stop
     - saveDataSignal:
          To: [backend] get_save_data_state
+    - exposureTimeChanged:
+         To: [backend] update_exposure_time
+    - saveVideoSignal
+         To: [backend] start_saving_video
     """
 
     def __init__(self, *args, **kwargs):
@@ -183,7 +191,21 @@ class Frontend(QtGui.QFrame):
         del roi
         self.ROInumber -= 1
         self.emit_roi_info('xy')
-
+    
+    def on_exposure_time_changed(self):
+        try:
+            """Emite la señal con el nuevo tiempo de exposición."""
+            new_exposure_time = int(self.exposureTimeEdit.text())
+            self.exposureTimeChanged.emit(new_exposure_time)
+        except ValueError:
+            print("Error en valor ingresado para el tiempo de exposición.")
+    
+    def video_checkbox_changed(self, state):
+        if state == QtCore.Qt.Checked:
+            self.saveVideoSignal.emit(True)
+        else:
+            self.saveVideoSignal.emit(False)
+            
     @pyqtSlot(bool)
     def toggle_liveview(self, on):
         """Cambia el estado del botón al elegirlo.
@@ -286,15 +308,16 @@ class Frontend(QtGui.QFrame):
         if (num == 5) or (num == 6) or (num == 8):
             self.shutterCheckbox.setChecked(on)
 
-    @pyqtSlot(bool, bool, bool, bool, bool)
+    @pyqtSlot(bool, bool, bool, bool, bool, bool)
     def get_backend_states(self, tracking_xy, tracking_z, feedback_xy, feedback_z,
-                           savedata):
+                           savedata, savevideo):
         """Actualizar el frontend de acuerdo al estado del backend."""
         self.trackXYBox.setChecked(tracking_xy)
         self.trackZBox.setChecked(tracking_z)
         self.feedbackXYBox.setChecked(feedback_xy)
         self.feedbackZBox.setChecked(feedback_z)
         self.saveDataBox.setChecked(savedata)
+        self.saveVideoBox.setChecked(savevideo)
 
     def emit_save_data_state(self):
         """Informa al backend si hay que grabar data xy o no."""
@@ -476,10 +499,6 @@ class Frontend(QtGui.QFrame):
         self.delete_roiButton = QtGui.QPushButton('delete ROIs')
         self.delete_roiButton.clicked.connect(self.delete_roi)
 
-        # Aquí se debería agregar delete_roi_zButton
-        # self.delete_roi_zButton = QtGui.QPushButton('delete ROI z')
-        # self.delete_roi_zButton.clicked.connect(self.delete_roi_z)
-
         # export data checkbox
         self.exportDataButton = QtGui.QPushButton('Export current data')
 
@@ -519,6 +538,13 @@ class Frontend(QtGui.QFrame):
                                                  self.feedbackXYBox,
                                                  self.feedbackZBox,
                                                  )
+        # set exposure time
+        self.exposureTimeLabel = QtGui.QLabel('IDS ExpTime (µs)')
+        self.exposureTimeEdit = QtGui.QLineEdit('50000') #us
+        self.exposureTimeEdit.textChanged.connect(self.on_exposure_time_changed)
+        # save video
+        self.saveVideoBox = QtGui.QCheckBox("Save Video")
+        self.saveVideoBox.stateChanged.connect(self.video_checkbox_changed)
 
         # save data signal
         self.saveDataBox = QtGui.QCheckBox("Save data")
@@ -535,7 +561,7 @@ class Frontend(QtGui.QFrame):
 
         # Button to make custom pattern
         # es start pattern en linea 500 en xyz_tracking
-        self.xyPatternButton = QtGui.QPushButton('Move')
+        self.xyPatternButton = QtGui.QPushButton('Start pattern OnlySquare')
 
         # buttons and param layout
         grid.addWidget(self.paramWidget, 0, 1)
@@ -551,8 +577,6 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.selectxyROIbutton, 3, 0)
         subgrid.addWidget(self.selectzROIbutton, 4, 0)
         subgrid.addWidget(self.delete_roiButton, 5, 0)
-        # también añadir algo así
-        # subgrid.addWidget(self.delete_roi_zButton, 6, 0)
         subgrid.addWidget(self.exportDataButton, 6, 0)
         subgrid.addWidget(self.clearDataButton, 7, 0)
         subgrid.addWidget(self.xyPatternButton, 8, 0)
@@ -560,7 +584,10 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(trackgb, 0, 1, 2, 3)
         # subgrid.addWidget(self.feedbackLoopBox, 2, 1)
         subgrid.addWidget(feedbackgb, 2, 1, 2, 3)
-        subgrid.addWidget(self.saveDataBox, 4, 1)
+        subgrid.addWidget(self.exposureTimeLabel, 4, 1)
+        subgrid.addWidget(self.exposureTimeEdit, 4, 2)
+        subgrid.addWidget(self.saveDataBox, 5, 1)
+        subgrid.addWidget(self.saveVideoBox, 6, 1)
         subgrid.addWidget(self.shutterLabel, 9, 0)
         subgrid.addWidget(self.shutterCheckbox, 9, 1)
 
@@ -618,7 +645,7 @@ class Backend(QtCore.QObject):
     changedXYData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, )
     changedZData = pyqtSignal(np.ndarray, np.ndarray, )
     # no se usa en xyz_tracking
-    updateGUIcheckboxSignal = pyqtSignal(bool, bool, bool, bool, bool)
+    updateGUIcheckboxSignal = pyqtSignal(bool, bool, bool, bool, bool, bool)
     # changedSetPoint = pyqtSignal(float) #Debería añadir esta señal??? de focus.py
 
     # signal to emit new piezo position after drift correction
@@ -661,6 +688,12 @@ class Backend(QtCore.QObject):
             raise Exception("No pude abrir la cámara")
 
         self.adw = adw
+        self.saving_video = False
+        self.frames = []
+        self.frame_counter = 0
+        self.total_frames = 2*60 #2 fps #CHANGE THIS
+        self.time_log_file = None
+        self.csv_writer = None
         # folder
         # TODO: change to get folder from microscope
         today = str(date.today()).replace('-', '')
@@ -718,7 +751,11 @@ class Backend(QtCore.QObject):
 
         self.previous_image = None  # para chequear que la imagen cambie
         self.currentz = 0.0  # Valor en pixeles dentro del roi del z
-
+    
+    @pyqtSlot(int) 
+    def update_exposure_time(self, exposure_time):
+        self.camera.set_exposure_time(exposure_time)
+    
     @pyqtSlot(int, bool)
     def toggle_tracking_shutter(self, num, val):
         """Toma acciones con los shutters que lo involucran. DESACTIVADO.
@@ -762,7 +799,7 @@ class Backend(QtCore.QObject):
             self.camON = False
         self.camON = True
         self.viewtimer.start(self.xyz_time)
-        # self.startTime = time.time()
+        # self.startTime = time.time() ##############Creo que debo descomentar
 
     def liveview_stop(self):
         self.viewtimer.stop()
@@ -791,7 +828,6 @@ class Backend(QtCore.QObject):
                 self.correct_z()
         self.update_graph_data()
 
-        # De acá para abajo es para hacer un patrón para algún test
         if self.pattern:
             val = (self.counter - self.initcounter)
             reprate = 10  # Antes era 10 para andor
@@ -802,7 +838,6 @@ class Backend(QtCore.QObject):
 
     def update_view(self):
         """Image/data update while in Liveview mode."""
-        # acquire image
         # This is a 2D array, (only R channel)
         self.image = self.camera.on_acquisition_timer()
         self.currentTime = time.time() - self.startTime
@@ -815,6 +850,53 @@ class Backend(QtCore.QObject):
 
         # send image to gui
         # self.changedImage.emit(self.image)  # ahora esta en update_graph_data
+        #Forma 1 el Qtimer es quien regula
+        if self.saving_video: #and len(self.frames) < self.total_frames: #Forma 2, funciona por conteo de numero de frames
+            self.frames.append(self.image)
+            if self.csv_writer:  # Verificar que el escritor esté configurado
+                current_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                self.csv_writer.writerow([len(self.frames), current_time])  # Escribir fila en CSV
+        
+        # if len(self.frames) >= self.total_frames: #Forma 2
+        #     self.start_saving_video(False)
+        #Forma 3: Toma un frame cada tanto 
+        # if self.saving_video:
+        #     self.frame_counter += 1
+        #     if self.frame_counter >= 2:
+        #         self.frames.append(self.image)
+        #         self.frame_counter = 0
+            
+    @pyqtSlot(bool)
+    def start_saving_video(self, val):
+        if val:
+            self.saving_video = True
+            self.frames.clear()
+            self.time_log_file = open("frame_timestamps.csv", mode="w", newline="")
+            self.csv_writer = csv.writer(self.time_log_file)
+            self.csv_writer.writerow(["frame", "time"])  # Escribir encabezado
+
+            QtCore.QTimer.singleShot(60000, lambda: self.start_saving_video(False)) # ms
+        else:
+            self.saving_video = False
+            self.save_video()
+
+    def save_video(self):
+        if self.frames:
+            # for i, frame in enumerate(self.frames):
+            #     imwrite(f'frame_{i:04d}.tiff', frame)  # Guarda cada frame como TIFF
+            stack = np.array(self.frames)
+            imwrite('output_video.tiff', stack)
+            print("Recording video finished and saved.")
+            self.frames.clear()
+            
+            if self.time_log_file:
+                self.time_log_file.close()
+                self.time_log_file = None
+                self.csv_writer = None
+                
+            self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
+                                              self.feedback_xy, self.feedback_z,
+                                              self.save_data_state, self.saving_video)
 
     # Incorporo cambios con vistas a añadir data actualizada de z
     def update_graph_data(self):
@@ -834,6 +916,7 @@ class Backend(QtCore.QObject):
                                        self.zData[0:self.ptr + 1],
                                        )
             self.avgIntData[self.ptr] = self.avgInt
+            # send image to gui
             self.changedImage.emit(self.image,
                                    self.avgIntData[0:self.ptr + 1],
                                    )
@@ -1045,7 +1128,7 @@ class Backend(QtCore.QObject):
         """Send a notification to frontend about status."""
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
-                                          self.save_data_state)
+                                          self.save_data_state, self.saving_video)
 
     def center_of_mass(self):
         """Calculate z image center of mass."""
@@ -1562,7 +1645,8 @@ class Backend(QtCore.QObject):
         _lgr.debug("Got stop signal with value %s", stoplive)
         # self.toggle_feedback(False)# Añadir discrete mode para enviar
         self.set_xy_feedback(False)
-        # self.toggle_tracking(False) #Aquí se podría poner self.toggle_tracking_xy(False) Para que deje funcionando el tracking z FC
+        # self.toggle_tracking(False)
+        # Estabilización en Z queda encendida
         self.toggle_tracking_xy(False)
 
         # TODO: Ver si no restringir a xy
@@ -1603,8 +1687,7 @@ class Backend(QtCore.QObject):
 
         # TODO: guardar frame final
         # self.export_image()
-        
-        filename = self.z_filename + '.txt'
+        filename = tools.getUniqueName(self.z_filename) + '.txt'
 
         size = self.j_z
         savedData = np.zeros((2, size))
@@ -1663,58 +1746,101 @@ class Backend(QtCore.QObject):
         self.toggle_tracking(True)
         self.toggle_feedback(True)
         self.save_data_state = True
-        # Esto está comentado en focus pero no en xy
+        #TODO: better call: self.notify_status()
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
-                                          self.save_data_state)
+                                          self.save_data_state, self.saving_video)
         _lgr.debug('System xy locked')
 
     @pyqtSlot(np.ndarray, np.ndarray)
     def get_move_signal(self, r, r_rel):
         """Recibe de módulo Minflux para hacer patterns.
 
-        TODO: entender qué bien qué hacer. Parece que recibe posiciones a las
+        TODO: entender bien qué hace. Parece que recibe posiciones a las
         que moverse.
         TODO: si FPar_72 no está bien seteado esto se va a cualquier posición
         """
         self.toggle_feedback(False)
-        # self.toggle_tracking(True)
+        # self.toggle_tracking(True) #Imagino que esto es para ver el track
+        #TODO: better call: self.notify_status()
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
-                                          self.save_data_state)
+                                          self.save_data_state, self.saving_video)
         x_f, y_f = r
         # z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         self.actuator_xy(x_f, y_f)
-
-    def start_tracking_pattern(self):
+    
+    @pyqtSlot(str)
+    def start_tracking_pattern(self, patternType: str):
         """Se prepara para hacer un patrón.
 
         Ver módulo Minflux
-
-        TODO: Terminar de entender
+        Recibe señal de módulo minflux.
+        También funciona al apretar el boton "Start pattern"
         """
-        self.pattern = True
-        self.initcounter = self.counter
-        self.save_data_state = True
+        print("Estoy en start_tracking_pattern modo: ", patternType)
+        if patternType == 'Standard':
+            print("Static mode detected, no pattern movement will start.")
+            return 
+        else:
+            self.pattern = True
+            self.initcounter = self.counter
+            self.save_data_state = True
+            self.forma = patternType
 
     def make_tracking_pattern(self, step):
-        """Poner las posiciones de referencia en un cuadrado.
+        """Poner las posiciones de referencia en un patrón.
 
-        TODO: Ver cómo se concilia con start_tracking_pattern.
+        TODO: Con este cambio, chequear cómo queda el módulo minflux
+        
         """
-        if step < 2:
-            return
-        elif step == 2:
-            dist = np.array([0.0, 20.0])
-        elif step == 3:
-            dist = np.array([20.0, 0.0])
-        elif step == 4:
-            dist = np.array([0.0, -20.0])
-        elif step == 5:
-            dist = np.array([-20.0, 0.0])
-        else:
-            self.pattern = False
-            return
+        L = 20.0  # nm
+        H = L * (3/2)**.5
+        if self.forma == 'Row':
+            if step < 2:
+                return
+            elif step == 2:
+                dist = np.array([0.0, -L])
+            elif step == 3:
+                dist = np.array([0.0, 0.0])
+            elif step == 4:
+                dist = np.array([0.0, L])
+            else:
+                self.pattern = False
+                print("ROW")
+                return
+                
+        if self.forma == "Square":
+            if step < 2:
+                return
+            elif step == 2:
+                dist = np.array([0.0, L])
+            elif step == 3:
+                dist = np.array([L, 0.0])
+            elif step == 4:
+                dist = np.array([0.0, -L])
+            elif step == 5:
+                dist = np.array([-L, 0.0])
+            else:
+                self.pattern = False
+                print("Square")
+                return
+            
+        elif self.forma == "Triangle":
+            if step < 2:
+                return
+            elif step == 2:
+                dist = np.array([0.0, 2/3*H])
+            elif step == 3:
+                dist = np.array([L/2, -H])
+            elif step == 4:
+                dist = np.array([-L, 0.0])
+            elif step == 5:
+                dist = np.array([L/2, H/3])
+            else:
+                self.pattern = False
+                print("Triangle")
+                return
 
         self.initialx = self.initialx + dist[0]
         self.initialy = self.initialy + dist[1]
@@ -1763,6 +1889,8 @@ class Backend(QtCore.QObject):
         frontend.roiInfoSignal.connect(self.get_roi_info)
         frontend.closeSignal.connect(self.stop)
         frontend.saveDataSignal.connect(self.get_save_data_state)
+        frontend.saveVideoSignal.connect(self.start_saving_video)
+        frontend.exposureTimeChanged.connect(self.update_exposure_time)
         frontend.exportDataButton.clicked.connect(self.export_data)
         frontend.clearDataButton.clicked.connect(self.reset_graph)
         frontend.clearDataButton.clicked.connect(self.reset_data_arrays)
@@ -1782,10 +1910,7 @@ class Backend(QtCore.QObject):
             lambda: self.set_xy_feedback(frontend.feedbackXYBox.isChecked()))
         frontend.feedbackZBox.stateChanged.connect(
             lambda: self.set_z_feedback(frontend.feedbackZBox.isChecked()))
-        frontend.xyPatternButton.clicked.connect(
-            lambda: self.start_tracking_pattern
-            )  # duda con esto, comparar con línea análoga en xyz_tracking
-
+        frontend.xyPatternButton.clicked.connect(lambda: self.start_tracking_pattern("Square")) 
         # TO DO: clean-up checkbox create continous and discrete feedback loop
 
     @pyqtSlot()
@@ -1820,13 +1945,13 @@ if __name__ == '__main__':
 
     # if camera wasnt closed properly just keep using it without opening new one
     try:
-        camera = ids_cam.IDS_U3()
+        camera = ids_cam.IDS_U3() # Default exposure time: 50000.0 µs
     except Exception:
         print("Excepcion inicializando la cámara... seguimos")
 
     gui = Frontend()
     worker = Backend(camera, adw)
-
+    
     gui.make_connection(worker)
     worker.make_connection(gui)
 

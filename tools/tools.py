@@ -400,7 +400,7 @@ def get_MiniLasEvoPort():
     wmi = win32com.client.GetObject ("winmgmts:")
     for usb in wmi.InstancesOf ("Win32_USBHub"):
         strid = usb.DeviceID
-#        print(strid)
+        print(strid)
         if ('ML069719' in strid):
             savei = i
             

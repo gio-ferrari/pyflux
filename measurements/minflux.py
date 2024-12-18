@@ -194,7 +194,7 @@ class Frontend(QtGui.QFrame):
 class Backend(QtCore.QObject):
     
     tcspcPrepareSignal = pyqtSignal(str, int, int)
-    tcspcStartSignal = pyqtSignal()
+    tcspcStartSignal = pyqtSignal(str)
     
     xyzStartSignal = pyqtSignal()
     xyzEndSignal = pyqtSignal(str)
@@ -306,13 +306,15 @@ class Backend(QtCore.QObject):
         
         self.i = 0
         self.shutterSignal.emit(8, True)
-        
+        print("inside Start")
         if self.measType == 'Standard':
             print('[minflux] self.n, self.acqtime', self.n, self.acqtime)
             self.tcspcPrepareSignal.emit(self.filename, self.acqtime, self.n) # signal emitted to tcspc module to start the measurement
+            print("tcspcPrepareSignal emitted in Standard mode")
 #            phtime = 4.0  # in s, it takes 4 s for the PH to start the measurement, TO DO: check if this can be reduced (send email to Picoquant, etc)
 #            time.sleep(phtime)
-            self.tcspcStartSignal.emit()
+            self.tcspcStartSignal.emit('Standard')
+            print("tcspcstartSignal emitted in Standard mode")
             self.t0 = time.time()
             
         if self.measType == 'Predefined positions':
@@ -320,11 +322,13 @@ class Backend(QtCore.QObject):
             self.update_param()
             time.sleep(0.2)
             self.tcspcPrepareSignal.emit(self.filename, self.acqtime, self.n) # signal emitted to tcspc module to start the measurement
+            print("tcspcPrepareSignal emitted in Predefined positions")
 #            phtime = 4.0  # in s, it takes 4 s for the PH to start the measurement, TO DO: check if this can be reduced (send email to Picoquant, etc)
 #            time.sleep(phtime)
-            self.tcspcStartSignal.emit()
+            self.tcspcStartSignal.emit(self.patternType)
+            print("tcspcPrepareSignal emitted in Predefined positions")
             self.t0 = time.time()
-            self.measTimer.start(0)
+            # self.measTimer.start(0)
     
     def loop(self):
         
