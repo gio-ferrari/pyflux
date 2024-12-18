@@ -1601,8 +1601,7 @@ class Backend(QtCore.QObject):
 
         # TODO: guardar frame final
         # self.export_image()
-        
-        filename = self.z_filename + '.txt'
+        filename = tools.getUniqueName(self.z_filename) + '.txt'
 
         size = self.j_z
         savedData = np.zeros((2, size))
