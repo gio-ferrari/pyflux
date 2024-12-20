@@ -3,7 +3,7 @@ import numpy as _np
 from collections.abc import Sequence as _Sequence
 from enum import Enum
 from dataclasses import dataclass as _dataclass
-
+import pathlib as _pathlib
 
 class SignalEdgeEnum(Enum):
     RISEEDGE = 1
@@ -189,6 +189,30 @@ def set_channel_level(
         channel = -abs(channel)
     tagger.setTriggerLevel(channel, level_type.value.trigger_voltage)
 
+
+def swabian2numpy(filename):
+    """Extrae info de un archivo de swabian y lo graba en uno numpy."""
+    base_dir = _pathlib.Path.home() / "pMinflux_data"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    date_str = _datetime.datetime.now().isoformat(
+        timespec='seconds').replace('-', '').replace(':', '-')
+    out_file_name = base_dir / ('tcspc_data' + date_str + '.npy')
+    with open(out_file_name) as fd:
+        ...
+    filereader = _TimeTagger.FileReader(filename)
+
+    n_events = int(1E5)
+    i = 0
+    while filereader.hasData():
+
+        data = filereader.getData(n_events=n_events)
+        channel = data.getChannels()            # The channel numbers
+        timestamps = data.getTimestamps()       # The timestamps in ps
+        overflow_types = data.getEventTypes()   # TimeTag = 0, Error = 1, OverflowBegin = 2, OverflowEnd = 3, MissedEvents = 4
+        missed_events = data.getMissedEvents()  # The numbers of missed events in case of overflow
+            # Output to table
+    
+    _TimeTagger.freeTimeTagger(tagger)
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
