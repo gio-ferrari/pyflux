@@ -55,8 +55,8 @@ _FPAR_Y = 41
 _FPAR_Z = 32
 
 PX_SIZE = 23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
-PX_Z = 16  # 20 nm/px for z in nm
-
+PX_Z = -120  # 20 nm/px for z in nm # Antes 16 con calibración. Ahora: 120 con movimiento manual.
+#TODO: Fix (-1) (+1), correct_z
 
 # Posiblemente debería ir a un toolbox
 class GroupedCheckBoxes:
