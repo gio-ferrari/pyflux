@@ -55,7 +55,7 @@ _FPAR_Y = 41
 _FPAR_Z = 32
 
 PX_SIZE = 23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
-PX_Z = -120  # 20 nm/px for z in nm # Antes 16 con calibración. Ahora: 120 con movimiento manual.
+PX_Z = -15  # 20 nm/px for z in nm # Antes 16 con calibración. Ahora: 120 con movimiento manual.
 #TODO: Fix (-1) (+1), correct_z
 
 # Posiblemente debería ir a un toolbox
@@ -1394,14 +1394,15 @@ class Backend(QtCore.QObject):
             if not self.feedback_z:
                 _lgr.warning("Single correction without Z feedback. Turning on.")
                 self.set_z_feedback(True, mode='continous')
+
         if not self.camON:
             print(datetime.now(), 'singlexy liveview started')
             self.camON = True
         # time.sleep(0.200)
 
         self.update_view()
-        # if initial:
-        #     self._initialize_xy_positions()
+        if initial:
+            self._initialize_xy_positions()
 
         self.track('xy') #Aquí obtiene las posiciones: self._fit_xy_rois() del centro de la Np, self.x y self.y
         self.update_graph_data()
