@@ -10,10 +10,10 @@ import atexit as _atexit
 import tools.filenames as fntools
 import logging as _lgn
 
-from PyQt5.QtCore import pyqtSignal, QObject
+from PyQt5.QtCore import pyqtSignal as _pyqtSignal, QObject as _QObject
 import TimeTagger as _TimeTagger
 import tools.swabiantools as _st
-from tools.config_handler import TCSPInstrumentInfo
+from tools.config_handler import TCSPInstrumentInfo as _TCSPInstrumentInfo
 from typing import Union as _Union
 
 from tools import analysis as _analysis
@@ -47,7 +47,7 @@ def loadConfig(filename) -> configparser.SectionProxy:
     return config['Scanning parameters']
 
 
-def _config_channels(tagger: _TimeTagger.TimeTagger, IInfo: TCSPInstrumentInfo):
+def _config_channels(tagger: _TimeTagger.TimeTagger, IInfo: _TCSPInstrumentInfo):
     """Set delays and filtering according to Info."""
     settings = []
     for APDi in IInfo.APD_info:
@@ -62,7 +62,7 @@ def _config_channels(tagger: _TimeTagger.TimeTagger, IInfo: TCSPInstrumentInfo):
     )
 
 
-class __TCSPCBackend(QObject):
+class __TCSPCBackend(_QObject):
     """Backend class for TCSPC.
 
     Not to be instantiated by the user.
@@ -70,13 +70,13 @@ class __TCSPCBackend(QObject):
 
     _TCSPC_measurement = None
     _measurementGroup = None
-    sgnl_measure_init = pyqtSignal()
-    sgnl_measure_end = pyqtSignal()
-    sgnl_new_data = pyqtSignal(np.ndarray, np.array, np.array)
+    sgnl_measure_init = _pyqtSignal()
+    sgnl_measure_end = _pyqtSignal()
+    sgnl_new_data = _pyqtSignal(np.ndarray, np.array, np.array)
     _NOPLACE = np.full((2,), np.nan)
 
     def __init__(self,
-                 IInfo: TCSPInstrumentInfo,
+                 IInfo: _TCSPInstrumentInfo,
                  *args, **kwargs):
         """Receive device info."""
         super().__init__(*args, **kwargs)
@@ -140,8 +140,13 @@ class __TCSPCBackend(QObject):
             new_pos = self._NOPLACE
         self.sgnl_new_data.emit(delta_t, bins, new_pos)
 
-    def stop_measure(self):
-        """Stop measure."""
+    def stop_measure(self) -> bool:
+        """Stop measure.
+
+        Returns
+        =======
+           True if successful
+        """
         if self._measurementGroup:
             self._measurementGroup.stop()
             _lgr.info("Measurement finished")
@@ -149,8 +154,9 @@ class __TCSPCBackend(QObject):
             self._TCSPC_measurement = None
             self._file_measurement = None
             self.sgnl_measure_end.emit()
-        else:
-            _lgr.warning("Trying to stop while no measurement is active")
+            return True
+        _lgr.warning("Trying to stop while no measurement is active")
+        return False
 
     def close(self):
         if self._tagger:
@@ -168,7 +174,7 @@ def __create_backend() -> __TCSPCBackend:
         raise ValueError("POR FAVOR ENCHUFA EL EQUIPO")
     IInfo = None
     try:
-        IInfo = TCSPInstrumentInfo.load()
+        IInfo = _TCSPInstrumentInfo.load()
     except FileNotFoundError:
         _lgr.Error("No configuration file found")
         raise
