@@ -1284,6 +1284,8 @@ class Backend(QtCore.QObject):
         else:
             # add correction to piezo position
             currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
+            # FIXME: Giovanni cambio el Z
+            dz = -dz
 
             targetZposition = currentZposition + dz  # in µm
 
