@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import QGroupBox
 from tkinter import Tk, filedialog
 
 import tools.tools as tools
-
+from swabian.backend import TCSPC_backend
 
 π = np.pi
 
@@ -221,6 +221,7 @@ class Backend(QtCore.QObject):
         
         self.measTimer = QtCore.QTimer()
         self.measTimer.timeout.connect(self.loop)
+        TCSPC_backend.sgnl_measure_end.connect(self.get_tcspc_done_signal)
             
     @pyqtSlot(np.ndarray)    
     def get_ROI_center(self, center):
@@ -265,42 +266,24 @@ class Backend(QtCore.QObject):
         
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
-                
         self.r0 = np.array([currentXposition, currentYposition])
-        
         if self.measType == 'Predefined positions':
-        
             if self.patternType == 'Row':
-                
                 self.pattern = np.array([[0, -l], [0, 0], [0, l]])
-                
                 print('ROW')
-                
             if self.patternType == 'Square':
-                
                 self.pattern = np.array([[0, 0], [l/2, l/2], [l/2, -l/2],
                                         [-l/2, -l/2], [-l/2, l/2]])
-        
                 print('SQUARE')
-        
             if self.patternType == 'Triangle':
-                
                 self.pattern = np.array([[0, 0], [0, (2/3)*h], [l/2, -(1/3)*h],
                                         [-l/2, -(1/3)*h]])
-        
                 print('TRIANGLE')
-                
             self.r = self.r0 + self.pattern
             self.n = np.shape(self.r)[0]
-                
         else:
-            
             self.r = self.r0
             self.n = 1
-    
-#        print('[minflux] self.pattern', self.pattern)
-#        print(datetime.now(), '[minflux] self.r', self.r)
-#        print(datetime.now(), '[minflux] self.r.shape', self.r.shape)
                 
     def start(self):
         
@@ -309,49 +292,38 @@ class Backend(QtCore.QObject):
         
         if self.measType == 'Standard':
             print('[minflux] self.n, self.acqtime', self.n, self.acqtime)
-            self.tcspcPrepareSignal.emit(self.filename, self.acqtime, self.n) # signal emitted to tcspc module to start the measurement
-#            phtime = 4.0  # in s, it takes 4 s for the PH to start the measurement, TO DO: check if this can be reduced (send email to Picoquant, etc)
-#            time.sleep(phtime)
             self.tcspcStartSignal.emit()
             self.t0 = time.time()
-            
+            TCSPC_backend.start_measure(self.filename)
         if self.measType == 'Predefined positions':
             print(datetime.now(), '[minflux] Predefined positions')
             self.update_param()
             time.sleep(0.2)
-            self.tcspcPrepareSignal.emit(self.filename, self.acqtime, self.n) # signal emitted to tcspc module to start the measurement
+            # self.tcspcPrepareSignal.emit(self.filename, self.acqtime, self.n) # signal emitted to tcspc module to start the measurement
 #            phtime = 4.0  # in s, it takes 4 s for the PH to start the measurement, TO DO: check if this can be reduced (send email to Picoquant, etc)
 #            time.sleep(phtime)
             self.tcspcStartSignal.emit()
             self.t0 = time.time()
             self.measTimer.start(0)
+            TCSPC_backend.start_measure(self.filename)
     
     def loop(self):
-        
         now = time.time()
-        
         if (now - (self.t0 + self.i * self.acqtime) + self.acqtime) > self.acqtime:
-            
             print(datetime.now(), '[minflux] loop', self.i)
-                        
             self.moveToSignal.emit(self.r[self.i], self.pattern[self.i])
-        
             self.i += 1
-            
-            if self.i == self.n:
-                                
+            if self.i == self.n:         
                 self.stop()
-                
                 print(datetime.now(), '[minflux] measurement ended')
                 
     def stop(self):
-        
         self.shutterSignal.emit(8, False)
         self.measTimer.stop()
+        TCSPC_backend.stop_measure()
         
     @pyqtSlot()  
     def get_tcspc_done_signal(self):
-        
         """
         Connection: [tcspc] tcspcDoneSignal
         """
