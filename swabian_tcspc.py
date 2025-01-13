@@ -31,7 +31,7 @@ import qdarkstyle
 
 
 _lgr = _lgn.getLogger(__name__)
-_lgn.basicConfig(level=_lgn.DEBUG)
+_lgn.basicConfig(level=_lgn.INFO)
 
 
 _MAX_EVENTS = 131072
@@ -84,6 +84,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.setup_gui()
         TCSPC_backend.sgnl_new_data.connect(self.get_data)
         TCSPC_backend.sgnl_measure_init.connect(self.process_measurement_start)
+        TCSPC_backend.sgnl_measure_end.connect(self.process_measurement_stop)
 
     def _init_data(self):
         self._hist_data = list(np.histogram([], range=(0, self.period), bins=_N_BINS))
@@ -101,6 +102,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
     def process_measurement_start(self, filename: str):
         """Procesa inicio de medida."""
         _lgr.info("Iniciando medida con archivo %s", filename)
+        self._current_filename = filename
         self.clear_data()
         self._init_data()
         self.measureButton.setEnabled(False)
@@ -118,6 +120,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         Sin error checking por hora
         """
         self.measureButton.setEnabled(True)
+        _st.swabian2numpy(self._current_filename)
 
     def load_folder(self):
         """Muestra una ventana de selección de carpeta."""
@@ -196,8 +199,9 @@ class TCSPCFrontend(QtWidgets.QFrame):
                     plot.setData(data)  # , connect="finite")
                 self.trace_vline.setValue(self._last_pos)
                 self.histPlot.setData(bins[0:-1], counts)
-            self.add_localization(*new_pos, self._last_pos, must_update)
-            # print(new_pos)
+            # si no mandamos PSFs nos vienen NAN en la localizacion
+            if not np.any(np.isnan(new_pos)):
+                self.add_localization(*new_pos, self._last_pos, must_update)
 
             self._last_pos += 1
             if self._last_pos >= _MAX_SAMPLES:
@@ -363,7 +367,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
     def closeEvent(self, *args, **kwargs):
         """Handle close event."""
         super().closeEvent(*args, **kwargs)
-        # app.quit()
+        app.quit()
 
 
 if __name__ == "__main__":
@@ -382,3 +386,4 @@ if __name__ == "__main__":
     gui.raise_()
     gui.activateWindow()
     app.exec_()
+    # app.quit()

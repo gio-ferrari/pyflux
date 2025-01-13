@@ -72,7 +72,7 @@ class __TCSPCBackend(_QObject):
     _measurementGroup = None
     sgnl_measure_init = _pyqtSignal(str)
     sgnl_measure_end = _pyqtSignal()
-    sgnl_new_data = _pyqtSignal(np.ndarray, np.array, np.array)
+    sgnl_new_data = _pyqtSignal(object, object, object)
     _NOPLACE = np.full((2,), np.nan)
 
     def __init__(self,
@@ -88,6 +88,7 @@ class __TCSPCBackend(_QObject):
 
     def start_measure(self,
                       filename: str,
+                      acq_time_s: _Union[float, None] = None, 
                       PSF: _Union[np.ndarray, None] = None,
                       PSF_info: _Union[PSFMetadata, None] = None) -> bool:
         """Start a measurement.
@@ -126,8 +127,11 @@ class __TCSPCBackend(_QObject):
         self._file_measurement = _TimeTagger.FileWriter(
             self._measurementGroup.getTagger(), self.currentfname + '.ttbin',
             [self.iinfo.laser_channel] + [APDi.channel for APDi in self.iinfo.APD_info])
-        self.sgnl_measure_start.emit(self.currentfname)
-        self._measurementGroup.start()
+        self.sgnl_measure_init.emit(self.currentfname)
+        if acq_time_s:
+            self._measurementGroup.startFor(int(acq_time_s * 1E12))
+        else:
+            self._measurementGroup.start()
 
     def report(self, delta_t: np.ndarray, bins: np.ndarray, pos: tuple):
         """Receive data from Swabian driver and report."""
@@ -162,6 +166,7 @@ class __TCSPCBackend(_QObject):
     def close(self):
         if self._tagger:
             _TimeTagger.freeTimeTagger(self._tagger)
+            print("Cerrando tagger")
         self._tagger = None
 
     def __del__(self):
@@ -171,7 +176,7 @@ class __TCSPCBackend(_QObject):
 def __create_backend() -> __TCSPCBackend:
     tt_data = _st.get_tt_info()
     if not tt_data:
-        _lgr.Error("   ******* Enchufá el equipo *******")
+        _lgr.error("   ******* Enchufá el equipo *******")
         raise ValueError("POR FAVOR ENCHUFA EL EQUIPO")
     IInfo = None
     try:
