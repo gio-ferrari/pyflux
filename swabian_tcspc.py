@@ -5,7 +5,6 @@ TCSPC con tracking.
 @author: azelcer
 """
 
-
 import numpy as np
 from datetime import date
 import os
@@ -20,17 +19,16 @@ from PyQt5.QtWidgets import QGroupBox
 from PyQt5 import QtWidgets
 import TimeTagger as _TimeTagger
 import tools.swabiantools as _st
+from swabian.backend import TCSPC_backend
 from tools.config_handler import TCSPInstrumentInfo
 
 
 # import drivers.ADwin as ADwin
-from tools import analysis as _analysis
 import configparser
 from dataclasses import dataclass as _dataclass
 
 import qdarkstyle
 
-from drivers.minflux_measurement import MinfluxMeasurement
 
 _lgr = _lgn.getLogger(__name__)
 _lgn.basicConfig(level=_lgn.DEBUG)
@@ -59,21 +57,6 @@ def loadConfig(filename) -> configparser.SectionProxy:
     return config['Scanning parameters']
 
 
-def _config_channels(tagger: _TimeTagger.TimeTagger, IInfo: TCSPInstrumentInfo):
-    """Set delays and filtering according to Info."""
-    settings = []
-    for APDi in IInfo.APD_info:
-        # print(APDi)
-        settings.append((APDi.channel, -APDi.delay,))
-        _st.set_channel_level(tagger, APDi.channel, _st.SignalTypeEnum[APDi.signal_type])
-    _st.set_channels_delay(tagger, settings)
-    _st.set_channel_level(tagger, IInfo.laser_channel, _st.SignalTypeEnum[IInfo.laser_signal])
-    tagger.setConditionalFilter(
-        trigger=[APDi.channel for APDi in IInfo.APD_info],
-        filtered=[IInfo.laser_channel]
-    )
-
-
 class TCSPCFrontend(QtWidgets.QFrame):
     """Frontend para TCSPC con tracking."""
 
@@ -88,21 +71,19 @@ class TCSPCFrontend(QtWidgets.QFrame):
     _PSF = None
     _config: PSFMetadata = None
     _pos_vline: pg.InfiniteLine = None
-    _measure: "TCSPCBackend" = None
 
-    def __init__(self, tagger: _TimeTagger.TimeTagger, IInfo: TCSPInstrumentInfo, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """No hace nada."""
         super().__init__(*args, **kwargs)
 
         # initial directory
-        self.tagger = tagger
         self.initialDir = r"C:\Data"
-        self.iinfo = IInfo
         # FIXME: for developing only
-        self.period = self.iinfo.period
+        self.period = TCSPC_backend.iinfo.period
         self._init_data()
         self.setup_gui()
-        self.measureSignal.connect(self.get_data)
+        TCSPC_backend.sgnl_new_data.connect(self.get_data)
+        TCSPC_backend.sgnl_measure_init.connect(self.process_measurement_start)
 
     def _init_data(self):
         self._hist_data = list(np.histogram([], range=(0, self.period), bins=_N_BINS))
@@ -114,30 +95,29 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
     def start_measurement(self):
         """Inicia la medida."""
-        if self._PSF is None:
-            print("PSFs needed to start measurements")
-            return
-        if self._config is None:
-            print("config needed to start measurements")
-            return
+        TCSPC_backend.start_measure("lefilename", self._PSF, self._config)
+
+    @pyqtSlot(str)
+    def process_measurement_start(self, filename: str):
+        """Procesa inicio de medida."""
+        _lgr.info("Iniciando medida con archivo %s", filename)
         self.clear_data()
         self._init_data()
         self.measureButton.setEnabled(False)
-        self._measure = TCSPCBackend(self.tagger, self.iinfo, self.callback, self._PSF,
-                                     self._config)
-        self._measure.start_measure()
 
     def stop_measurement(self):
         """Detiene la medida.
 
         Sin error checking por hora
         """
+        TCSPC_backend.stop_measure()
+
+    def process_measurement_stop(self):
+        """Procesa fin de medida.
+
+        Sin error checking por hora
+        """
         self.measureButton.setEnabled(True)
-        if not self._measure:
-            _lgr.warning("Se pidió parar la medida pero no parece haber una activa")
-            return
-        self._measure.stop_measure()
-        self._measure = None
 
     def load_folder(self):
         """Muestra una ventana de selección de carpeta."""
@@ -201,10 +181,6 @@ class TCSPCFrontend(QtWidgets.QFrame):
         _lgr.info("%s", metadata)
         self._config = metadata
 
-    def callback(self, delta_t: np.ndarray, binned: np.array, newpos: np.array):
-        """Calbback -> signal translator."""
-        self.measureSignal.emit(delta_t, binned, newpos)
-
     @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
     def get_data(self, delta_t: np.ndarray, binned: np.array, new_pos: np.array):
         """Receive new data and graph."""
@@ -241,11 +217,6 @@ class TCSPCFrontend(QtWidgets.QFrame):
         """Receive a shift signal from backend."""
         self._shifts.append((shift_x, shift_y,))
         self._localizations.append([])
-
-    @pyqtSlot()
-    def get_measure_end(self):
-        """Receive a measure end signal from backend."""
-        self.measureButton.setEnabled(True)
 
     def clear_data(self):
         """Clear all data and plots."""
@@ -391,127 +362,23 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
     def closeEvent(self, *args, **kwargs):
         """Handle close event."""
-        
-
         super().closeEvent(*args, **kwargs)
         # app.quit()
 
 
-class TCSPCBackend:
-    """Backend for TCSPC."""
-
-    TCSPC_measurement = None
-    measurementGroup = None
-
-    def __init__(self, tagger, IInfo: TCSPInstrumentInfo, cb, PSF: np.ndarray,
-                 PSF_info: PSFMetadata, *args, **kwargs):
-        """Receive device and config info."""
-        super().__init__(*args, **kwargs)
-        self.tagger = tagger
-        self.iinfo = IInfo
-        self._cb = cb
-        # FIXME
-        SBR = 8
-        sorted_indexes = np.argsort(self.iinfo.shutter_delays)
-        self._PSF = PSF[sorted_indexes]
-        self._shutter_delays = [self.iinfo.shutter_delays[idx] for idx in sorted_indexes]
-        self._locator = _analysis.MinFluxLocator(PSF, SBR, PSF_info.px_size * 1E3)
-
-    def start_measure(self):
-        """Start the measurement.
-
-        Called from GUI.
-        """
-        if self.measurementGroup:
-            _lgr.error("A measurement is already running")
-            return
-        self.fname = "Fantasia_filename"
-        self.currentfname = fntools.getUniqueName(self.fname)
-        _config_channels(tagger, self.iinfo)
-        # TODO: Adjust latency
-        tagger.setStreamBlockSize(max_events=_MAX_EVENTS, max_latency=5)
-        self.measurementGroup = _TimeTagger.SynchronizedMeasurements(tagger)
-        self.TCSPC_measurement = MinfluxMeasurement(
-            self.measurementGroup.getTagger(),
-            self.iinfo.APD_info[0].channel,
-            self.iinfo.laser_channel,
-            self.iinfo.period,
-            _MAX_EVENTS,
-            self._shutter_delays,
-            self.report,
-        )
-        self.file_measurement = _TimeTagger.FileWriter(
-            self.measurementGroup.getTagger(), 'filename.ttbin',
-            [self.iinfo.laser_channel] + [APDi.channel for APDi in self.iinfo.APD_info])
-        self.measurementGroup.start()
-        # Lo hacemos así por ahora
-        # self.measurementGroup.startFor(int(15E12))
-
-    def report(self, delta_t: np.ndarray, bins: np.ndarray, pos: tuple):
-        """Receive data from Swabian driver and call callback."""
-        try:
-            new_pos = self._locator(bins)[1]
-            self._cb(delta_t, bins, new_pos)
-        except Exception as e:
-            _lgr.error("Excepción %s reportando data: %s", type(e), e)
-            self.stop_measure()
-
-    def stop_measure(self):
-        """Stop measure.
-
-        Called from GUI.
-        """
-        if self.measurementGroup:
-            self.measurementGroup.stop()
-            _lgr.info("Measurement finished")
-            self.measurementGroup = None
-        else:
-            _lgr.info("No measurement active")
-
-
 if __name__ == "__main__":
-    tt_data = _st.get_tt_info()
-    if not tt_data:
-        print("   ******* Enchufá el equipo *******")
-        raise ValueError("POR FAVOR ENCHUFA EL EQUIPO")
-    IInfo = None
-    try:
-        IInfo = TCSPInstrumentInfo.load()
-        serial = IInfo.serial
-    except FileNotFoundError:
-        _lgr.info("No configuration file found")
-        # FIXME: for testing
-        # tt_data = {'aaaaa': {}}
-        serial = list(tt_data.keys())[0]
-    if not (serial in list(tt_data.keys())):
-        _lgr.warning(
-            "The configuration file is for a time tagger with a "
-            "different serial number: will use the first one instead."
-        )
-        serial = list(tt_data.keys())[0]
-    _lgr.info(
-        "%s TimeTaggers found. Using the one with with S#%s",
-        len(tt_data),
-        serial,
-    )
-    tt_info = tt_data[serial]
-    # FIXME: testing
-    # tt_info = TCSPInstrumentInfo("serial", 0, 'NIM', int(50E3),
-    #                              np.arange(0, 50000, 12500))
-    with _TimeTagger.createTimeTagger() as tagger:
-    # tagger = None
-    # if True:
-        if not QtWidgets.QApplication.instance():
-            app = QtWidgets.QApplication([])
-        else:
-            app = QtWidgets.QApplication.instance()
 
-        app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
+    if not QtWidgets.QApplication.instance():
+        app = QtWidgets.QApplication([])
+    else:
+        app = QtWidgets.QApplication.instance()
 
-        gui = TCSPCFrontend(tagger, IInfo)
+    app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
 
-        gui.setWindowTitle("Time-correlated single-photon counting with tracking")
-        gui.show()
-        gui.raise_()
-        gui.activateWindow()
-        app.exec_()
+    gui = TCSPCFrontend()
+
+    gui.setWindowTitle("Time-correlated single-photon counting with tracking")
+    gui.show()
+    gui.raise_()
+    gui.activateWindow()
+    app.exec_()
