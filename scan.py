@@ -146,7 +146,8 @@ class Frontend(QtGui.QFrame):
         params['waitingTime'] = int(self.waitingTimeEdit.text())  # in µs
         params['fileName'] = os.path.join(self.folderEdit.text(),
                                           self.filenameEdit.text())
-        params['moveToPos'] = np.array(self.moveToEdit.text().split(' '),
+        params['moveToPos'] = np.array([float(x.strip()) for x in
+                                        self.moveToEdit.text().split()],
                                        dtype=np.float16)
         
         params['xStep'] = float(self.xStepEdit.text())
@@ -1414,7 +1415,7 @@ class Backend(QtCore.QObject):
         y_f = tools.convert(y_f, 'XtoU')
         z_f = tools.convert(z_f, 'XtoU')
 
-#        print(x_f, y_f, z_f)
+        print("moviendo a ", x_f, y_f, z_f)
 
         self.adw.Set_Par(21, n_pixels_x)
         self.adw.Set_Par(22, n_pixels_y)
