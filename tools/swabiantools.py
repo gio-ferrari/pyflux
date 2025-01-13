@@ -1,6 +1,7 @@
 import TimeTagger as _TimeTagger
 import numpy as _np
-from collections.abc import Sequence as _Sequence
+from typing import Sequence as _Sequence
+from typing import Union, List, Tuple
 from enum import Enum
 from dataclasses import dataclass as _dataclass
 import pathlib as _pathlib
@@ -156,8 +157,8 @@ def get_tt_info() -> dict:
 
 
 def get_channels_delay(
-    tagger: _TimeTagger.TimeTagger, channels: int | _Sequence[int]
-) -> list[int]:
+    tagger: _TimeTagger.TimeTagger, channels: Union[int, _Sequence[int]]
+) -> List[int]:
     """Get hardware delays in ps for specified channels."""
     if isinstance(channels, int):
         channels = [
@@ -169,7 +170,7 @@ def get_channels_delay(
 
 def set_channels_delay(
     tagger: _TimeTagger.TimeTagger,
-    settings: tuple[int, int] | _Sequence[tuple[int, int]],
+    settings: Union[Tuple[int, int], _Sequence[Tuple[int, int]]],
 ):
     """Set hardware delays in ps for specified channels."""
     if isinstance(settings[0], int):

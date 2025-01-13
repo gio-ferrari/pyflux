@@ -9,6 +9,7 @@ Created on Thu Sep 19 11:01:37 2024
 from configparser import ConfigParser as _ConfigParser
 from dataclasses import dataclass as _dataclass, field as _field
 from collections import OrderedDict as _OrderedDict
+from typing import List
 
 
 _CONFIG_FILENAME = "tcspc.ini"
@@ -28,8 +29,8 @@ class TCSPInstrumentInfo:
     laser_channel: int = 0
     laser_signal: str = 'NIM'
     period: int = 0  # in ps
-    shutter_delays: list[int] = _field(default_factory=list)
-    APD_info: list[APDInfo] = _field(default_factory=list)
+    shutter_delays: List[int] = _field(default_factory=list)
+    APD_info: List[APDInfo] = _field(default_factory=list)
 
     def save(self, filename: str = _CONFIG_FILENAME):
         """Save data to file."""
