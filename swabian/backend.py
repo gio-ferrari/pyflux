@@ -70,7 +70,7 @@ class __TCSPCBackend(_QObject):
 
     _TCSPC_measurement = None
     _measurementGroup = None
-    sgnl_measure_init = _pyqtSignal()
+    sgnl_measure_init = _pyqtSignal(str)
     sgnl_measure_end = _pyqtSignal()
     sgnl_new_data = _pyqtSignal(np.ndarray, np.array, np.array)
     _NOPLACE = np.full((2,), np.nan)
@@ -87,6 +87,7 @@ class __TCSPCBackend(_QObject):
         self._tagger.setStreamBlockSize(max_events=_MAX_EVENTS, max_latency=5)
 
     def start_measure(self,
+                      filename: str,
                       PSF: _Union[np.ndarray, None] = None,
                       PSF_info: _Union[PSFMetadata, None] = None) -> bool:
         """Start a measurement.
@@ -110,7 +111,7 @@ class __TCSPCBackend(_QObject):
             _lgr.info("Starting measurement without location")
             self._locator = None
         # FIXME
-        self.fname = "Fantasia_filename"
+        self.fname = filename
         self.currentfname = fntools.getUniqueName(self.fname)
         self._measurementGroup = _TimeTagger.SynchronizedMeasurements(self._tagger)
         self._TCSPC_measurement = MinfluxMeasurement(
@@ -125,7 +126,7 @@ class __TCSPCBackend(_QObject):
         self._file_measurement = _TimeTagger.FileWriter(
             self._measurementGroup.getTagger(), self.currentfname + '.ttbin',
             [self.iinfo.laser_channel] + [APDi.channel for APDi in self.iinfo.APD_info])
-        self.sgnl_measure_start.emit()
+        self.sgnl_measure_start.emit(self.currentfname)
         self._measurementGroup.start()
 
     def report(self, delta_t: np.ndarray, bins: np.ndarray, pos: tuple):
