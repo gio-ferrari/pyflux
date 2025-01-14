@@ -5,6 +5,7 @@ from typing import Union, List, Tuple
 from enum import Enum
 from dataclasses import dataclass as _dataclass
 import pathlib as _pathlib
+from numba import njit
 
 class SignalEdgeEnum(Enum):
     RISEEDGE = 1
@@ -191,13 +192,14 @@ def set_channel_level(
     tagger.setTriggerLevel(channel, level_type.value.trigger_voltage)
 
 
-
+@njit
 def time_tags2delays(timestamps: _np.ndarray, channels: _np.ndarray,
                      overflow_types: _np.ndarray, APD_channel: int,
                      laser_channel: int, period: int,
+                     last_timestamp: int,
                      ):
     """calculate ."""
-    last_timestamp = 0  # Puede ser que perdamos info, ponerlo en errors[1]
+    # last_timestamp = 0  # Puede ser que perdamos info, ponerlo en errors[1]
     n_errors = 0
     last_pos = 0
     rv = _np.empty((len(timestamps), ), dtype=_np.int64)
@@ -212,12 +214,14 @@ def time_tags2delays(timestamps: _np.ndarray, channels: _np.ndarray,
             # valid event
             rv[last_pos] = period - (ts - last_timestamp)
             if rv[last_pos] < 0:
-                print("Tiempo negativo", rv[last_pos])
+                # print("Tiempo negativo", rv[last_pos], ts, last_timestamp)
                 rv[last_pos] += period
             last_pos += 1
         elif chan == APD_channel:
             last_timestamp = ts
-    return rv[:last_pos]
+    # if n_errors:
+    #     print("errores = ", n_errors)
+    return rv[:last_pos], last_timestamp
 
 
 def swabian2numpy(filename: str, period: int, APD_channel: int, laser_channel: int):
@@ -230,9 +234,10 @@ def swabian2numpy(filename: str, period: int, APD_channel: int, laser_channel: i
     original_filename = _pathlib.Path(filename)
     out_file_name = original_filename.with_suffix('.npy')
     filereader = _TimeTagger.FileReader(filename)
-    n_events = int(1E5)
+    n_events = int(5E6)
     i = 0
     batch = []
+    lts = 0 
     while filereader.hasData():
         data = filereader.getData(n_events=n_events)
         channel = data.getChannels()            # The channel numbers
@@ -240,14 +245,21 @@ def swabian2numpy(filename: str, period: int, APD_channel: int, laser_channel: i
         overflow_types = data.getEventTypes()   # TimeTag = 0, Error = 1, OverflowBegin = 2, OverflowEnd = 3, MissedEvents = 4
         missed_events = data.getMissedEvents()  # The numbers of missed events in case of overflow
         # Output to table
-        print(len(timestamps), "datos")
-        batch.append(time_tags2delays(timestamps, channel, overflow_types,
-                                      APD_channel, laser_channel, period))
+        rv, lts = time_tags2delays(timestamps, channel, overflow_types,
+                                      APD_channel, laser_channel, period, lts)
+        batch.append(rv)
     with open(out_file_name, "wb") as fd:
         _np.save(fd, _np.concatenate(batch))
 
 
 if __name__ == "__main__":
+    swabian2numpy(r"C:\Users\Minflux\Documents\PythonScripts\reading_swabian\filename.ttbin",
+                  50000, 4, 1)
+    a = _np.load(r"C:\Users\Minflux\Documents\PythonScripts\reading_swabian\filename.npy")
+    import matplotlib.pyplot as plt
+    plt.hist(a, 250, range=(-13,50000))
+
+if False:
     import matplotlib.pyplot as plt
 
     print(get_tt_info())
