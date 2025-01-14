@@ -191,7 +191,36 @@ def set_channel_level(
     tagger.setTriggerLevel(channel, level_type.value.trigger_voltage)
 
 
-def swabian2numpy(filename):
+
+def time_tags2delays(timestamps: _np.ndarray, channels: _np.ndarray,
+                     overflow_types: _np.ndarray, APD_channel: int,
+                     laser_channel: int, period: int,
+                     ):
+    """calculate ."""
+    last_timestamp = 0  # Puede ser que perdamos info, ponerlo en errors[1]
+    n_errors = 0
+    last_pos = 0
+    rv = _np.empty((len(timestamps), ), dtype=_np.int64)
+    for ts, chan, type_ in zip(timestamps, channels, overflow_types):
+        # tag.type can be: 0 - TimeTag, 1- Error, 2 - OverflowBegin, 3 -
+        # OverflowEnd, 4 - MissedEvents (you can use the TimeTagger.TagType IntEnum)
+        if type_ != 0:
+            # tag is not a TimeTag, so we are in an error state, e.g. overflow
+            last_timestamp = 0
+            n_errors += 1
+        elif chan == laser_channel and last_timestamp != 0:
+            # valid event
+            rv[last_pos] = period - (ts - last_timestamp)
+            if rv[last_pos] < 0:
+                print("Tiempo negativo", rv[last_pos])
+                rv[last_pos] += period
+            last_pos += 1
+        elif chan == APD_channel:
+            last_timestamp = ts
+    return rv[:last_pos]
+
+
+def swabian2numpy(filename: str, period: int, APD_channel: int, laser_channel: int):
     """Extrae info de un archivo de swabian y lo graba en uno numpy."""
     # base_dir = _pathlib.Path.home() / "pMinflux_data"
     # base_dir.mkdir(parents=True, exist_ok=True)
@@ -199,19 +228,23 @@ def swabian2numpy(filename):
     #     timespec='seconds').replace('-', '').replace(':', '-')
     # out_file_name = base_dir / ('tcspc_data' + date_str + '.npy')
     original_filename = _pathlib.Path(filename)
-    out_file_name = original_filename.stem + ".npy"
+    out_file_name = original_filename.with_suffix('.npy')
+    filereader = _TimeTagger.FileReader(filename)
+    n_events = int(1E5)
+    i = 0
+    batch = []
+    while filereader.hasData():
+        data = filereader.getData(n_events=n_events)
+        channel = data.getChannels()            # The channel numbers
+        timestamps = data.getTimestamps()       # The timestamps in ps
+        overflow_types = data.getEventTypes()   # TimeTag = 0, Error = 1, OverflowBegin = 2, OverflowEnd = 3, MissedEvents = 4
+        missed_events = data.getMissedEvents()  # The numbers of missed events in case of overflow
+        # Output to table
+        print(len(timestamps), "datos")
+        batch.append(time_tags2delays(timestamps, channel, overflow_types,
+                                      APD_channel, laser_channel, period))
     with open(out_file_name, "wb") as fd:
-        filereader = _TimeTagger.FileReader(filename)
-        n_events = int(1E5)
-        i = 0
-        while filereader.hasData():
-            data = filereader.getData(n_events=n_events)
-            channel = data.getChannels()            # The channel numbers
-            timestamps = data.getTimestamps()       # The timestamps in ps
-            overflow_types = data.getEventTypes()   # TimeTag = 0, Error = 1, OverflowBegin = 2, OverflowEnd = 3, MissedEvents = 4
-            missed_events = data.getMissedEvents()  # The numbers of missed events in case of overflow
-            # Output to table
-            print(len(timestamps), "datos")
+        _np.save(fd, _np.concatenate(batch))
 
 
 if __name__ == "__main__":

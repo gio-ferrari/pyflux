@@ -17,10 +17,8 @@ from pyqtgraph.Qt import QtCore
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QGroupBox
 from PyQt5 import QtWidgets
-import TimeTagger as _TimeTagger
 import tools.swabiantools as _st
 from swabian.backend import TCSPC_backend
-from tools.config_handler import TCSPInstrumentInfo
 
 
 # import drivers.ADwin as ADwin
@@ -120,7 +118,10 @@ class TCSPCFrontend(QtWidgets.QFrame):
         Sin error checking por hora
         """
         self.measureButton.setEnabled(True)
-        _st.swabian2numpy(self._current_filename)
+        _st.swabian2numpy(self._current_filename, TCSPC_backend.period,
+                          TCSPC_backend.iinfo.APD_info[0].channel,
+                          TCSPC_backend.iinfo.laser_channel,
+                          )
 
     def load_folder(self):
         """Muestra una ventana de selección de carpeta."""

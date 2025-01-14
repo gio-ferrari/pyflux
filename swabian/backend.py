@@ -82,6 +82,7 @@ class __TCSPCBackend(_QObject):
         super().__init__(*args, **kwargs)
         self._tagger = _TimeTagger.createTimeTagger(IInfo.serial)
         self.iinfo = IInfo
+        self.period = IInfo.period
         _config_channels(self._tagger, self.iinfo)
         # TODO: Adjust latency
         self._tagger.setStreamBlockSize(max_events=_MAX_EVENTS, max_latency=5)

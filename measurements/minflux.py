@@ -26,43 +26,32 @@ from swabian.backend import TCSPC_backend
 π = np.pi
 
 class Frontend(QtGui.QFrame):
-    
     filenameSignal = pyqtSignal(str)
     paramSignal = pyqtSignal(dict)
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
-        
         self.setup_gui()
-        
+
     def emit_filename(self):  
-        
         filename = os.path.join(self.folderEdit.text(),
                                 self.filenameEdit.text())
-        
         today = str(date.today()).replace('-', '')
         filename = tools.getUniqueName(filename + '_' + today)
-        
         self.filenameSignal.emit(filename)
              
     def emit_param(self):
-        
         params = dict()
-        
         filename = os.path.join(self.folderEdit.text(),
                                 self.filenameEdit.text())
-        
         params['measType'] = self.measType.currentText()
         params['acqtime'] = int(self.acqtimeEdit.text())
         params['filename'] = filename
         params['patternType'] = self.patternType.currentText()
         params['patternLength'] = float(self.lengthEdit.text())
-        
         self.paramSignal.emit(params)
-        
-    def load_folder(self):
 
+    def load_folder(self):
         try:
             root = Tk()
             root.withdraw()
@@ -73,41 +62,35 @@ class Frontend(QtGui.QFrame):
                 self.folderEdit.setText(folder)
         except OSError:
             pass
-        
+
     def toggle_parameters(self):
-        
         if self.measType.currentText() == 'Predefined positions':
-            
             self.patternType.show()
             self.lengthLabel.show()
             self.lengthEdit.show()
-      
         else:
-            
             self.patternType.hide()
             self.lengthLabel.hide()
             self.lengthEdit.hide()
-                    
-    def setup_gui(self):
-        
-        self.setWindowTitle('MINFLUX measurement')
 
+    def setup_gui(self):
+        self.setWindowTitle('MINFLUX measurement')
         grid = QtGui.QGridLayout()
 
         self.setLayout(grid)
         self.paramWidget = QGroupBox('Parameter')
 
         grid.addWidget(self.paramWidget, 0, 0)
-        
+
         subgrid = QtGui.QGridLayout()
         self.paramWidget.setLayout(subgrid)
-        
+
         self.measLabel = QtGui.QLabel('Measurement type')
-        
+
         self.measType = QtGui.QComboBox()
         self.measTypes = ['Standard', 'Predefined positions']
         self.measType.addItems(self.measTypes)
-        
+
         self.patternType = QtGui.QComboBox()
         self.patternTypes = ['Row', 'Square', 'Triangle']
         self.patternType.addItems(self.patternTypes)
