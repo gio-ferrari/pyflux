@@ -54,8 +54,8 @@ _FPAR_Y = 41
 # Proceso 3:
 _FPAR_Z = 32
 
-PX_SIZE = 23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
-PX_Z = -15  # 20 nm/px for z in nm # Antes 16 con calibración. Ahora: 120 con movimiento manual.
+PX_SIZE = 29.4 #23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
+PX_Z = -37.5  # 20 nm/px for z in nm # Antes 16 con calibración. Ahora: 120 con movimiento manual.
 #TODO: Fix (-1) (+1), correct_z
 
 # Posiblemente debería ir a un toolbox
@@ -875,7 +875,7 @@ class Backend(QtCore.QObject):
             self.csv_writer = csv.writer(self.time_log_file)
             self.csv_writer.writerow(["frame", "time"])  # Escribir encabezado
 
-            QtCore.QTimer.singleShot(60000, lambda: self.start_saving_video(False)) # ms
+            QtCore.QTimer.singleShot(1000, lambda: self.start_saving_video(False)) # ms
         else:
             self.saving_video = False
             self.save_video()
@@ -1140,7 +1140,7 @@ class Backend(QtCore.QObject):
         self.m_center = np.array(ndi.measurements.center_of_mass(zimage))
         # calculate z estimator
         # TODO: copiar de new_focus
-        self.currentz = self.m_center[1]
+        self.currentz = self.m_center[0]
         # El estimador está en píxeles... fraccionarios
 
     def gaussian_fit(self, roi_coordinates) -> (float, float):
