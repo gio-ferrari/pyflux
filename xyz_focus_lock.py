@@ -131,7 +131,7 @@ class Frontend(QtGui.QFrame):
         if roi_type == 'xy':
             ROIpen = pg.mkPen(color='r')
             ROIpos = (512 - 64, 512 - 64)
-            roi = viewbox_tools.ROI2(50, self.vb, ROIpos, handlePos=(1, 0),
+            roi = viewbox_tools.ROI2(90, self.vb, ROIpos, handlePos=(1, 0),
                                      handleCenter=(0, 1),
                                      scaleSnap=True,
                                      translateSnap=True,
@@ -141,7 +141,7 @@ class Frontend(QtGui.QFrame):
             self.xyROIButton.setChecked(False)
         elif roi_type == 'z':
             ROIpen = pg.mkPen(color='y')
-            ROIpos = (1100, 265)  # Lugar conveniente para colocar el roi z
+            ROIpos = (200, 200)  # Lugar conveniente para colocar el roi z
             self.roi_z = viewbox_tools.ROI2(150, self.vb, ROIpos,
                                             handlePos=(1, 0),
                                             handleCenter=(0, 1),
@@ -558,7 +558,7 @@ class Frontend(QtGui.QFrame):
         self.saveFocusButton = QtGui.QPushButton("Save focus")
         
         # go to saved focus
-        self.goToFocusButton = QtGui.QPushButton('Go to focus')
+        self.goToFocusButton = QtGui.QPushButton('Set focus')
 
         # button to clear the data
         self.clearDataButton = QtGui.QPushButton('Clear data')
@@ -1156,7 +1156,7 @@ class Backend(QtCore.QObject):
         # El estimador está en píxeles... fraccionarios
         
     @pyqtSlot(bool)
-    def save_focus(self):
+    def save_focus(self, checked: bool):
         self.center_of_mass()
         xmin, xmax, ymin, ymax = self.zROIcoordinates #Better define something like: self.xmin
         self.CM_abs = [self.m_center[0] + xmin, self.m_center[1] + ymin]
@@ -1164,13 +1164,13 @@ class Backend(QtCore.QObject):
         print("CM_abs: ", self.CM_abs) # Save this value in txt or something
         print("Reference in abs coord: self.CM_abs[0]: ", self.CM_abs[0])
         
-    @pyqtSlot(bool)
-    def go_to_focus(self):
+    def set_focus(self):
         xmin, xmax, ymin, ymax = self.zROIcoordinates
+        #self.CM_abs[0] = 65.90683593367112
         self.initialz = self.CM_abs[0] - xmin # To obtain coordinates relative to the new zROI
-        self.tracking_z = True
-        self.set_z_feedback(True, mode='continous')
-        self.notify_status()
+        # self.tracking_z = True
+        # self.set_z_feedback(True, mode='continous')
+        # self.notify_status()
         
         
     def gaussian_fit(self, roi_coordinates) -> (float, float):
@@ -1916,7 +1916,7 @@ class Backend(QtCore.QObject):
         frontend.saveDataSignal.connect(self.get_save_data_state)
         frontend.saveVideoSignal.connect(self.start_saving_video)
         frontend.saveFocusButton.clicked.connect(self.save_focus)
-        frontend.goToFocusButton.clicked.connect(self.go_to_focus)
+        frontend.goToFocusButton.clicked.connect(self.set_focus)
         frontend.exposureTimeChanged.connect(self.update_exposure_time)
         frontend.exportDataButton.clicked.connect(self.export_data)
         frontend.clearDataButton.clicked.connect(self.reset_graph)
