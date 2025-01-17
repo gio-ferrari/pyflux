@@ -29,10 +29,13 @@ from tkinter import Tk, filedialog
 
 import drivers.ADwin as ADwin
 import drivers.ids_cam as ids_cam
+#from pylablib.devices import Andor
+from pylablib.devices.Andor import AndorSDK2
 
 import xyz_focus_lock as focus
 import scan #scan works with minilasEvo 632, new_scan to work with another wavelength
 import tcspc
+import widefield_Andor
 import measurements.minflux as minflux
 import measurements.psf as psf
 
@@ -80,19 +83,16 @@ class Frontend(QtGui.QMainWindow):
 
         ## scan dock
         self.scanWidget = scan.Frontend()
-
         scanDock = QDockWidget('Confocal scan', self)
         scanDock.setWidget(self.scanWidget)
         scanDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar | 
                                  QDockWidget.DockWidgetFloatable |
                                  QDockWidget.DockWidgetClosable)
         scanDock.setAllowedAreas(Qt.LeftDockWidgetArea)
-
         self.addDockWidget(Qt.LeftDockWidgetArea, scanDock)
 
         ## tcspc dock
         self.tcspcWidget = tcspc.Frontend()
-        
         tcspcDock = QDockWidget('Time-correlated single-photon counting', self)
         tcspcDock.setWidget(self.tcspcWidget)
         tcspcDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar | 
@@ -101,22 +101,31 @@ class Frontend(QtGui.QMainWindow):
         tcspcDock.setAllowedAreas(Qt.BottomDockWidgetArea)
         self.addDockWidget(Qt.BottomDockWidgetArea, tcspcDock)
         
+        ## Widefield Andor dock
+        self.andorWidget = widefield_Andor.Frontend()
+        andorDock = QDockWidget('Widefield Andor', self)
+        andorDock.setWidget(self.andorWidget)
+        andorDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar | 
+                                 QDockWidget.DockWidgetFloatable |
+                                 QDockWidget.DockWidgetClosable)
+        andorDock.setAllowedAreas(Qt.RightDockWidgetArea)
+        self.addDockWidget(Qt.RightDockWidgetArea, andorDock)
+        
         ## focus lock dock
         self.focusWidget = focus.Frontend()
-
         focusDock = QDockWidget('Focus Lock', self)
         focusDock.setWidget(self.focusWidget)
         focusDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar | 
                                  QDockWidget.DockWidgetFloatable |
                                  QDockWidget.DockWidgetClosable)
         focusDock.setAllowedAreas(Qt.BottomDockWidgetArea)
-        
         self.addDockWidget(Qt.BottomDockWidgetArea, focusDock)
 
         # sizes to fit my screen properly
-        self.focusWidget.setMinimumSize(1100, 370)
-        self.tcspcWidget.setMinimumSize(598, 370)
         self.scanWidget.setMinimumSize(598, 370)
+        self.andorWidget.setMinimumSize(598, 370)
+        self.tcspcWidget.setMinimumSize(598, 370)
+        self.focusWidget.setMinimumSize(1100, 370)
         self.move(1, 1)
         
     def make_connection(self, backend):
@@ -124,7 +133,7 @@ class Frontend(QtGui.QMainWindow):
         backend.xyzWorker.make_connection(self.focusWidget)
         backend.scanWorker.make_connection(self.scanWidget)
         backend.tcspcWorker.make_connection(self.tcspcWidget)
-        
+        backend.andorWorker.make_connection(self.andorWidget)
         backend.minfluxWorker.make_connection(self.minfluxWidget)
         backend.psfWorker.make_connection(self.psfWidget)
 
@@ -159,12 +168,14 @@ class Backend(QtCore.QObject):
     xyzEndSignal = pyqtSignal(str)
     xyMoveAndLockSignal = pyqtSignal(np.ndarray)
     
-    def __init__(self, adw, ph, scmos, diodelaser, *args, **kwargs):
+    def __init__(self, adw, ph, scmos, diodelaser, andor, *args, **kwargs):
         
         super().__init__(*args, **kwargs)
         
         self.scanWorker = scan.Backend(adw, diodelaser)
         self.xyzWorker = focus.Backend(scmos, adw)
+        self.andorWorker = widefield_Andor.Backend(andor, adw) #Por ahora le mando adw para pensar el desplzamiento de la platina
+        print("success with Andor worker")
         self.tcspcWorker = tcspc.Backend(ph)
         
         self.minfluxWorker = minflux.Backend(adw)
@@ -180,8 +191,7 @@ class Backend(QtCore.QObject):
         
         self.minfluxWorker.xyzStartSignal.connect(self.xyzWorker.get_lock_signal)
         
-        # TO DO: check if this is compatible with both psf and minflux measurement
-        self.minfluxWorker.moveToSignal.connect(self.xyzWorker.get_move_signal)
+        self.minfluxWorker.moveToSignal.connect(self.xyzWorker.get_move_signal) #esta señal sólo se emite en modo: 'Predefined positions', que arranca el loop
         
         self.minfluxWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
         self.minfluxWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
@@ -191,7 +201,7 @@ class Backend(QtCore.QObject):
         self.minfluxWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
         self.minfluxWorker.xyzEndSignal.connect(self.xyzWorker.get_end_measurement_signal)
         # TODO: check before use
-        self.minfluxWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
+        self.minfluxWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal) #Esta señal jamás se emite desde minflux.py
 
     def setup_psf_connections(self):
         self.psfWorker.scanSignal.connect(self.scanWorker.get_scan_signal) #Esta es la conexion que permite cambiar el punto de inicio del escaneo
@@ -216,7 +226,7 @@ class Backend(QtCore.QObject):
         frontend.focusWidget.make_connection(self.xyzWorker)
         frontend.scanWidget.make_connection(self.scanWorker)
         frontend.tcspcWidget.make_connection(self.tcspcWorker)
-    
+        frontend.andorWidget.make_connection(self.andorWorker)
         frontend.minfluxWidget.make_connection(self.minfluxWorker)
         frontend.psfWidget.make_connection(self.psfWorker)
     
@@ -236,6 +246,7 @@ class Backend(QtCore.QObject):
         self.scanWorker.stop()
         self.tcspcWorker.stop()
         self.xyzWorker.stop()
+        self.andorWorker.stop()
 
 
 if __name__ == '__main__':
@@ -251,7 +262,6 @@ if __name__ == '__main__':
     gui = Frontend()
     
     #initialize devices
-    
     port = tools.get_MiniLasEvoPort()
     print('MiniLasEvo diode laser port:', port)
     diodelaser = MiniLasEvo(port)
@@ -261,14 +271,15 @@ if __name__ == '__main__':
         cam = ids_cam.IDS_U3()
     except:
         pass
-    
+    andor = AndorSDK2.AndorSDK2Camera(fan_mode = "full") #Forma antigua
+    #andor = Andor.AndorSDK2Camera(fan_mode = "full") 
     ph = picoharp.PicoHarp300()
     
     DEVICENUMBER = 0x1
     adw = ADwin.ADwin(DEVICENUMBER, 1)
     scan.setupDevice(adw)
     
-    worker = Backend(adw, ph, cam, diodelaser)
+    worker = Backend(adw, ph, cam, diodelaser, andor)
     
     gui.make_connection(worker)
     worker.make_connection(gui)
@@ -299,12 +310,10 @@ if __name__ == '__main__':
 #    psfGUIThread.start()
     
     # focus thread
-
     focusThread = QtCore.QThread()
     worker.xyzWorker.moveToThread(focusThread)
     worker.xyzWorker.viewtimer.moveToThread(focusThread)
     worker.xyzWorker.viewtimer.timeout.connect(worker.xyzWorker.update)
-
     focusThread.start()
     
     # focus GUI thread
@@ -316,38 +325,36 @@ if __name__ == '__main__':
        
 
     # tcspc thread
-    
     tcspcWorkerThread = QtCore.QThread()
     worker.tcspcWorker.moveToThread(tcspcWorkerThread)
     worker.tcspcWorker.tcspcTimer.moveToThread(tcspcWorkerThread)
     worker.tcspcWorker.tcspcTimer.timeout.connect(worker.tcspcWorker.update)
-    
     tcspcWorkerThread.start()
     
     # scan thread
-    
     scanThread = QtCore.QThread()
-    
     worker.scanWorker.moveToThread(scanThread)
     worker.scanWorker.viewtimer.moveToThread(scanThread)
     worker.scanWorker.viewtimer.timeout.connect(worker.scanWorker.update_view)
-
     scanThread.start()
     
-    # minflux worker thread
+    # Andor widefield thread
+    andorThread = QtCore.QThread()
+    worker.andorWorker.moveToThread(andorThread)
+    worker.andorWorker.viewtimer.moveToThread(andorThread)
+    worker.andorWorker.viewtimer.timeout.connect(worker.andorWorker.update_view)
+    andorThread.start()
     
+    # minflux worker thread
     minfluxThread = QtCore.QThread()
     worker.minfluxWorker.moveToThread(minfluxThread)
-    
     minfluxThread.start()
     
     # psf worker thread
-    
 #    psfThread = QtCore.QThread()
 #    worker.psfWorker.moveToThread(psfThread)
 #    worker.psfWorker.measTimer.moveToThread(psfThread)
 #    worker.psfWorker.measTimer.timeout.connect(worker.psfWorker.measurement_loop)
-#
 #    psfThread.start()
     
     gui.showMaximized()

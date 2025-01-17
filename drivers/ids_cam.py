@@ -16,6 +16,7 @@ I created this class to introduce camera as an IDS object in a backend class (an
 on_acquisition_timer function can be modified to return 1 channel image
 When running in stand alone mode device.take_image() displays a camera photo.
 TriggerSoftware:To trigger the capture of an image.
+TODO: Add gain control
 
 """
 
@@ -34,14 +35,15 @@ _lgr = _lgn.getLogger(__name__)
 _lgr.setLevel(_lgn.DEBUG)
 
 FPS_LIMIT = 30.0  # Hz, FPS: Acquisition Frame Rate to meet the desirable application's speed.
-EXPOSURE_TIME_VALUE = 50000.0  # us
+EXPOSURE_TIME_VALUE = 50000.0  # µs # Default exposure time
 
 
 class IDS_U3:
     """IDS Camera."""
 
-    def __init__(self):
+    def __init__(self, exposure_time = EXPOSURE_TIME_VALUE):
         """Init Camera."""
+        self.exposure_time = exposure_time
         self.__device = None
         self.__nodemap_remote_device = None
         self.__datastream = None
@@ -118,25 +120,7 @@ class IDS_U3:
             self.__nodemap_remote_device.FindNode("TriggerSource").SetCurrentEntry("Software")
             self.__nodemap_remote_device.FindNode("TriggerMode").SetCurrentEntry("On")
             
-            # Setting exposure time
-            min_exposure_time = 0
-            max_exposure_time = 0
-
-            # Get exposure range. All values in microseconds
-            min_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Minimum() # Min exposure_time:  28.527027027027028 us
-            max_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Maximum() # Max exposure time:  2000001.6351351351 us = 2000 ms = 2 s
-            #_lgr.info("Min / Max exposure_time: %s µs / %s µs", min_exposure_time, max_exposure_time)
-            # if self.__nodemap_remote_device.FindNode("ExposureTime").HasConstantIncrement():
-            #      inc_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Increment()
-            # else:
-            #     # If there is no increment, it might be useful to choose a suitable increment for a GUI control element (e.g. a slider)
-            #      inc_exposure_time = 1000
-
-            # Set exposure time to EXPOSURE_TIME_VALUE
-            self.__nodemap_remote_device.FindNode("ExposureTime").SetValue(EXPOSURE_TIME_VALUE)
-            exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Value() #This is a default value
-            _lgr.info("New Current exposure time: %s ms.", exposure_time/1E3)
-
+            self.set_exposure_time(self.exposure_time)
             try:
                 ds = self.__datastream.NodeMaps()
                 ds = ds[0]
@@ -166,7 +150,28 @@ class IDS_U3:
         except ids_peak.Exception as e:
             _lgr.error("Exception %s: %s", type(e), str(e))
             return False
+        
+    def set_exposure_time(self, exposure_time):
+                    # Setting exposure time
+            min_exposure_time = 0
+            max_exposure_time = 0
+            self.exposure_time = exposure_time
+            # Get exposure range. All values in microseconds
+            min_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Minimum() # Min exposure_time:  28.527027027027028 us
+            max_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Maximum() # Max exposure time:  2000001.6351351351 us = 2000 ms = 2 s
+            #_lgr.info("Min / Max exposure time: %s µs / %s µs", min_exposure_time, max_exposure_time)
+            # if self.__nodemap_remote_device.FindNode("ExposureTime").HasConstantIncrement():
+            #      inc_exposure_time = self.__nodemap_remote_device.FindNode("ExposureTime").Increment()
+            # else:
+            #     # If there is no increment, it might be useful to choose a suitable increment for a GUI control element (e.g. a slider)
+            #      inc_exposure_time = 1000
 
+            # Set exposure time to exposure_time
+            self.__nodemap_remote_device.FindNode("ExposureTime").SetValue(self.exposure_time)
+            exp_time = self.__nodemap_remote_device.FindNode("ExposureTime").Value() #This is a default value
+            _lgr.info("New Current exposure time: %s ms.", exp_time/1E3)
+
+    
     def set_roi(self, x, y, width, height):
         try:
             # Get the minimum ROI and set it. After that there are no size restrictions anymore
@@ -378,7 +383,6 @@ class IDS_U3:
 
 
 if __name__ == '__main__':
-    
     device = IDS_U3()
     if device.open_device():
         print("Big success, device configured")
