@@ -556,9 +556,9 @@ class Frontend(QtGui.QFrame):
         
         # save focus reference
         self.saveFocusButton = QtGui.QPushButton("Save focus")
-        # delete ROI button
+        
+        # go to saved focus
         self.goToFocusButton = QtGui.QPushButton('Go to focus')
-        self.goToFocusButton.clicked.connect(self.go_to_focus)
 
         # button to clear the data
         self.clearDataButton = QtGui.QPushButton('Clear data')
@@ -730,7 +730,7 @@ class Backend(QtCore.QObject):
         self.viewtimer = QtCore.QTimer()
         # TODO: overload de movetothread para que se mueva con sus timers
         # self.viewtimer.timeout.connect(self.update)
-        self.xyz_time = 1000  # 200 ms per acquisition + fit + correction
+        self.xyz_time = 200  # 200 ms per acquisition + fit + correction
 
         # Si trackear (NO si corregir)
         self.tracking_xy = False
@@ -1159,19 +1159,20 @@ class Backend(QtCore.QObject):
     def save_focus(self):
         self.center_of_mass()
         print("self.m_center: ", self.m_center)
-        xmin, ymin = self.roi_z.pos() #Better define something like: self.xmin
+        xmin, xmax, ymin, ymax = self.zROIcoordinates #Better define something like: self.xmin
         self.CM_abs = [self.m_center[0] + xmin, self.m_center[1] + ymin]
         #self.CM_abs = [CMx_abs, CMy_abs]
-        print("CM_abs: ", self.CM_abs, self.CM_abs.shape, self.CM_abs.size) # Save this value in txt or something
-        print("Reference in abs coord: ", self.CM_abs[0])
+        print("CM_abs: ", self.CM_abs) # Save this value in txt or something
+        print("Reference in abs coord: self.CM_abs[0]: ", self.CM_abs[0])
         
     @pyqtSlot(bool)
     def go_to_focus(self):
-        print("inside go_to_focus")
-        xmin, ymin = self.roi_z.pos()
+        xmin, xmax, ymin, ymax = self.zROIcoordinates
         self.initialz = self.CM_abs[0] - xmin # To obtain coordinates relative to the new zROI
+        print("self.initialz in go_to_focus: " , self.initialz)
         self.tracking_z = True
         self.feedback_z = True
+        self.notify_status()
         
         
     def gaussian_fit(self, roi_coordinates) -> (float, float):
@@ -1307,6 +1308,7 @@ class Backend(QtCore.QObject):
         # z track of the reflected beam
         if track_type == 'z':
             self.center_of_mass()
+            print("initialz in track: ", self.initialz)
             self.z = (self.currentz - self.initialz) * PX_Z  # self.z in nm
             if self.save_data_state:
                 self.z_time_array[self.j_z] = time.time() - self.startTime
@@ -1916,8 +1918,8 @@ class Backend(QtCore.QObject):
         frontend.closeSignal.connect(self.stop)
         frontend.saveDataSignal.connect(self.get_save_data_state)
         frontend.saveVideoSignal.connect(self.start_saving_video)
-        frontend.saveFocusButton.connect(self.save_focus)
-        frontend.goToFocusButton.connect(self.go_to_focus)
+        frontend.saveFocusButton.clicked.connect(self.save_focus)
+        frontend.goToFocusButton.clicked.connect(self.go_to_focus)
         frontend.exposureTimeChanged.connect(self.update_exposure_time)
         frontend.exportDataButton.clicked.connect(self.export_data)
         frontend.clearDataButton.clicked.connect(self.reset_graph)
