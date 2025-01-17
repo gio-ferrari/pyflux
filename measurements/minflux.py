@@ -226,27 +226,20 @@ class Backend(QtCore.QObject):
         
     @pyqtSlot(dict)
     def get_frontend_param(self, params):
-        
         """
         Connection: [frontend] paramSignal
         """
-        
         self.acqtime = params['acqtime']
         self.measType = params['measType']
-        
         today = str(date.today()).replace('-', '')
         self.filename = params['filename'] + '_' + today
-        
         self.patternType = params['patternType']
         self.patternLength = float(params['patternLength'])/1000 # in micrometer
-        
         self.update_param()
         
     def update_param(self):
-        
         l = self.patternLength
         h = np.sqrt(3/2)*l
-        
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
         self.r0 = np.array([currentXposition, currentYposition])
@@ -269,7 +262,6 @@ class Backend(QtCore.QObject):
             self.n = 1
                 
     def start(self):
-        
         self.i = 0
         self.shutterSignal.emit(8, True)
         
@@ -292,13 +284,17 @@ class Backend(QtCore.QObject):
     
     def loop(self):
         now = time.time()
-        if (now - (self.t0 + self.i * self.acqtime) + self.acqtime) > self.acqtime:
-            print(datetime.now(), '[minflux] loop', self.i)
+        time_elapsed = now - self.t0
+        if time_elapsed > (self.i+1) * self.acqtime:
+        # if (now - (self.t0 + self.i * self.acqtime) + self.acqtime) > self.acqtime:
+            print(datetime.now(), '[minflux] fin loop', self.i)
             self.moveToSignal.emit(self.r[self.i], self.pattern[self.i])
             self.i += 1
-            if self.i == self.n:         
+            if self.i == self.n:
                 self.stop()
                 print(datetime.now(), '[minflux] measurement ended')
+            else:
+                print("Moviendo a ", self.r[self.i])
                 
     def stop(self):
         self.shutterSignal.emit(8, False)
@@ -312,15 +308,11 @@ class Backend(QtCore.QObject):
         """
         #make scan saving config file
         self.saveConfigSignal.emit(self.filename)
-
         self.xyzEndSignal.emit(self.filename)
-        
-        self.stop()
-        
+        # self.stop()
         print(datetime.now(), '[minflux] measurement ended')
         
     def make_connection(self, frontend):
-        
         frontend.paramSignal.connect(self.get_frontend_param)
 #        frontend.filenameSignal.connect(self.get_filename)
         frontend.startButton.clicked.connect(self.start)

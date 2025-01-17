@@ -21,7 +21,7 @@ import tools.tools as tools
 
 import scan
 
-from PyQt5.QtCore import pyqtSignal, pyqtSlot
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
 from PyQt5.QtWidgets import QGroupBox, QHBoxLayout, QCheckBox
 
 import pyqtgraph as pg
@@ -108,6 +108,9 @@ class Frontend(QtGui.QFrame):
         """Init internal data and GUI."""
         super().__init__(*args, **kwargs)
         # initial ROI parameters
+        # self.setWindowFlags(self.windowFlags() | Qt.CustomizeWindowHint)
+        # disable (but not hide) close button
+        # self.setWindowFlags(self.windowFlags() & ~Qt.WindowCloseButtonHint)
         self.ROInumber = 0  # siguiente ROIs xy a actualizar
         # Una lista en la que se guardarán los objetos ROI a graficar
         self.roilist: list = []  # list[viewbox_tools.ROI2]
@@ -1679,7 +1682,7 @@ class Backend(QtCore.QObject):
         que moverse.
         TODO: si FPar_72 no está bien seteado esto se va a cualquier posición
         """
-        self.toggle_feedback(False)
+        # self.toggle_feedback(False)
         # self.toggle_tracking(True)
         self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                           self.feedback_xy, self.feedback_z,
