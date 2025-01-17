@@ -1160,18 +1160,12 @@ class Backend(QtCore.QObject):
         self.center_of_mass()
         xmin, xmax, ymin, ymax = self.zROIcoordinates #Better define something like: self.xmin
         self.CM_abs = [self.m_center[0] + xmin, self.m_center[1] + ymin]
-        #self.CM_abs = [CMx_abs, CMy_abs]
         print("CM_abs: ", self.CM_abs) # Save this value in txt or something
         print("Reference in abs coord: self.CM_abs[0]: ", self.CM_abs[0])
         
     def set_focus(self):
         xmin, xmax, ymin, ymax = self.zROIcoordinates
-        #self.CM_abs[0] = 65.90683593367112
         self.initialz = self.CM_abs[0] - xmin # To obtain coordinates relative to the new zROI
-        # self.tracking_z = True
-        # self.set_z_feedback(True, mode='continous')
-        # self.notify_status()
-        
         
     def gaussian_fit(self, roi_coordinates) -> (float, float):
         """Devuelve el centro del fiteo, en nm respecto al ROI.
