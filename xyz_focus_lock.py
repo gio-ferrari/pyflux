@@ -1158,7 +1158,6 @@ class Backend(QtCore.QObject):
     @pyqtSlot(bool)
     def save_focus(self):
         self.center_of_mass()
-        print("self.m_center: ", self.m_center)
         xmin, xmax, ymin, ymax = self.zROIcoordinates #Better define something like: self.xmin
         self.CM_abs = [self.m_center[0] + xmin, self.m_center[1] + ymin]
         #self.CM_abs = [CMx_abs, CMy_abs]
@@ -1169,9 +1168,8 @@ class Backend(QtCore.QObject):
     def go_to_focus(self):
         xmin, xmax, ymin, ymax = self.zROIcoordinates
         self.initialz = self.CM_abs[0] - xmin # To obtain coordinates relative to the new zROI
-        print("self.initialz in go_to_focus: " , self.initialz)
         self.tracking_z = True
-        self.feedback_z = True
+        self.set_z_feedback(True, mode='continous')
         self.notify_status()
         
         
@@ -1308,7 +1306,6 @@ class Backend(QtCore.QObject):
         # z track of the reflected beam
         if track_type == 'z':
             self.center_of_mass()
-            print("initialz in track: ", self.initialz)
             self.z = (self.currentz - self.initialz) * PX_Z  # self.z in nm
             if self.save_data_state:
                 self.z_time_array[self.j_z] = time.time() - self.startTime
