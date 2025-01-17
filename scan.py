@@ -1779,34 +1779,29 @@ class Backend(QtCore.QObject):
         else:
             self.liveview_stop()
 
-    def liveview_start(self):
-        
-#        self.plot_scan()
-        
+    def reset_position(self):
         if self.scantype == 'xy':
-
             self.moveTo(self.x_i, self.y_i, self.z_i)
-
-        if self.scantype == 'xz':
-
+        elif self.scantype == 'xz':
             self.moveTo(self.x_i, self.y_i + self.scanRange/2,
                         self.z_i - self.scanRange/2)
-
-        if self.scantype == 'yz':
-
+        elif self.scantype == 'yz':
             self.moveTo(self.x_i + self.scanRange/2, self.y_i,
                         self.z_i - self.scanRange/2)
+        else:
+            print("Unknown scan type in reset_position")    
+        # HOTFIX: para ver si el linescan y el moveto no se estan peleando
+        time.sleep(.256)
 
+    def liveview_start(self):
+#        self.plot_scan()
+        self.reset_position()
         self.viewtimer.start(self.viewtimer_time)
 
     def liveview_stop(self):
         """Finish liveview scan."""
         self.viewtimer.stop()
-        time.sleep(.5)  # Not sure if neccesary, but let's wait
-        # self.moveTo(self.x_i + self.scanRange/2,
-        #             self.y_i + self.scanRange/2,
-        #             self.z_i
-        #             )
+        self.reset_position()
 
     def update_view(self):
         """Procesa click del timer."""
@@ -1861,14 +1856,7 @@ class Backend(QtCore.QObject):
             self.i = 0
             self.y_offset = 0
             self.z_offset = 0
-            if self.scantype == 'xy':
-                self.moveTo(self.x_i, self.y_i, self.z_i)
-            if self.scantype == 'xz':
-                self.moveTo(self.x_i, self.y_i + self.scanRange/2,
-                            self.z_i - self.scanRange/2)
-            if self.scantype == 'yz':
-                self.moveTo(self.x_i + self.scanRange/2, self.y_i,
-                            self.z_i - self.scanRange/2)
+            self.reset_position()
             if self.acquisitionMode == 'frame':
                 self.liveview_stop()
                 self.frameIsDone.emit(True, self.image)
