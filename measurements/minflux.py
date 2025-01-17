@@ -21,48 +21,37 @@ from PyQt5.QtWidgets import QGroupBox
 from tkinter import Tk, filedialog
 
 import tools.tools as tools
-
+from swabian.backend import TCSPC_backend
 
 π = np.pi
 
 class Frontend(QtGui.QFrame):
-    
     filenameSignal = pyqtSignal(str)
     paramSignal = pyqtSignal(dict)
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
-        
         self.setup_gui()
-        
+
     def emit_filename(self):  
-        
         filename = os.path.join(self.folderEdit.text(),
                                 self.filenameEdit.text())
-        
         today = str(date.today()).replace('-', '')
         filename = tools.getUniqueName(filename + '_' + today)
-        
         self.filenameSignal.emit(filename)
              
     def emit_param(self):
-        
         params = dict()
-        
         filename = os.path.join(self.folderEdit.text(),
                                 self.filenameEdit.text())
-        
         params['measType'] = self.measType.currentText()
         params['acqtime'] = int(self.acqtimeEdit.text())
         params['filename'] = filename
         params['patternType'] = self.patternType.currentText()
         params['patternLength'] = float(self.lengthEdit.text())
-        
         self.paramSignal.emit(params)
-        
-    def load_folder(self):
 
+    def load_folder(self):
         try:
             root = Tk()
             root.withdraw()
@@ -73,41 +62,35 @@ class Frontend(QtGui.QFrame):
                 self.folderEdit.setText(folder)
         except OSError:
             pass
-        
+
     def toggle_parameters(self):
-        
         if self.measType.currentText() == 'Predefined positions':
-            
             self.patternType.show()
             self.lengthLabel.show()
             self.lengthEdit.show()
-      
         else:
-            
             self.patternType.hide()
             self.lengthLabel.hide()
             self.lengthEdit.hide()
-                    
-    def setup_gui(self):
-        
-        self.setWindowTitle('MINFLUX measurement')
 
+    def setup_gui(self):
+        self.setWindowTitle('MINFLUX measurement')
         grid = QtGui.QGridLayout()
 
         self.setLayout(grid)
         self.paramWidget = QGroupBox('Parameter')
 
         grid.addWidget(self.paramWidget, 0, 0)
-        
+
         subgrid = QtGui.QGridLayout()
         self.paramWidget.setLayout(subgrid)
-        
+
         self.measLabel = QtGui.QLabel('Measurement type')
-        
+
         self.measType = QtGui.QComboBox()
         self.measTypes = ['Standard', 'Predefined positions']
         self.measType.addItems(self.measTypes)
-        
+
         self.patternType = QtGui.QComboBox()
         self.patternTypes = ['Row', 'Square', 'Triangle']
         self.patternType.addItems(self.patternTypes)
@@ -194,7 +177,7 @@ class Frontend(QtGui.QFrame):
 class Backend(QtCore.QObject):
     
     tcspcPrepareSignal = pyqtSignal(str, int, int)
-    tcspcStartSignal = pyqtSignal(str)
+    tcspcStartSignal = pyqtSignal()
     
     xyzStartSignal = pyqtSignal()
     xyzEndSignal = pyqtSignal(str)
@@ -221,6 +204,7 @@ class Backend(QtCore.QObject):
         
         self.measTimer = QtCore.QTimer()
         self.measTimer.timeout.connect(self.loop)
+        TCSPC_backend.sgnl_measure_end.connect(self.get_tcspc_done_signal)
             
     @pyqtSlot(np.ndarray)    
     def get_ROI_center(self, center):
@@ -242,134 +226,91 @@ class Backend(QtCore.QObject):
         
     @pyqtSlot(dict)
     def get_frontend_param(self, params):
-        
         """
         Connection: [frontend] paramSignal
         """
-        
         self.acqtime = params['acqtime']
         self.measType = params['measType']
-        
         today = str(date.today()).replace('-', '')
         self.filename = params['filename'] + '_' + today
-        
         self.patternType = params['patternType']
         self.patternLength = float(params['patternLength'])/1000 # in micrometer
-        
         self.update_param()
         
     def update_param(self):
-        
         l = self.patternLength
         h = np.sqrt(3/2)*l
-        
         currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
         currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
-                
         self.r0 = np.array([currentXposition, currentYposition])
-        
         if self.measType == 'Predefined positions':
-        
             if self.patternType == 'Row':
-                
                 self.pattern = np.array([[0, -l], [0, 0], [0, l]])
-                
                 print('ROW')
-                
             if self.patternType == 'Square':
-                
                 self.pattern = np.array([[0, 0], [l/2, l/2], [l/2, -l/2],
                                         [-l/2, -l/2], [-l/2, l/2]])
-        
                 print('SQUARE')
-        
             if self.patternType == 'Triangle':
-                
                 self.pattern = np.array([[0, 0], [0, (2/3)*h], [l/2, -(1/3)*h],
                                         [-l/2, -(1/3)*h]])
-        
                 print('TRIANGLE')
-                
             self.r = self.r0 + self.pattern
             self.n = np.shape(self.r)[0]
-                
         else:
-            
             self.r = self.r0
             self.n = 1
-    
-#        print('[minflux] self.pattern', self.pattern)
-#        print(datetime.now(), '[minflux] self.r', self.r)
-#        print(datetime.now(), '[minflux] self.r.shape', self.r.shape)
                 
     def start(self):
-        
         self.i = 0
         self.shutterSignal.emit(8, True)
         print("inside Start")
         if self.measType == 'Standard':
             print('[minflux] self.n, self.acqtime', self.n, self.acqtime)
-            self.tcspcPrepareSignal.emit(self.filename, self.acqtime, self.n) # signal emitted to tcspc module to start the measurement
-            print("tcspcPrepareSignal emitted in Standard mode")
-#            phtime = 4.0  # in s, it takes 4 s for the PH to start the measurement, TO DO: check if this can be reduced (send email to Picoquant, etc)
-#            time.sleep(phtime)
-            self.tcspcStartSignal.emit('Standard')
-            print("tcspcstartSignal emitted in Standard mode")
+            self.tcspcStartSignal.emit()
             self.t0 = time.time()
-            
+            TCSPC_backend.start_measure(self.filename)
         if self.measType == 'Predefined positions':
             print(datetime.now(), '[minflux] Predefined positions')
             self.update_param()
             time.sleep(0.2)
-            self.tcspcPrepareSignal.emit(self.filename, self.acqtime, self.n) # signal emitted to tcspc module to start the measurement
-            print("tcspcPrepareSignal emitted in Predefined positions")
-#            phtime = 4.0  # in s, it takes 4 s for the PH to start the measurement, TO DO: check if this can be reduced (send email to Picoquant, etc)
-#            time.sleep(phtime)
-            self.tcspcStartSignal.emit(self.patternType)
-            print("tcspcPrepareSignal emitted in Predefined positions")
+            self.tcspcStartSignal.emit()
             self.t0 = time.time()
-            # self.measTimer.start(0)
+            self.measTimer.start(0)
+            TCSPC_backend.start_measure(self.filename)
     
     def loop(self):
-        
         now = time.time()
-        
-        if (now - (self.t0 + self.i * self.acqtime) + self.acqtime) > self.acqtime:
-            
-            print(datetime.now(), '[minflux] loop', self.i)
-                        
+        time_elapsed = now - self.t0
+        # TODO: Check from here
+        if time_elapsed > (self.i+1) * self.acqtime:
+        # if (now - (self.t0 + self.i * self.acqtime) + self.acqtime) > self.acqtime:
+            print(datetime.now(), '[minflux] fin loop', self.i)
             self.moveToSignal.emit(self.r[self.i], self.pattern[self.i])
-        
             self.i += 1
-            
             if self.i == self.n:
-                                
                 self.stop()
-                
                 print(datetime.now(), '[minflux] measurement ended')
+            else:
+                print("Moviendo a ", self.r[self.i])
                 
     def stop(self):
-        
         self.shutterSignal.emit(8, False)
         self.measTimer.stop()
+        TCSPC_backend.stop_measure()
         
     @pyqtSlot()  
     def get_tcspc_done_signal(self):
-        
         """
         Connection: [tcspc] tcspcDoneSignal
         """
         #make scan saving config file
         self.saveConfigSignal.emit(self.filename)
-
         self.xyzEndSignal.emit(self.filename)
-        
-        self.stop()
-        
+        # self.stop()
         print(datetime.now(), '[minflux] measurement ended')
         
     def make_connection(self, frontend):
-        
         frontend.paramSignal.connect(self.get_frontend_param)
 #        frontend.filenameSignal.connect(self.get_filename)
         frontend.startButton.clicked.connect(self.start)

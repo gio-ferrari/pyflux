@@ -34,8 +34,9 @@ from pylablib.devices.Andor import AndorSDK2
 
 import xyz_focus_lock as focus
 import scan #scan works with minilasEvo 632, new_scan to work with another wavelength
-import tcspc
+
 #import widefield_Andor
+from swabian_tcspc import TCSPCFrontend
 import measurements.minflux as minflux
 import measurements.psf as psf
 
@@ -92,7 +93,7 @@ class Frontend(QtGui.QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, scanDock)
 
         ## tcspc dock
-        self.tcspcWidget = tcspc.Frontend()
+        self.tcspcWidget = TCSPCFrontend()
         tcspcDock = QDockWidget('Time-correlated single-photon counting', self)
         tcspcDock.setWidget(self.tcspcWidget)
         tcspcDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar | 
@@ -129,30 +130,24 @@ class Frontend(QtGui.QMainWindow):
         self.move(1, 1)
         
     def make_connection(self, backend):
-        
         backend.xyzWorker.make_connection(self.focusWidget)
         backend.scanWorker.make_connection(self.scanWidget)
-        backend.tcspcWorker.make_connection(self.tcspcWidget)
-        #backend.andorWorker.make_connection(self.andorWidget)
+        # backend.andorWorker.make_connection(self.andorWidget)
         backend.minfluxWorker.make_connection(self.minfluxWidget)
         backend.psfWorker.make_connection(self.psfWidget)
 
     def psf_measurement(self):
-
         self.psfWidget.show()
-        
+
     def minflux_measurement(self):
-        
         self.minfluxWidget.show()
         self.minfluxWidget.emit_filename()
 
     def closeEvent(self, *args, **kwargs):
-        
         self.closeSignal.emit()
         time.sleep(1)
-        
         focusThread.exit()
-        tcspcWorkerThread.exit()
+        # tcspcWorkerThread.exit()
         scanThread.exit()
         minfluxThread.exit()
         super().closeEvent(*args, **kwargs)
@@ -163,20 +158,18 @@ class Backend(QtCore.QObject):
     
     askROIcenterSignal = pyqtSignal()
     moveToSignal = pyqtSignal(np.ndarray)
-    tcspcStartSignal = pyqtSignal(str, int, int)
-    xyzStartSignal = pyqtSignal()
     xyzEndSignal = pyqtSignal(str)
     xyMoveAndLockSignal = pyqtSignal(np.ndarray)
     
-    def __init__(self, adw, ph, scmos, diodelaser, *args, **kwargs):
+    def __init__(self, adw, scmos, diodelaser, *args, **kwargs):
         
         super().__init__(*args, **kwargs)
         
         self.scanWorker = scan.Backend(adw, diodelaser)
         self.xyzWorker = focus.Backend(scmos, adw)
-        #self.andorWorker = widefield_Andor.Backend(andor, adw) #Por ahora le mando adw para pensar el desplzamiento de la platina
-        print("success with Andor worker")
-        self.tcspcWorker = tcspc.Backend(ph)
+        # self.andorWorker = widefield_Andor.Backend(andor, adw) #Por ahora le mando adw para pensar el desplzamiento de la platina
+        # print("success with Andor worker")
+        # self.tcspcWorker = tcspc.Backend(ph)
         
         self.minfluxWorker = minflux.Backend(adw)
         self.psfWorker = psf.Backend()
@@ -185,9 +178,9 @@ class Backend(QtCore.QObject):
         
         self.scanWorker.ROIcenterSignal.connect(self.minfluxWorker.get_ROI_center)
         
-        self.minfluxWorker.tcspcPrepareSignal.connect(self.tcspcWorker.prepare_minflux)
+        # self.minfluxWorker.tcspcPrepareSignal.connect(self.tcspcWorker.prepare_minflux)
         self.minfluxWorker.tcspcStartSignal.connect(self.xyzWorker.start_tracking_pattern)
-        self.minfluxWorker.tcspcStartSignal.connect(self.tcspcWorker.measure_minflux)
+        # self.minfluxWorker.tcspcStartSignal.connect(self.tcspcWorker.measure_minflux)
         
         self.minfluxWorker.xyzStartSignal.connect(self.xyzWorker.get_lock_signal)
         
@@ -196,7 +189,7 @@ class Backend(QtCore.QObject):
         self.minfluxWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
         self.minfluxWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
         
-        self.tcspcWorker.tcspcDoneSignal.connect(self.minfluxWorker.get_tcspc_done_signal)
+        # self.tcspcWorker.tcspcDoneSignal.connect(self.minfluxWorker.get_tcspc_done_signal)
        
         self.minfluxWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
         self.minfluxWorker.xyzEndSignal.connect(self.xyzWorker.get_end_measurement_signal)
@@ -225,8 +218,9 @@ class Backend(QtCore.QObject):
         
         frontend.focusWidget.make_connection(self.xyzWorker)
         frontend.scanWidget.make_connection(self.scanWorker)
-        frontend.tcspcWidget.make_connection(self.tcspcWorker)
+
         #frontend.andorWidget.make_connection(self.andorWorker)
+        # frontend.tcspcWidget.make_connection(self.tcspcWorker)
         frontend.minfluxWidget.make_connection(self.minfluxWorker)
         frontend.psfWidget.make_connection(self.psfWorker)
     
@@ -244,7 +238,7 @@ class Backend(QtCore.QObject):
     def stop(self):
         
         self.scanWorker.stop()
-        self.tcspcWorker.stop()
+        # self.tcspcWorker.stop()
         self.xyzWorker.stop()
         #self.andorWorker.stop()
 
@@ -262,24 +256,26 @@ if __name__ == '__main__':
     gui = Frontend()
     
     #initialize devices
-    port = tools.get_MiniLasEvoPort()
+    # port = tools.get_MiniLasEvoPort()
+    port = 'COM5'  # tools.get_MiniLasEvoPort('ML069719')
     print('MiniLasEvo diode laser port:', port)
     diodelaser = MiniLasEvo(port)
-    
+
     #if camera wasnt closed properly just keep using it without opening new one
     try:
         cam = ids_cam.IDS_U3()
     except:
         pass
+
     #andor = AndorSDK2.AndorSDK2Camera(fan_mode = "full") #Forma antigua
     #andor = Andor.AndorSDK2Camera(fan_mode = "full") 
-    ph = picoharp.PicoHarp300()
+    # ph = picoharp.PicoHarp300()
     
     DEVICENUMBER = 0x1
     adw = ADwin.ADwin(DEVICENUMBER, 1)
     scan.setupDevice(adw)
     
-    worker = Backend(adw, ph, cam, diodelaser)
+    worker = Backend(adw, cam, diodelaser)
     
     gui.make_connection(worker)
     worker.make_connection(gui)
@@ -325,12 +321,12 @@ if __name__ == '__main__':
        
 
     # tcspc thread
-    tcspcWorkerThread = QtCore.QThread()
-    worker.tcspcWorker.moveToThread(tcspcWorkerThread)
-    worker.tcspcWorker.tcspcTimer.moveToThread(tcspcWorkerThread)
-    worker.tcspcWorker.tcspcTimer.timeout.connect(worker.tcspcWorker.update)
-    tcspcWorkerThread.start()
+    # tcspcWorkerThread = QtCore.QThread()
+    # worker.tcspcWorker.moveToThread(tcspcWorkerThread)
+    # worker.tcspcWorker.tcspcTimer.moveToThread(tcspcWorkerThread)
+    # worker.tcspcWorker.tcspcTimer.timeout.connect(worker.tcspcWorker.update)
     
+    # tcspcWorkerThread.start()
     # scan thread
     scanThread = QtCore.QThread()
     worker.scanWorker.moveToThread(scanThread)

@@ -466,7 +466,7 @@ class Backend(QtCore.QObject):
             self.shutterSignal.emit(7, False)
             self.shutterSignal.emit(11, False)
     
-            _lgr.info('[psf] Inside start ')
+            _lgr.info('PSF measurement started')
     
             self.xyStopSignal.emit(True)
             # self.zStopSignal.emit(True)
@@ -484,7 +484,6 @@ class Backend(QtCore.QObject):
         except Exception as e:
             print("Excepcion en start:", e)
         self.measTimer.start(0)
-        _lgr.info('[psf] PSF measurement started')
 
     def stop(self):
         self.measTimer.stop()
@@ -516,8 +515,8 @@ class Backend(QtCore.QObject):
         if self.xy_flag:
             self.xySignal.emit(True, initial)
             self.xy_flag = False
-            _lgr.debug(' xy signal emitted (%s) going to single_xy_correction [xyz_focus_lock]', self.i)
-        if self.xyIsDone: 
+            _lgr.debug(' xy signal emitted (%s)', self.i)
+        if self.xyIsDone:
             # if self.z_flag:
             #     self.zSignal.emit(True, initial)
             #     self.z_flag = False
@@ -565,6 +564,17 @@ class Backend(QtCore.QObject):
         # make scan saving config file
         self.lastFileName = filename
         self.saveConfigSignal.emit(filename)
+        self.data = np.array(self.data, dtype=np.float32)
+        _lgr.info("Guardando array de PSFs")
+        try:
+            npx = self.data.shape[-1]  # shady
+            # esto suma de a 4 juntos, si cambiamos el escaneo hay que hacer
+            # o la suma en axis=0 u otro reshape
+            to_save = np.mean(self.data.reshape((4, -1, npx, npx)), axis=1)
+            _lgr.debug("data shape: %s", to_save.shape)
+            np.save(filename + ".npy", to_save)
+        except Exception as e:
+            _lgr.error("Excepción %s (%s) grabando el arreglo", type(e), e)
 
     @pyqtSlot(dict)
     def get_frontend_param(self, params):
