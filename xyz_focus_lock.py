@@ -108,7 +108,7 @@ class Frontend(QtGui.QFrame):
          To: [backend] get_save_data_state
     - exposureTimeChanged:
          To: [backend] update_exposure_time
-    - saveVideoSignal
+    - saveVideoSignal:
          To: [backend] start_saving_video
     """
 
@@ -172,7 +172,11 @@ class Frontend(QtGui.QFrame):
                 print(datetime.now(), 'Please select a valid ROI for z tracking')
                 return
             xmin, ymin = self.roi_z.pos()
+            print("xmin: ", xmin, "ymin: ", ymin)
+            print("self.roi_z.pos()", self.roi_z.pos())
+            print("self.roi_z.size(): ", self.roi_z.size())
             xmax, ymax = self.roi_z.pos() + self.roi_z.size()
+            print("xmax: ", xmax, "ymax: ", ymax)
             coordinates = np.array([xmin, xmax, ymin, ymax])
             coordinates_list = [coordinates]
 
@@ -549,6 +553,12 @@ class Frontend(QtGui.QFrame):
         # save data signal
         self.saveDataBox = QtGui.QCheckBox("Save data")
         self.saveDataBox.stateChanged.connect(self.emit_save_data_state)
+        
+        # save focus reference
+        self.saveFocusButton = QtGui.QPushButton("Save focus")
+        # delete ROI button
+        self.goToFocusButton = QtGui.QPushButton('Go to focus')
+        self.goToFocusButton.clicked.connect(self.go_to_focus)
 
         # button to clear the data
         self.clearDataButton = QtGui.QPushButton('Clear data')
@@ -588,6 +598,8 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.exposureTimeEdit, 4, 2)
         subgrid.addWidget(self.saveDataBox, 5, 1)
         subgrid.addWidget(self.saveVideoBox, 6, 1)
+        subgrid.addWidget(self.saveFocusButton, 7, 1)
+        subgrid.addWidget(self.goToFocusButton, 8, 1)
         subgrid.addWidget(self.shutterLabel, 9, 0)
         subgrid.addWidget(self.shutterCheckbox, 9, 1)
 
@@ -718,7 +730,7 @@ class Backend(QtCore.QObject):
         self.viewtimer = QtCore.QTimer()
         # TODO: overload de movetothread para que se mueva con sus timers
         # self.viewtimer.timeout.connect(self.update)
-        self.xyz_time = 200  # 200 ms per acquisition + fit + correction
+        self.xyz_time = 1000  # 200 ms per acquisition + fit + correction
 
         # Si trackear (NO si corregir)
         self.tracking_xy = False
@@ -1142,7 +1154,26 @@ class Backend(QtCore.QObject):
         # TODO: copiar de new_focus
         self.currentz = self.m_center[0]
         # El estimador está en píxeles... fraccionarios
-
+        
+    @pyqtSlot(bool)
+    def save_focus(self):
+        self.center_of_mass()
+        print("self.m_center: ", self.m_center)
+        xmin, ymin = self.roi_z.pos() #Better define something like: self.xmin
+        self.CM_abs = [self.m_center[0] + xmin, self.m_center[1] + ymin]
+        #self.CM_abs = [CMx_abs, CMy_abs]
+        print("CM_abs: ", self.CM_abs, self.CM_abs.shape, self.CM_abs.size) # Save this value in txt or something
+        print("Reference in abs coord: ", self.CM_abs[0])
+        
+    @pyqtSlot(bool)
+    def go_to_focus(self):
+        print("inside go_to_focus")
+        xmin, ymin = self.roi_z.pos()
+        self.initialz = self.CM_abs[0] - xmin # To obtain coordinates relative to the new zROI
+        self.tracking_z = True
+        self.feedback_z = True
+        
+        
     def gaussian_fit(self, roi_coordinates) -> (float, float):
         """Devuelve el centro del fiteo, en nm respecto al ROI.
 
@@ -1747,10 +1778,7 @@ class Backend(QtCore.QObject):
         self.toggle_tracking(True)
         self.toggle_feedback(True)
         self.save_data_state = True
-        #TODO: better call: self.notify_status()
-        self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
-                                          self.feedback_xy, self.feedback_z,
-                                          self.save_data_state, self.saving_video)
+        self.notify_status()
         _lgr.debug('System xy locked')
 
     @pyqtSlot(np.ndarray, np.ndarray)
@@ -1763,10 +1791,7 @@ class Backend(QtCore.QObject):
         """
         self.toggle_feedback(False)
         # self.toggle_tracking(True) #Imagino que esto es para ver el track
-        #TODO: better call: self.notify_status()
-        self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
-                                          self.feedback_xy, self.feedback_z,
-                                          self.save_data_state, self.saving_video)
+        self.notify_status()
         x_f, y_f = r
         # z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
         self.actuator_xy(x_f, y_f)
@@ -1891,6 +1916,8 @@ class Backend(QtCore.QObject):
         frontend.closeSignal.connect(self.stop)
         frontend.saveDataSignal.connect(self.get_save_data_state)
         frontend.saveVideoSignal.connect(self.start_saving_video)
+        frontend.saveFocusButton.connect(self.save_focus)
+        frontend.goToFocusButton.connect(self.go_to_focus)
         frontend.exposureTimeChanged.connect(self.update_exposure_time)
         frontend.exportDataButton.clicked.connect(self.export_data)
         frontend.clearDataButton.clicked.connect(self.reset_graph)
