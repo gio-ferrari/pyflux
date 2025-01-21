@@ -22,11 +22,11 @@ from PyQt5.QtWidgets import QDockWidget
 
 import drivers.ADwin as ADwin
 import drivers.ids_cam as ids_cam
-#from pylablib.devices import Andor
+# from pylablib.devices import Andor
 # from pylablib.devices.Andor import AndorSDK2
 
 import xyz_focus_lock as focus
-import scan #scan works with minilasEvo 632, new_scan to work with another wavelength
+import scan
 
 #import widefield_Andor
 from swabian_tcspc import TCSPCFrontend
@@ -35,38 +35,34 @@ import measurements.psf as psf
 
 
 class Frontend(QtGui.QMainWindow):
-    
+
     closeSignal = pyqtSignal()
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
-
         self.setWindowTitle('PyFLUX')
-
         self.cwidget = QtGui.QWidget()
         self.setCentralWidget(self.cwidget)
 
         # Actions in menubar
-
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('Measurement')
-        
+
         self.psfWidget = psf.Frontend()
         self.minfluxWidget = minflux.Frontend()
 
         self.psfMeasAction = QtGui.QAction('PSF measurement', self)
         self.psfMeasAction.setStatusTip('Routine to measure one MINFLUX PSF')
         fileMenu.addAction(self.psfMeasAction)
-        
+
         self.psfMeasAction.triggered.connect(self.psf_measurement)
-    
+
         self.minfluxMeasAction = QtGui.QAction('MINFLUX measurement', self)
         self.minfluxMeasAction.setStatusTip('Routine to perform a tcspc-MINFLUX measurement')
         fileMenu.addAction(self.minfluxMeasAction)
-        
+
         self.minfluxMeasAction.triggered.connect(self.minflux_measurement)
-        
+
         # GUI layout
         grid = QtGui.QGridLayout()
         self.cwidget.setLayout(grid)
@@ -76,21 +72,21 @@ class Frontend(QtGui.QMainWindow):
         scanDock = QDockWidget('Confocal scan', self)
         scanDock.setWidget(self.scanWidget)
         scanDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar | 
-                                 QDockWidget.DockWidgetFloatable |
-                                 QDockWidget.DockWidgetClosable)
+                             QDockWidget.DockWidgetFloatable |
+                             QDockWidget.DockWidgetClosable)
         scanDock.setAllowedAreas(Qt.LeftDockWidgetArea)
         self.addDockWidget(Qt.LeftDockWidgetArea, scanDock)
 
-        ## tcspc dock
+        # tcspc dock
         self.tcspcWidget = TCSPCFrontend()
         tcspcDock = QDockWidget('Time-correlated single-photon counting', self)
         tcspcDock.setWidget(self.tcspcWidget)
-        tcspcDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar | 
-                                 QDockWidget.DockWidgetFloatable |
-                                 QDockWidget.DockWidgetClosable)
+        tcspcDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar |
+                              QDockWidget.DockWidgetFloatable |
+                              QDockWidget.DockWidgetClosable)
         tcspcDock.setAllowedAreas(Qt.BottomDockWidgetArea)
         self.addDockWidget(Qt.BottomDockWidgetArea, tcspcDock)
-        
+
         ## Widefield Andor dock
         # self.andorWidget = widefield_Andor.Frontend()
         # andorDock = QDockWidget('Widefield Andor', self)
@@ -100,20 +96,20 @@ class Frontend(QtGui.QMainWindow):
         #                          QDockWidget.DockWidgetClosable)
         # andorDock.setAllowedAreas(Qt.RightDockWidgetArea)
         # self.addDockWidget(Qt.RightDockWidgetArea, andorDock)
-        
-        ## focus lock dock
+
+        # focus lock dock
         self.focusWidget = focus.Frontend()
         focusDock = QDockWidget('Focus Lock', self)
         focusDock.setWidget(self.focusWidget)
-        focusDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar | 
-                                 QDockWidget.DockWidgetFloatable |
-                                 QDockWidget.DockWidgetClosable)
+        focusDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar |
+                              QDockWidget.DockWidgetFloatable |
+                              QDockWidget.DockWidgetClosable)
         focusDock.setAllowedAreas(Qt.BottomDockWidgetArea)
         self.addDockWidget(Qt.BottomDockWidgetArea, focusDock)
 
         # sizes to fit my screen properly
         self.scanWidget.setMinimumSize(598, 370)
-        #self.andorWidget.setMinimumSize(598, 370)
+        # self.andorWidget.setMinimumSize(598, 370)
         self.tcspcWidget.setMinimumSize(598, 370)
         self.focusWidget.setMinimumSize(1100, 370)
         self.move(1, 1)
