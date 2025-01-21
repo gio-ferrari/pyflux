@@ -9,7 +9,6 @@ import numpy as np
 import time
 from datetime import date, datetime
 import os
-import sys
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import tools.tools as tools
@@ -246,7 +245,7 @@ class Frontend(QtGui.QFrame):
                 self.folderEdit.setText(folder)
         except OSError:
             pass
-    
+
     def preview_scan(self):
 
         plt.figure('Preview scan plot x vs t')
@@ -263,76 +262,53 @@ class Frontend(QtGui.QFrame):
 
         if self.liveviewButton.isChecked():
             self.liveviewSignal.emit(True, 'liveview')
-            
             if self.roi is not None:
-
                 self.vb.removeItem(self.roi)
                 self.roi.hide()
-    
                 self.ROIButton.setChecked(False)
-            
             if self.lineROI is not None:
-
                 self.vb.removeItem(self.lineROI)
                 self.lplotWidget.hide()
                 self.lineProfButton.setChecked(False)
                 self.lineROI = None
-
             else:
-    
                 pass
-
         else:
             self.liveviewSignal.emit(False, 'liveview')
             self.emit_param()
-            
+
     def toggle_frame_acq(self):
 
         if self.acquireFrameButton.isChecked():
             self.frameacqSignal.emit(True)
-            
             if self.roi is not None:
-
                 self.vb.removeItem(self.roi)
                 self.roi.hide()
-    
                 self.ROIButton.setChecked(False)
                 self.liveviewButton.setChecked(False)
-            
             if self.lineROI is not None:
-
                 self.vb.removeItem(self.lineROI)
                 self.lplotWidget.hide()
                 self.lineProfButton.setChecked(False)
                 self.lineROI = None
-
             else:
-    
                 pass
-
         else:
-            self.frameacqSignal.emit(False)   
+            self.frameacqSignal.emit(False)
 
     def line_profile(self):
-        
         if self.lineROI is None:
-            
             if self.roi is None:
-                self.lineROI = pg.LineSegmentROI([[10, 64], [70,64]], pen='r')
+                self.lineROI = pg.LineSegmentROI([[10, 64], [70, 64]], pen='r')
             else:
                 xmin, ymin = self.roi.pos()
                 xmax, ymax = self.roi.pos() + self.roi.size()
                 y = int((ymax - ymin)/2) + ymin
                 self.lineROI = pg.LineSegmentROI([[xmin, y], [xmax, y]], pen='r')
-                
             self.vb.addItem(self.lineROI)
-            
             self.lplotWidget.show()
-            
         else:
-
             self.vb.removeItem(self.lineROI)
-            
             if self.roi is None:
                 self.lineROI = pg.LineSegmentROI([[10, 64], [70,64]], pen='r')
             else:
@@ -340,14 +316,10 @@ class Frontend(QtGui.QFrame):
                 xmax, ymax = self.roi.pos() + self.roi.size()
                 y = int((ymax - ymin)/2) + ymin
                 self.lineROI = pg.LineSegmentROI([[xmin, y], [xmax, y]], pen='r')
-
             self.vb.addItem(self.lineROI)
-            
         self.lineROI.sigRegionChanged.connect(self.update_line_profile)
-        
-        
+
     def update_line_profile(self):
-        
         data = self.lineROI.getArrayRegion(self.image, self.img)
         self.lplotWidget.linePlot.clear()
         #TODO: check how to make legend work that it is always deleted 
@@ -1223,9 +1195,7 @@ class Backend(QtCore.QObject):
         
     @pyqtSlot(dict)
     def get_frontend_param(self, params):
-        
         # updates parameters according to what is input in the GUI
-        
         self.detector = params['detectorType']
         self.scantype = params['scanType']
         self.scanRange = params['scanRange']
@@ -1233,43 +1203,30 @@ class Backend(QtCore.QObject):
         self.pxTime = params['pxTime']
         self.initialPos = params['initialPos']
         self.powerBFP = params['power']
-        
         self.waitingTime = params['waitingTime']
         self.a_aux_coeff = params['a_aux_coeff']
-        
         self.filename = params['fileName']
-        
         self.moveToPos = params['moveToPos']
-        
         self.xStep = params['xStep']
         self.yStep = params['yStep']
         self.zStep = params['zStep']
-        
-#        self.selectedCoord = params['ROIcoordinates']
-#        
-#        print('[scan] selected ROI coordinates are:', self.selectedCoord)
-                
+        # self.selectedCoord = params['ROIcoordinates']
+        # print('[scan] selected ROI coordinates are:', self.selectedCoord)
         self.calculate_derived_param()
-    
+
     @pyqtSlot(np.ndarray, str)
     def get_ROI_coords_and_fit(self, array, actionType):
-      
         self.selectedCoord = array
-        
         print('[scan] selected fit ROI coordinates are:', self.selectedCoord)
-        
         if actionType == 'fit':
-        
             self.auxFitSignal.emit()
-            
         elif actionType == 'move':
-        
             self.auxMoveSignal.emit()
-      
+
     def calculate_derived_param(self):
-        #TODO: check whether we can delete this. 
-        #caused saving zeros in some cases
-#        self.image_to_save = self.image
+        # TODO: check whether we can delete this.
+        # caused saving zeros in some cases
+        # self.image_to_save = self.image
 
         self.pxSize = self.scanRange/self.NofPixels   # in µm
         self.frameTime = self.NofPixels**2 * self.pxTime / 10**6
@@ -1344,29 +1301,19 @@ class Backend(QtCore.QObject):
 
         if self.detector == 'APD':
             self.adw.Set_Par(3, 0)  # Digital input (APD)
-
         if self.detector == 'photodiode':
             self.adw.Set_Par(3, 1)  # Analog input (photodiode)
-
         # select scan type
-
         if self.scantype == 'xy':
-
             self.adw.Set_FPar(10, 1)
             self.adw.Set_FPar(11, 2)
-
         if self.scantype == 'xz':
-
             self.adw.Set_FPar(10, 1)
             self.adw.Set_FPar(11, 6)
-
         if self.scantype == 'yz':
-
             self.adw.Set_FPar(10, 2)
             self.adw.Set_FPar(11, 6)
-
         #  initial positions x and y
-        
         self.x_i = self.initialPos[0]
         self.y_i = self.initialPos[1]
         self.z_i = self.initialPos[2]
@@ -1427,48 +1374,39 @@ class Backend(QtCore.QObject):
         self.adw.Set_FPar(26, tools.timeToADwin(pixeltime))
 
     def moveTo(self, x_f, y_f, z_f):
-
         self.set_moveTo_param(x_f, y_f, z_f)
         self.adw.Start_Process(2)
 
     def moveTo_action(self):
-
         self.moveTo(*self.moveToPos)
-        
+
     def moveTo_roi_center(self):
-                
         xi, xf, yi, yf = self.selectedCoord
         self.ROIcenter = self.initialPos + np.array([(xf+xi)/2, (yf+yi)/2, 0]) * self.pxSize
-        
-#        print('[scan] self.initialPos[0:2]', self.initialPos[0:2])
+
+        # print('[scan] self.initialPos[0:2]', self.initialPos[0:2])
         print('[scan] moved to center of ROI:', self.ROIcenter, 'µm')
-        
+
         self.moveTo(*self.ROIcenter)
         time.sleep(.3)
         self.ROIcenterSignal.emit(self.ROIcenter)
-        
+
         self.trace_measurement()
-        
+
     def psf_fit_FandB_and_move(self):
-        
         target_F = self.psf_fit(self.imageF_copy, d='F')
         target_B = self.psf_fit(self.imageB_copy, d='B')
-        
+
         print('[scan] target_F', target_F)
         print('[scan] target_B', target_B)
-        
-#        target_position = (0.5*target_F + 0.5*target_B) + np.array([4*self.pxSize, 0, 0])
+
+        # target_position = (0.5*target_F + 0.5*target_B) + np.array([4*self.pxSize, 0, 0])
         target_position = (0.5*target_F + 0.5*target_B)
-        
         print('[scan] target_position', target_position)
-        
         self.moveTo(*target_position)
         self.ROIcenterSignal.emit(target_position)
-        
         self.realPositionSignal.emit(target_position)
-        
         time.sleep(.2)
-        
         self.trace_measurement()
         self.shuttermodeSignal.emit(11, False)
         
@@ -1551,50 +1489,39 @@ class Backend(QtCore.QObject):
         size = array.shape[0]
         x_nm = np.linspace(xmin_nm + px_size_nm/2, xmax_nm + px_size_nm/2, size)
         y_nm = np.linspace(ymin_nm + px_size_nm/2, ymax_nm + px_size_nm/2, size)
-        
-#        print('[scan] x_nm', x_nm)
+
+        # print('[scan] x_nm', x_nm)
         print('[scan] x_nm shape', x_nm.shape)
-        
-#        print('[scan] y_nm', y_nm)
+        # print('[scan] y_nm', y_nm)
         print('[scan] y_nm shape', y_nm.shape)
-        
+
         (Mx_nm, My_nm) = np.meshgrid(x_nm, y_nm)
-        
+
         print('[scan] shape grid', Mx_nm.shape)
-        
+
         # make initial guess for parameters
-        
         offset = np.min(array)
-        d = 300 # nm
+        d = 300  # nm
         x0 = (xmin_nm + xmax_nm)/2
         y0 = (ymin_nm + ymax_nm)/2
-        A = np.max(array)*d**2 # check this estimation ????
-        
+        A = np.max(array)*d**2  # check this estimation ????
+
         if function == 'doughnut':
-        
-          initial_guess = [A, x0, y0, d, offset]
-      
-          popt, pcov = opt.curve_fit(PSF.doughnut2D, (Mx_nm, My_nm), array.ravel(), p0=initial_guess)
-          
-          # retrieve results
-  
-          print('[scan] doughnut fit parameters', popt)
-          
-          dougnutFit = PSF.doughnut2D((Mx_nm, My_nm), *popt).reshape(shape)
-          
-          plt.figure('doughnut fit')
-          plt.imshow(dougnutFit, cmap=cmaps.parula, interpolation='None', extent=extent)
-          plt.xlabel('x (nm)')
-          plt.ylabel('y (nm)')
-          
-          x0_fit = popt[1]
-          y0_fit = popt[2]
-          
-          doughnut_center = np.array([x0_fit, y0_fit, 0], dtype=np.float64)/1000 # in µm
-          target = self.initialPos + doughnut_center 
-          
-          print('[scan] target', target)
-          
+            initial_guess = [A, x0, y0, d, offset]
+            popt, pcov = opt.curve_fit(PSF.doughnut2D, (Mx_nm, My_nm), array.ravel(), p0=initial_guess)
+            # retrieve results
+            print('[scan] doughnut fit parameters', popt)
+            dougnutFit = PSF.doughnut2D((Mx_nm, My_nm), *popt).reshape(shape)
+            plt.figure('doughnut fit')
+            plt.imshow(dougnutFit, cmap=cmaps.parula, interpolation='None', extent=extent)
+            plt.xlabel('x (nm)')
+            plt.ylabel('y (nm)')
+            x0_fit = popt[1]
+            y0_fit = popt[2]
+            doughnut_center = np.array([x0_fit, y0_fit, 0], dtype=np.float64)/1000 # in µm
+            target = self.initialPos + doughnut_center 
+            print('[scan] target', target)
+
         if function == 'gaussian':
           
           σ_x = 130
@@ -1626,63 +1553,47 @@ class Backend(QtCore.QObject):
           print('SCAN GAUSSIAN CENTER', x0_fit, y0_fit)
           print('SCAN INITIAL', self.initialPos)
 
-          
           gaussian_center = np.array([x0_fit, y0_fit, 0], dtype=np.float64)/1000 # in µm
           target = self.initialPos + gaussian_center 
-        
         return target
 
     @pyqtSlot()
     def get_moveTo_initial_signal(self):
-        
         self.moveTo(*self.initialPos)
-    
+
     def relative_move(self, axis, direction):
-        
         if axis == 'x' and direction == 'up':
-            
             newPos_µm = self.initialPos[0] - self.xStep
             newPos_µm = round(newPos_µm, 3)
             self.initialPos = np.array([newPos_µm, self.initialPos[1],
                                         self.initialPos[2]])
-            
         if axis == 'x' and direction == 'down':
-            
             newPos_µm = self.initialPos[0] + self.xStep
             newPos_µm = np.around(newPos_µm, 3)
             self.initialPos = np.array([newPos_µm, self.initialPos[1],
                                         self.initialPos[2]])
-            
         if axis == 'y' and direction == 'up':
-            
             newPos_µm = self.initialPos[1] + self.yStep
-            newPos_µm = np.around(newPos_µm, 3)       
+            newPos_µm = np.around(newPos_µm, 3)   
             self.initialPos = np.array([self.initialPos[0], newPos_µm,
                                         self.initialPos[2]])
-            
         if axis == 'y' and direction == 'down':
-            
             newPos_µm = self.initialPos[1] - self.yStep
             newPos_µm = np.around(newPos_µm, 3)
             self.initialPos = np.array([self.initialPos[0], newPos_µm,
                                         self.initialPos[2]])
-            
         if axis == 'z' and direction == 'up':
-            
             newPos_µm = self.initialPos[2] + self.zStep
             newPos_µm = np.around(newPos_µm, 3)
             self.initialPos = np.array([self.initialPos[0], self.initialPos[1], 
                                         newPos_µm])
-        
         if axis == 'z' and direction == 'down':
-            
             newPos_µm = self.initialPos[2] - self.zStep
             newPos_µm = np.around(newPos_µm, 3)
             self.initialPos = np.array([self.initialPos[0], self.initialPos[1], 
                                         newPos_µm])
-    
         self.update_device_param()
-        self.emit_param()    
+        self.emit_param()
 
     @pyqtSlot(float)
     def get_focuslockposition(self, position):
@@ -1723,25 +1634,20 @@ class Backend(QtCore.QObject):
         result.save(r'{}.tiff'.format(name))
 
         if self.save_FB is True:
+            print('[scan] Saved current frame F and B', name)
 
-          print('[scan] Saved current frame F and B', name)
-          
-          # save image F
-          
-          data = self.imageF_copy
-          result = Image.fromarray(data.astype('uint16'))
-          result.save(r'{} F.tiff'.format(name))
-          
-          # save image B
-          
-          data = self.imageB_copy
-          result = Image.fromarray(data.astype('uint16'))
-          result.save(r'{} B.tiff'.format(name))
-        
+            # save image F
+            data = self.imageF_copy
+            result = Image.fromarray(data.astype('uint16'))
+            result.save(r'{} F.tiff'.format(name))
+            # save image B
+            data = self.imageB_copy
+            result = Image.fromarray(data.astype('uint16'))
+            result.save(r'{} B.tiff'.format(name))
         print('[scan] Saved current frame', name)
 
 #        self.gui.currentFrameButton.setChecked(False)
-        
+
     @pyqtSlot(bool, str, np.ndarray)
     def get_scan_signal(self, lvbool, mode, initialPos):
         """
@@ -1753,8 +1659,7 @@ class Backend(QtCore.QObject):
         self.calculate_derived_param()
 
         self.liveview(lvbool, mode)
-        
-        
+
     def line_acquisition(self):
         """Scan and get line from ADwin."""
 
@@ -1775,18 +1680,21 @@ class Backend(QtCore.QObject):
     @pyqtSlot(bool, str)
     def liveview(self, lvbool, mode):
         if lvbool:
-            self.acquisitionMode = mode # modes: 'liveview', 'frame'
+            self.acquisitionMode = mode  # modes: 'liveview', 'frame'
             self.liveview_start()
         else:
             self.liveview_stop()
 
     def reset_position(self):
         if self.scantype == 'xy':
+            self.z_i = tools.convert(self.adw.Get_FPar(72), 'UtoX')
             self.moveTo(self.x_i, self.y_i, self.z_i)
         elif self.scantype == 'xz':
+            self.y_i = tools.convert(self.adw.Get_FPar(71), 'UtoX')
             self.moveTo(self.x_i, self.y_i + self.scanRange/2,
                         self.z_i - self.scanRange/2)
         elif self.scantype == 'yz':
+            self.x_i = tools.convert(self.adw.Get_FPar(70), 'UtoX')
             self.moveTo(self.x_i + self.scanRange/2, self.y_i,
                         self.z_i - self.scanRange/2)
         else:
@@ -1795,7 +1703,7 @@ class Backend(QtCore.QObject):
         time.sleep(.256)
 
     def liveview_start(self):
-#        self.plot_scan()
+        # self.plot_scan()
         self.reset_position()
         self.viewtimer.start(self.viewtimer_time)
 
@@ -1811,7 +1719,6 @@ class Backend(QtCore.QObject):
                 dy = tools.convert(self.dy, 'ΔXtoU')
                 self.y_offset = int(self.y_offset + dy)
                 self.adw.Set_FPar(2, self.y_offset)
-
             if self.scantype == 'xz' or self.scantype == 'yz':
                 dz = tools.convert(self.dz, 'ΔXtoU')
                 self.z_offset = int(self.z_offset + dz)
@@ -1887,34 +1794,23 @@ class Backend(QtCore.QObject):
     def toggle_flipper(self, val):
         
         if val is True:
-            
             self.flipper_state = True
-            
             self.adw.Set_Par(55, 1)
             self.adw.Start_Process(5)
-            
             print('[scan] Flipper down')
-            
         if val is False:
-            
             self.flipper_state = False
-            
             self.adw.Set_Par(55, 1)
             self.adw.Start_Process(5)
-
             print('[scan] Flipper up')
-    
+
     @pyqtSlot(bool)        
     def toggle_FBav_scan(self, val):
-        
         if val is True:
-            
             self.FBaverage_scan = True
-        
         if val is False:
-            
             self.FBaverage_scan = False
-        
+
     def emit_ROI_center(self):
         
         self.ROIcenterSignal.emit(self.ROIcenter)
@@ -2029,9 +1925,7 @@ class Backend(QtCore.QObject):
                     transparent=False, bbox_inches=None, pad_inches=0.1,
                     frameon=None)
 
-                      
     def make_connection(self, frontend):
-        
         frontend.liveviewSignal.connect(self.liveview)
         frontend.moveToROIcenterButton.clicked.connect(self.moveTo_roi_center)
         frontend.currentFrameButton.clicked.connect(self.save_current_frame)
@@ -2039,11 +1933,9 @@ class Backend(QtCore.QObject):
         frontend.paramSignal.connect(self.get_frontend_param)
         frontend.closeSignal.connect(self.stop)
         frontend.traceButton.clicked.connect(self.trace_measurement)
-        
         frontend.fitPSFSignal.connect(self.get_ROI_coords_and_fit)
         self.auxFitSignal.connect(self.psf_fit_FandB_and_move)
         self.auxMoveSignal.connect(self.moveTo_roi_center)
-        
         frontend.shutter1Checkbox.stateChanged.connect(lambda: self.control_shutters(1, frontend.shutter1Checkbox.isChecked()))
         frontend.shutter2Checkbox.stateChanged.connect(lambda: self.control_shutters(2, frontend.shutter2Checkbox.isChecked()))
         frontend.shutter3Checkbox.stateChanged.connect(lambda: self.control_shutters(3, frontend.shutter3Checkbox.isChecked()))

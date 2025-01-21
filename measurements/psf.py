@@ -36,6 +36,7 @@ FIX_L = 100.  # en nm
 FIX_K = 4
 N_COLS = 2
 
+
 class Frontend(QtGui.QFrame):
     paramSignal = pyqtSignal(dict)
     """

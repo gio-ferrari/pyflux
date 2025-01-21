@@ -1146,11 +1146,11 @@ class Backend(QtCore.QObject):
     def save_focus(self, checked: bool):
         self.center_of_mass()
         xmin, xmax, ymin, ymax = self.zROIcoordinates #Better define something like: self.xmin
-        self.CM_abs = [self.m_center[0] + xmin, self.m_center[1] + ymin]
-        print(f"Reference in abs coord: ({self.CM_abs[0]}, {self.CM_abs[1]})")
+        CM_abs = [self.m_center[0] + xmin, self.m_center[1] + ymin]
+        print(f"Reference in abs coord: ({CM_abs[0]}, {CM_abs[1]})")
         filename = self.focus_filename
         _lgr.info('Focus data exported to %s', filename)
-        tools.saveConfig_focus(xmin, ymin, xmax - xmin, self.CM_abs[0], self.CM_abs[1], 'test_focus', filename)
+        tools.saveConfig_focus(xmin, ymin, xmax - xmin, CM_abs[0], CM_abs[1], 'test_focus', filename)
         print('[xyz_focus_lock] saved configfile', filename)
 
     def set_focus(self):
@@ -1159,8 +1159,8 @@ class Backend(QtCore.QObject):
         xmin = focus_info['x_min (px)']
         ymin = focus_info['y_min (px)']
         roi_size = focus_info['roi_size (px)']
-        self.CM_abs_x = focus_info['cm_abs[0] (px)']
-        self.initialz = self.CM_abs_x - xmin # To obtain coordinates relative to the new zROI
+        CM_abs_x = focus_info['cm_abs[0] (px)']
+        self.initialz = CM_abs_x - xmin # To obtain coordinates relative to the new zROI
         self.zROIcoordinates[:] = [xmin, xmin+roi_size, ymin, ymin+roi_size]
         return self.zROIcoordinates
 
