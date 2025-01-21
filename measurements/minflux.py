@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Apr 16 15:35:15 2019
-
-@author: Luciano A. Masullo
+Inicia medidas de minflux con opcion a realizar patrones
 """
 
 import numpy as np
@@ -10,20 +8,14 @@ import time
 import os
 from datetime import date, datetime
 
-from threading import Thread
-
-import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
-from pyqtgraph.dockarea import Dock, DockArea
 
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QGroupBox
 from tkinter import Tk, filedialog
 
 import tools.tools as tools
 from swabian.backend import TCSPC_backend
-
-π = np.pi
 
 class Frontend(QtGui.QFrame):
     filenameSignal = pyqtSignal(str)
@@ -169,36 +161,30 @@ class Frontend(QtGui.QFrame):
         self.patternType.activated.connect(self.emit_param)
         
     def make_connection(self, backend):
-        
-#        backend.paramSignal.connect(self.get_backend_param)
-        
+        # backend.paramSignal.connect(self.get_backend_param)
         pass
 
+
 class Backend(QtCore.QObject):
-    
+
     tcspcPrepareSignal = pyqtSignal(str, int, int)
-    tcspcStartSignal = pyqtSignal()
-    
+    tcspcStartSignal = pyqtSignal(str)
+
     xyzStartSignal = pyqtSignal()
     xyzEndSignal = pyqtSignal(str)
     xyStopSignal = pyqtSignal(bool)
+    moveToSignal = pyqtSignal(np.ndarray)
 
-    
-    moveToSignal = pyqtSignal(np.ndarray, np.ndarray)
-    
-    paramSignal = pyqtSignal(np.ndarray, np.ndarray, int)
+    # paramSignal = pyqtSignal(np.ndarray, np.ndarray, int)
     shutterSignal = pyqtSignal(int, bool)
-    
-    saveConfigSignal = pyqtSignal(str)
 
-    
+    saveConfigSignal = pyqtSignal(str)
     def __init__(self, adwin, *args, **kwargs):
         
         super().__init__(*args, **kwargs)
 
         self.i = 0 # counter
         self.n = 1
-        self.adw = adwin
   
         self.pattern = np.array([0, 0])
         
@@ -208,21 +194,19 @@ class Backend(QtCore.QObject):
             
     @pyqtSlot(np.ndarray)    
     def get_ROI_center(self, center):
-        
         ''' 
         Connection: [scan] ROIcenterSignal
         Description: gets the position selected by the user in [scan]
         '''
-        
         self.r0 = center[0:2]
         self.update_param()
-        
+
         time.sleep(0.4)
-        
+
         print(datetime.now(), '[minflux] got ROI center')
-        
+
         #TODO delete eventually
-        self.xyzStartSignal.emit()
+        # self.xyzStartSignal.emit()
         
     @pyqtSlot(dict)
     def get_frontend_param(self, params):
@@ -234,70 +218,62 @@ class Backend(QtCore.QObject):
         today = str(date.today()).replace('-', '')
         self.filename = params['filename'] + '_' + today
         self.patternType = params['patternType']
-        self.patternLength = float(params['patternLength'])/1000 # in micrometer
+        self.patternLength = float(params['patternLength'])
         self.update_param()
         
     def update_param(self):
         l = self.patternLength
         h = np.sqrt(3/2)*l
-        currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
-        currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
-        self.r0 = np.array([currentXposition, currentYposition])
+        # currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
+        # currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
+        # self.r0 = np.array([currentXposition, currentYposition])
         if self.measType == 'Predefined positions':
             if self.patternType == 'Row':
                 self.pattern = np.array([[0, -l], [0, 0], [0, l]])
                 print('ROW')
             if self.patternType == 'Square':
-                self.pattern = np.array([[0, 0], [l/2, l/2], [l/2, -l/2],
+                self.pattern = np.array([[l/2, l/2], [l/2, -l/2],
                                         [-l/2, -l/2], [-l/2, l/2]])
                 print('SQUARE')
             if self.patternType == 'Triangle':
-                self.pattern = np.array([[0, 0], [0, (2/3)*h], [l/2, -(1/3)*h],
+                self.pattern = np.array([[0, (2/3)*h], [l/2, -(1/3)*h],
                                         [-l/2, -(1/3)*h]])
                 print('TRIANGLE')
-            self.r = self.r0 + self.pattern
-            self.n = np.shape(self.r)[0]
+            # self.r = self.pattern  # + self.r0
+            self.n = np.shape(self.pattern)[0]
         else:
-            self.r = self.r0
-            self.n = 1
+            self.pattern = np.array((0, 0,))
+            self.n = 0
                 
     def start(self):
         self.i = 0
         self.shutterSignal.emit(8, True)
-        print("inside Start")
-        if self.measType == 'Standard':
-            print('[minflux] self.n, self.acqtime', self.n, self.acqtime)
-            self.tcspcStartSignal.emit()
-            self.t0 = time.time()
-            TCSPC_backend.start_measure(self.filename)
-        if self.measType == 'Predefined positions':
-            print(datetime.now(), '[minflux] Predefined positions')
-            self.update_param()
-            time.sleep(0.2)
-            self.tcspcStartSignal.emit()
-            self.t0 = time.time()
-            self.measTimer.start(0)
-            TCSPC_backend.start_measure(self.filename)
+        print(datetime.now(), f'[minflux] self.measType')
+        self.update_param()
+        time.sleep(0.2)
+        # self.tcspcStartSignal.emit(self.measType)
+        self.t0 = time.time()
+        print("ACQTime:", self.acqtime)
+        self.measTimer.start(self.acqtime*1E3)  # resolucion pedorra
+        TCSPC_backend.start_measure(self.filename)
     
     def loop(self):
-        now = time.time()
-        time_elapsed = now - self.t0
-        # TODO: Check from here
-        if time_elapsed > (self.i+1) * self.acqtime:
-        # if (now - (self.t0 + self.i * self.acqtime) + self.acqtime) > self.acqtime:
-            print(datetime.now(), '[minflux] fin loop', self.i)
-            self.moveToSignal.emit(self.r[self.i], self.pattern[self.i])
+        print(datetime.now(), '[minflux] fin loop', self.i)
+        if self.i >= self.n:
+            self.stop()
+            print(datetime.now(), '[minflux] measurement ended')
+        else:
+            print("Moviendo para ", self.pattern[self.i])
+            self.moveToSignal.emit(self.pattern[self.i])
             self.i += 1
-            if self.i == self.n:
-                self.stop()
-                print(datetime.now(), '[minflux] measurement ended')
-            else:
-                print("Moviendo a ", self.r[self.i])
                 
     def stop(self):
-        self.shutterSignal.emit(8, False)
         self.measTimer.stop()
+        self.i = 1E8  # Flag para que el loop no ejecute si quedo una señal en cola
         TCSPC_backend.stop_measure()
+        self.shutterSignal.emit(8, False)
+        self.moveToSignal.emit(np.zeros((2,)))
+
         
     @pyqtSlot()  
     def get_tcspc_done_signal(self):
@@ -307,7 +283,6 @@ class Backend(QtCore.QObject):
         #make scan saving config file
         self.saveConfigSignal.emit(self.filename)
         self.xyzEndSignal.emit(self.filename)
-        # self.stop()
         print(datetime.now(), '[minflux] measurement ended')
         
     def make_connection(self, frontend):

@@ -183,7 +183,7 @@ def __create_backend() -> __TCSPCBackend:
     try:
         IInfo = _TCSPInstrumentInfo.load()
     except FileNotFoundError:
-        _lgr.Error("No configuration file found")
+        _lgr.error("No configuration file found")
         raise
     if not (IInfo.serial in list(tt_data.keys())):
         _lgr.warning(

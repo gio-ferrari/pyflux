@@ -9,28 +9,21 @@ Also 2 modules run in the backend: minflux and psf, these were not modified, the
 
 import numpy as np
 import time
-import os
-import sys
-from datetime import date, datetime
 
-from threading import Thread
-
-import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 from pyqtgraph.dockarea import Dock, DockArea
 import qdarkstyle
 
-import drivers.picoharp as picoharp
 from drivers.minilasevo import MiniLasEvo
 
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QDockWidget
-from tkinter import Tk, filedialog
+# from tkinter import Tk, filedialog
 
 import drivers.ADwin as ADwin
 import drivers.ids_cam as ids_cam
 #from pylablib.devices import Andor
-from pylablib.devices.Andor import AndorSDK2
+# from pylablib.devices.Andor import AndorSDK2
 
 import xyz_focus_lock as focus
 import scan #scan works with minilasEvo 632, new_scan to work with another wavelength
@@ -39,10 +32,6 @@ import scan #scan works with minilasEvo 632, new_scan to work with another wavel
 from swabian_tcspc import TCSPCFrontend
 import measurements.minflux as minflux
 import measurements.psf as psf
-
-import tools.tools as tools
-
-π = np.pi
 
 
 class Frontend(QtGui.QMainWindow):
@@ -147,17 +136,16 @@ class Frontend(QtGui.QMainWindow):
         self.closeSignal.emit()
         time.sleep(1)
         focusThread.exit()
-        # tcspcWorkerThread.exit()
         scanThread.exit()
         minfluxThread.exit()
+        self.tcspcWidget.close()
         super().closeEvent(*args, **kwargs)
-        
         app.quit()        
         
 class Backend(QtCore.QObject):
     
     askROIcenterSignal = pyqtSignal()
-    moveToSignal = pyqtSignal(np.ndarray)
+    # moveToSignal = pyqtSignal(np.ndarray)
     xyzEndSignal = pyqtSignal(str)
     xyMoveAndLockSignal = pyqtSignal(np.ndarray)
     
@@ -169,8 +157,6 @@ class Backend(QtCore.QObject):
         self.xyzWorker = focus.Backend(scmos, adw)
         # self.andorWorker = widefield_Andor.Backend(andor, adw) #Por ahora le mando adw para pensar el desplzamiento de la platina
         # print("success with Andor worker")
-        # self.tcspcWorker = tcspc.Backend(ph)
-        
         self.minfluxWorker = minflux.Backend(adw)
         self.psfWorker = psf.Backend()
             
@@ -179,7 +165,8 @@ class Backend(QtCore.QObject):
         self.scanWorker.ROIcenterSignal.connect(self.minfluxWorker.get_ROI_center)
         
         # self.minfluxWorker.tcspcPrepareSignal.connect(self.tcspcWorker.prepare_minflux)
-        self.minfluxWorker.tcspcStartSignal.connect(self.xyzWorker.start_tracking_pattern)
+        # El modulo minflux se encarga de todo ahora
+        # self.minfluxWorker.tcspcStartSignal.connect(self.xyzWorker.start_tracking_pattern)
         # self.minfluxWorker.tcspcStartSignal.connect(self.tcspcWorker.measure_minflux)
         
         self.minfluxWorker.xyzStartSignal.connect(self.xyzWorker.get_lock_signal)
@@ -220,7 +207,6 @@ class Backend(QtCore.QObject):
         frontend.scanWidget.make_connection(self.scanWorker)
 
         #frontend.andorWidget.make_connection(self.andorWorker)
-        # frontend.tcspcWidget.make_connection(self.tcspcWorker)
         frontend.minfluxWidget.make_connection(self.minfluxWorker)
         frontend.psfWidget.make_connection(self.psfWorker)
     
@@ -236,9 +222,7 @@ class Backend(QtCore.QObject):
         frontend.closeSignal.connect(self.stop)
 
     def stop(self):
-        
         self.scanWorker.stop()
-        # self.tcspcWorker.stop()
         self.xyzWorker.stop()
         #self.andorWorker.stop()
 
@@ -269,7 +253,6 @@ if __name__ == '__main__':
 
     #andor = AndorSDK2.AndorSDK2Camera(fan_mode = "full") #Forma antigua
     #andor = Andor.AndorSDK2Camera(fan_mode = "full") 
-    # ph = picoharp.PicoHarp300()
     
     DEVICENUMBER = 0x1
     adw = ADwin.ADwin(DEVICENUMBER, 1)
@@ -281,7 +264,6 @@ if __name__ == '__main__':
     worker.make_connection(gui)
     
     # initial parameters
-    
     gui.scanWidget.emit_param()
     worker.scanWorker.emit_param()
     
@@ -292,14 +274,12 @@ if __name__ == '__main__':
     gui.psfWidget.emit_param()
     
 #    # GUI thread
-#    
 #    guiThread = QtCore.QThread()
 #    gui.moveToThread(guiThread)
 #    
 #    guiThread.start()
     
     # psf thread
-    
 #    psfGUIThread = QtCore.QThread()
 #    gui.psfWidget.moveToThread(psfGUIThread)
 #    
@@ -313,20 +293,10 @@ if __name__ == '__main__':
     focusThread.start()
     
     # focus GUI thread
-    
 #    focusGUIThread = QtCore.QThread()
 #    gui.focusWidget.moveToThread(focusGUIThread)
-#    
 #    focusGUIThread.start()
-       
 
-    # tcspc thread
-    # tcspcWorkerThread = QtCore.QThread()
-    # worker.tcspcWorker.moveToThread(tcspcWorkerThread)
-    # worker.tcspcWorker.tcspcTimer.moveToThread(tcspcWorkerThread)
-    # worker.tcspcWorker.tcspcTimer.timeout.connect(worker.tcspcWorker.update)
-    
-    # tcspcWorkerThread.start()
     # scan thread
     scanThread = QtCore.QThread()
     worker.scanWorker.moveToThread(scanThread)

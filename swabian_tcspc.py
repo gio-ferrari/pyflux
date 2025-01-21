@@ -367,8 +367,9 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
     def closeEvent(self, *args, **kwargs):
         """Handle close event."""
+        print("************** cerrando swabian")
+        TCSPC_backend.close()
         super().closeEvent(*args, **kwargs)
-        app.quit()
 
 
 if __name__ == "__main__":

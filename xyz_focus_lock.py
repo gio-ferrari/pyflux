@@ -155,6 +155,17 @@ class Frontend(QtGui.QFrame):
         else:
             _lgr.error("Unknown ROI type asked: %s", roi_type)
 
+    def set_focus(self):
+        focus_info = tools.loadConfig_focus(self.focus_filename + ".txt")
+        _lgr.info("Focus information loaded. FRONT!")
+        xmin = focus_info['x_min (px)']
+        ymin = focus_info['y_min (px)']
+        roi_size = focus_info['roi_size (px)']
+        if not self.roi_z:
+            self.create_roi('z')
+        self.roi_z.setPos(xmin, ymin, update=False)
+        self.roi_z.setSize((roi_size, roi_size,))
+
     def emit_roi_info(self, roi_type):
         """Informar los valores de los ROI del tipo solicitado existentes."""
         if roi_type == 'xy':
@@ -341,6 +352,7 @@ class Frontend(QtGui.QFrame):
         backend.updateGUIcheckboxSignal.connect(self.get_backend_states)
         backend.shuttermodeSignal.connect(self.update_shutter)
         backend.liveviewSignal.connect(self.toggle_liveview)
+        self.focus_filename = backend.focus_filename
 
     def setup_gui(self):
         """Set up GUI contents and signals/slots."""
@@ -556,12 +568,12 @@ class Frontend(QtGui.QFrame):
         # save data signal
         self.saveDataBox = QtGui.QCheckBox("Save data")
         self.saveDataBox.stateChanged.connect(self.emit_save_data_state)
-        
+
         # save focus reference
         self.saveFocusButton = QtGui.QPushButton("Save focus")
-        
         # go to saved focus
         self.goToFocusButton = QtGui.QPushButton('Set focus')
+        self.goToFocusButton.clicked.connect(self.set_focus)
 
         # button to clear the data
         self.clearDataButton = QtGui.QPushButton('Clear data')
@@ -574,7 +586,7 @@ class Frontend(QtGui.QFrame):
 
         # Button to make custom pattern
         # es start pattern en linea 500 en xyz_tracking
-        self.xyPatternButton = QtGui.QPushButton('Start pattern OnlySquare')
+        # self.xyPatternButton = QtGui.QPushButton('Start pattern OnlySquare')
 
         # buttons and param layout
         grid.addWidget(self.paramWidget, 0, 1)
@@ -592,7 +604,7 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.delete_roiButton, 5, 0)
         subgrid.addWidget(self.exportDataButton, 6, 0)
         subgrid.addWidget(self.clearDataButton, 7, 0)
-        subgrid.addWidget(self.xyPatternButton, 8, 0)
+        # subgrid.addWidget(self.xyPatternButton, 8, 0)
         # subgrid.addWidget(self.trackAllBox, 1, 1)
         subgrid.addWidget(trackgb, 0, 1, 2, 3)
         # subgrid.addWidget(self.feedbackLoopBox, 2, 1)
@@ -688,7 +700,7 @@ class Backend(QtCore.QObject):
         To: [scan] get current focus lock position
     """
     roi_coordinates_list: list = []  # list[np.ndarray] lista de tetradas de ROIs xy
-    zROIcoordinates: np.ndarray = np.ndarray([0, 0, 0, 0], dtype=int)
+    zROIcoordinates: np.ndarray = np.array([0, 0, 0, 0], dtype=int)
 
     def __init__(self, camera, adw, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -727,6 +739,10 @@ class Backend(QtCore.QObject):
         self.xy_filename = os.path.join(self.folder, xy_filename)
         z_filename = 'z_data'
         self.z_filename = os.path.join(self.folder, z_filename)
+        
+        focus_filename = 'focus_data'
+        self.focus_filename = os.path.join(self.folder, focus_filename)
+
         # Se llama viewTimer pero es el unico para todo, no sólo para view
         # Ojo: aquí coloqué viewtimer porque es el que se usa a lo largo del
         # código, pero en xyz_tracking se usa view_timer
@@ -762,10 +778,11 @@ class Backend(QtCore.QObject):
         # saves displacement when offsetting setpoint for feedbackloop
         # Estos son sólo para hacer un pattern de test
         self.displacement = np.array([0.0, 0.0])  # Solo para test pattern
-        self.pattern = False
+        # self.pattern = False
 
         self.previous_image = None  # para chequear que la imagen cambie
         self.currentz = 0.0  # Valor en pixeles dentro del roi del z
+        self.zROIcoordinates = np.zeros((4,), dtype=int)
     
     @pyqtSlot(int) 
     def update_exposure_time(self, exposure_time):
@@ -843,11 +860,11 @@ class Backend(QtCore.QObject):
                 self.correct_z()
         self.update_graph_data()
 
-        if self.pattern:
-            val = (self.counter - self.initcounter)
-            reprate = 10  # Antes era 10 para andor
-            if (val % reprate == 0):
-                self.make_tracking_pattern(val//reprate)
+        # if False:   # self.pattern:
+        #     val = (self.counter - self.initcounter)
+        #     reprate = 10  # Antes era 10 para andor
+        #     if (val % reprate == 0):
+        #         self.make_tracking_pattern(val//reprate)
         # counter to check how many times this function is executed
         self.counter += 1
 
@@ -1131,9 +1148,7 @@ class Backend(QtCore.QObject):
             if mode == 'continous': #duda FC: el proceso 4 se detiene, pero sólo funciona para modo continuo o en modo discreto también?? Cuando le dije que el modo es discreto en psf [start]???
                 self.adw.Stop_Process(4)
                 _lgr.info('Process 4 stopped. Status: %s', self.adw.Process_Status(4))
-                _lgr.debug("Self.displacement en set_xy_feeedback antes: %s", self.displacement)
                 self.displacement = np.array([0.0, 0.0])
-                _lgr.debug("Self.displacement en set_xy_feedback después: %s", self.displacement)
                 _lgr.debug('xy Feedback loop Off')
         else:
             _lgr.error("Deberías pasar un booleano, no: %s", val)
@@ -1163,13 +1178,24 @@ class Backend(QtCore.QObject):
         self.center_of_mass()
         xmin, xmax, ymin, ymax = self.zROIcoordinates #Better define something like: self.xmin
         self.CM_abs = [self.m_center[0] + xmin, self.m_center[1] + ymin]
-        print("CM_abs: ", self.CM_abs) # Save this value in txt or something
-        print("Reference in abs coord: self.CM_abs[0]: ", self.CM_abs[0])
+        print(f"Reference in abs coord: ({self.CM_abs[0]}, {self.CM_abs[1]})")
+        
+        filename = self.focus_filename
+        _lgr.info('Focus data exported to %s', filename)
+        tools.saveConfig_focus(xmin, ymin, xmax - xmin, self.CM_abs[0], self.CM_abs[1], 'test_focus', filename)
+        print('[xyz_focus_lock] saved configfile', filename)
         
     def set_focus(self):
-        xmin, xmax, ymin, ymax = self.zROIcoordinates
-        self.initialz = self.CM_abs[0] - xmin # To obtain coordinates relative to the new zROI
-        
+        focus_info = tools.loadConfig_focus(self.focus_filename + ".txt")
+        _lgr.info("Focus information loaded.")
+        xmin = focus_info['x_min (px)']
+        ymin = focus_info['y_min (px)']
+        roi_size = focus_info['roi_size (px)']
+        self.CM_abs_x = focus_info['cm_abs[0] (px)']
+        self.initialz = self.CM_abs_x - xmin # To obtain coordinates relative to the new zROI
+        self.zROIcoordinates[:] = [xmin, xmin+roi_size, ymin, ymin+roi_size]
+        return self.zROIcoordinates
+
     def gaussian_fit(self, roi_coordinates) -> (float, float):
         """Devuelve el centro del fiteo, en nm respecto al ROI.
 
@@ -1291,14 +1317,17 @@ class Backend(QtCore.QObject):
             self._check_xy_fit_limits()
             # self.x, y and z are relative to initial positions
             for i, roi in enumerate(self.roi_coordinates_list):
-                self.x[i] = self.currentx[i] - self.initialx[i]
-                self.y[i] = self.currenty[i] - self.initialy[i]
-
-            if self.save_data_state:
-                self.time_array[self.j] = self.currentTime
-                self.x_array[self.j, :] = self.x + self.displacement[0]
-                self.y_array[self.j, :] = self.y + self.displacement[1]
-                self.j += 1
+                self.x[i] = self.currentx[i] - self.initialx[i] - self.displacement[0]
+                self.y[i] = self.currenty[i] - self.initialy[i] - self.displacement[1]
+            try:
+                if self.save_data_state:
+                    self.time_array[self.j] = self.currentTime
+                    self.x_array[self.j, :] = self.x
+                    self.y_array[self.j, :] = self.y
+                    self.j += 1
+            except Exception as e:
+                print(e, type(e))
+                print(self.x_array.shape, self.x.shape, self.displacement.shape)
 
         # z track of the reflected beam
         if track_type == 'z':
@@ -1316,7 +1345,6 @@ class Backend(QtCore.QObject):
 
         xmean = np.mean(self.x)
         ymean = np.mean(self.y)
-
         dx = 0
         dy = 0
 
@@ -1394,9 +1422,6 @@ class Backend(QtCore.QObject):
         else:
             # add correction to piezo position
             currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
-            # FIXME: Giovanni cambio el Z
-            dz = -dz
-
             targetZposition = currentZposition + dz  # in µm
 
             if mode == 'continous':
@@ -1779,99 +1804,94 @@ class Backend(QtCore.QObject):
         self.notify_status()
         _lgr.debug('System xy locked')
 
-    @pyqtSlot(np.ndarray, np.ndarray)
-    def get_move_signal(self, r, r_rel):
-        """Recibe de módulo Minflux para hacer patterns.
-
-        TODO: entender bien qué hace. Parece que recibe posiciones a las
-        que moverse.
-        TODO: si FPar_72 no está bien seteado esto se va a cualquier posición
-        """
+    @pyqtSlot(np.ndarray)
+    def get_move_signal(self, dist):
+        """Recibe de módulo Minflux para hacer patterns."""
 
         # self.toggle_feedback(False)
         # self.toggle_tracking(True)
-        self.notify_status()
-        x_f, y_f = r
-        # z_f = tools.convert(self.adw.Get_FPar(72), 'UtoX')
-        self.actuator_xy(x_f, y_f)
+        # self.notify_status()
+        # self.initialx = self.initialx + dist[0]
+        # self.initialy = self.initialy + dist[1]
+        self.displacement[:] = dist
+        _lgr.info('Moved setpoint to %s', dist)
     
-    @pyqtSlot(str)
-    def start_tracking_pattern(self, patternType: str):
-        """Se prepara para hacer un patrón.
+    # @pyqtSlot(str)
+    # def start_tracking_pattern(self, patternType: str):
+    #     """Se prepara para hacer un patrón.
 
-        Ver módulo Minflux
-        Recibe señal de módulo minflux.
-        También funciona al apretar el boton "Start pattern"
-        """
-        print("Estoy en start_tracking_pattern modo: ", patternType)
-        if patternType == 'Standard':
-            print("Static mode detected, no pattern movement will start.")
-            return 
-        else:
-            self.pattern = True
-            self.initcounter = self.counter
-            self.save_data_state = True
-            self.forma = patternType
+    #     Ver módulo Minflux
+    #     Recibe señal de módulo minflux.
+    #     También funciona al apretar el boton "Start pattern"
+    #     """
+    #     print("Estoy en start_tracking_pattern modo: ", patternType)
+    #     if patternType == 'Standard':
+    #         print("Static mode detected, no pattern movement will start.")
+    #         return 
+    #     else:
+    #         self.pattern = True
+    #         self.initcounter = self.counter
+    #         self.save_data_state = True
+    #         self.forma = patternType
 
-    def make_tracking_pattern(self, step):
-        """Poner las posiciones de referencia en un patrón.
+    # def make_tracking_pattern(self, step):
+    #     """Poner las posiciones de referencia en un patrón.
 
-        TODO: Con este cambio, chequear cómo queda el módulo minflux
-        
-        """
-        L = 20.0  # nm
-        H = L * (3/2)**.5
-        if self.forma == 'Row':
-            if step < 2:
-                return
-            elif step == 2:
-                dist = np.array([0.0, -L])
-            elif step == 3:
-                dist = np.array([0.0, 0.0])
-            elif step == 4:
-                dist = np.array([0.0, L])
-            else:
-                self.pattern = False
-                print("ROW")
-                return
+    #     TODO: Con este cambio, chequear cómo queda el módulo minflux
+    #     """
+    #     L = 20.0  # nm
+    #     H = L * (3/2)**.5
+    #     if self.forma == 'Row':
+    #         if step < 2:
+    #             return
+    #         elif step == 2:
+    #             dist = np.array([0.0, -L])
+    #         elif step == 3:
+    #             dist = np.array([0.0, 0.0])
+    #         elif step == 4:
+    #             dist = np.array([0.0, L])
+    #         else:
+    #             self.pattern = False
+    #             print("ROW")
+    #             return
                 
-        if self.forma == "Square":
-            if step < 2:
-                return
-            elif step == 2:
-                dist = np.array([0.0, L])
-            elif step == 3:
-                dist = np.array([L, 0.0])
-            elif step == 4:
-                dist = np.array([0.0, -L])
-            elif step == 5:
-                dist = np.array([-L, 0.0])
-            else:
-                self.pattern = False
-                print("Square")
-                return
+    #     if self.forma == "Square":
+    #         if step < 2:
+    #             return
+    #         elif step == 2:
+    #             dist = np.array([0.0, L])
+    #         elif step == 3:
+    #             dist = np.array([L, 0.0])
+    #         elif step == 4:
+    #             dist = np.array([0.0, -L])
+    #         elif step == 5:
+    #             dist = np.array([-L, 0.0])
+    #         else:
+    #             self.pattern = False
+    #             print("Square")
+    #             return
             
-        elif self.forma == "Triangle":
-            if step < 2:
-                return
-            elif step == 2:
-                dist = np.array([0.0, 2/3*H])
-            elif step == 3:
-                dist = np.array([L/2, -H])
-            elif step == 4:
-                dist = np.array([-L, 0.0])
-            elif step == 5:
-                dist = np.array([L/2, H/3])
-            else:
-                self.pattern = False
-                print("Triangle")
-                return
+    #     elif self.forma == "Triangle":
+    #         if step < 2:
+    #             return
+    #         elif step == 2:
+    #             dist = np.array([0.0, 2/3*H])
+    #         elif step == 3:
+    #             dist = np.array([L/2, -H])
+    #         elif step == 4:
+    #             dist = np.array([-L, 0.0])
+    #         elif step == 5:
+    #             dist = np.array([L/2, H/3])
+    #         else:
+    #             self.pattern = False
+    #             print("Triangle")
+    #             return
 
-        self.initialx = self.initialx + dist[0]
-        self.initialy = self.initialy + dist[1]
-        self.displacement = self.displacement + dist
+    #     self.initialx = self.initialx + dist[0]
+    #     self.initialy = self.initialy + dist[1]
+    #     self.displacement = self.displacement + dist
 
-        _lgr.info('Moved setpoint by %s', dist)
+    #     _lgr.info('Moved setpoint by %s', dist)
 
     @pyqtSlot(str)
     def get_end_measurement_signal(self, fname):
@@ -1888,9 +1908,10 @@ class Backend(QtCore.QObject):
         # self.toggle_feedback(False)
         # check
         # self.toggle_tracking(False)
-        self.pattern = False
+        # self.pattern = False
         self.reset_graph()
         self.reset_data_arrays()
+        self.displacement[:] = 0.
         # comparar con la funcion de focus: algo que ver con focusTimer
         # TODO: ¿Seguro de que queremos apagar?
         # if self.camON:
@@ -1937,7 +1958,7 @@ class Backend(QtCore.QObject):
             lambda: self.set_xy_feedback(frontend.feedbackXYBox.isChecked()))
         frontend.feedbackZBox.stateChanged.connect(
             lambda: self.set_z_feedback(frontend.feedbackZBox.isChecked()))
-        frontend.xyPatternButton.clicked.connect(lambda: self.start_tracking_pattern("Square")) 
+        # frontend.xyPatternButton.clicked.connect(lambda: self.start_tracking_pattern("Square")) 
         # TO DO: clean-up checkbox create continous and discrete feedback loop
 
     @pyqtSlot()
@@ -1947,8 +1968,8 @@ class Backend(QtCore.QObject):
         viene del front.
         """
         self.toggle_tracking_shutter(8, False)
-        time.sleep(1)
         self.viewtimer.stop()
+        time.sleep(1)
         # Go back to 0 position
         x_0 = 0
         y_0 = 0

@@ -210,17 +210,22 @@ def time_tags2delays(timestamps: _np.ndarray, channels: _np.ndarray,
             # tag is not a TimeTag, so we are in an error state, e.g. overflow
             last_timestamp = 0
             n_errors += 1
-        elif chan == laser_channel and last_timestamp != 0:
+        elif (chan == laser_channel) and (last_timestamp != 0):
             # valid event
-            rv[last_pos] = period - (ts - last_timestamp)
+            rv[last_pos] = period + last_timestamp
+            rv[last_pos] -= ts
             if rv[last_pos] < 0:
-                # print("Tiempo negativo", rv[last_pos], ts, last_timestamp)
                 rv[last_pos] += period
+            if rv[last_pos] < 0:
+                print("Tiempo negativo", rv[last_pos]/period, ts, last_timestamp)
             last_pos += 1
         elif chan == APD_channel:
             last_timestamp = ts
-    # if n_errors:
-    #     print("errores = ", n_errors)
+        else:
+            print("unknown channel")
+            n_errors += 1
+    if n_errors:
+        print("errores = ", n_errors)
     return rv[:last_pos], last_timestamp
 
 
@@ -253,11 +258,15 @@ def swabian2numpy(filename: str, period: int, APD_channel: int, laser_channel: i
 
 
 if __name__ == "__main__":
-    swabian2numpy(r"C:\Users\Minflux\Documents\PythonScripts\reading_swabian\filename.ttbin",
+    input_file = r"C:\Users\Minflux\Documents\PythonScripts\reading_swabian\filename.ttbin"
+    input_file = r"C:\Users\Minflux\Documents\Andi\pyflux\lefilename.ttbin"
+    swabian2numpy(input_file,
                   50000, 4, 1)
-    a = _np.load(r"C:\Users\Minflux\Documents\PythonScripts\reading_swabian\filename.npy")
+    a = _np.load(r"C:\Users\Minflux\Documents\Andi\pyflux\lefilename.npy")
     import matplotlib.pyplot as plt
     plt.hist(a, 250, range=(-13,50000))
+    plt.figure()
+    plt.hist(a, 250, range=(a.min(), 0))
 
 if False:
     import matplotlib.pyplot as plt

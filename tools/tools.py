@@ -135,11 +135,48 @@ def saveConfig(main, dateandtime, name, filename=None):
     with open(filename + '.txt', 'w') as configfile:
         config.write(configfile)
 
+
 def loadConfig(filename) -> configparser.SectionProxy:
     """Load a config file and return just the parameters."""
     config = configparser.ConfigParser()
     config.read(filename)
     return config['Scanning parameters']
+
+
+def saveConfig_focus(x_min, y_min, size, CM_abs_0, CM_abs_1, name, filename=None):
+    """Save a focus config file."""
+    if filename is None:
+        filename = os.path.join(os.getcwd(), name)
+    config = configparser.ConfigParser()
+    config['Focus information'] = {
+        'x_min (px)': x_min,
+        'y_min (px)': y_min,
+        'ROI_size (px)': size,
+        'CM_abs[0] (px)': CM_abs_0,
+        'CM_abs[1] (px)': CM_abs_1}
+    with open(filename + '.txt', 'w') as configfile:
+        config.write(configfile)
+
+
+def loadConfig_focus(filename) -> dict:
+    """Load a focus config file and return the parameters as a dictionary."""
+    config = configparser.ConfigParser()
+    config.optionxform = str  # Mantener mayúsculas y minúsculas en las claves
+    config.read(filename)
+    
+    if 'Focus information' not in config:
+        raise ValueError(f"The file '{filename}' does not contain 'Focus information' section.")
+    focus_info = {}
+    for key, value in config['Focus information'].items():
+        # Convertir a int, float o dejar como string según corresponda
+        try:
+            if '.' in value:
+                focus_info[key] = float(value)
+            else:
+                focus_info[key] = int(value)
+        except ValueError:
+            focus_info[key] = value  # Si no es numérico, se mantiene como string
+    return focus_info
 
 
 def getUniqueName(name):
