@@ -8,7 +8,6 @@ TCSPC con tracking.
 import numpy as np
 from datetime import date
 import os
-import tools.filenames as fntools
 from tkinter import Tk, filedialog
 import logging as _lgn
 
@@ -20,8 +19,6 @@ from PyQt5 import QtWidgets
 import tools.swabiantools as _st
 from swabian.backend import TCSPC_backend
 
-
-# import drivers.ADwin as ADwin
 import configparser
 from dataclasses import dataclass as _dataclass
 
@@ -94,7 +91,11 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
     def start_measurement(self):
         """Inicia la medida."""
-        TCSPC_backend.start_measure("lefilename", self._PSF, self._config)
+        try:
+            filename = self.filenameEdit.text()
+        except Exception:
+            filename = "lefilename"
+        TCSPC_backend.start_measure(filename, self._PSF, self._config)
 
     @pyqtSlot(str)
     def process_measurement_start(self, filename: str):
@@ -263,8 +264,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
         self.clearButton = QtWidgets.QPushButton("Clear data")
         # TCSPC parameters labels and edits
-        acqtimeLabel = QtWidgets.QLabel("Acquisition time [s]")
-        self.acqtimeEdit = QtWidgets.QLineEdit("1")
+        # acqtimeLabel = QtWidgets.QLabel("Acquisition time [s]")
+        # self.acqtimeEdit = QtWidgets.QLineEdit("1")
 
         # self.channel0Label = QtWidgets.QLabel("Input 0 (sync) [kHz]")
         # self.channel0Value = QtWidgets.QLineEdit("")
@@ -341,8 +342,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
         subgrid = QtWidgets.QGridLayout()
         self.paramWidget.setLayout(subgrid)
         # subgrid.addWidget(phParamTitle, 0, 0, 2, 3)
-        subgrid.addWidget(acqtimeLabel, 2, 0)
-        subgrid.addWidget(self.acqtimeEdit, 2, 1)
+        # subgrid.addWidget(acqtimeLabel, 2, 0)
+        # subgrid.addWidget(self.acqtimeEdit, 2, 1)
         # subgrid.addWidget(self.channel0Label, 8, 0)
         # subgrid.addWidget(self.channel0Value, 8, 1)
         # subgrid.addWidget(self.channel1Label, 9, 0)

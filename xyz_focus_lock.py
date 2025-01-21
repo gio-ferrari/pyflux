@@ -39,14 +39,6 @@ import logging as _lgn
 _lgr = _lgn.getLogger(__name__)
 
 
-# TODO: Hacer que no inicie trackings si no hay ROIS. Que vuelva a resetear los
-# checkboxes si no puede iniciar
-# Que haya tracking para feedback
-# Ver el tema de      self.time[self.ptr] = self.currentTime
-# nans e histogramas
-# No grafica xy ni calcula std -> pyqtgraph viejo y NANS
-# ver logica resetgraphs
-
 # Parametros para procesos de estabilizacion continua ADWIN
 # Proceso 4:
 _FPAR_X = 40
@@ -56,7 +48,8 @@ _FPAR_Z = 32
 
 PX_SIZE = 29.4 #23.5  # px size of camera in nm #antes 80.0 para Andor #33.5
 PX_Z = -37.5  # 20 nm/px for z in nm # Antes 16 con calibración. Ahora: 120 con movimiento manual.
-#TODO: Fix (-1) (+1), correct_z
+# TODO: Fix (-1) (+1), correct_z
+
 
 # Posiblemente debería ir a un toolbox
 class GroupedCheckBoxes:
@@ -209,21 +202,21 @@ class Frontend(QtGui.QFrame):
         del roi
         self.ROInumber -= 1
         self.emit_roi_info('xy')
-    
+
     def on_exposure_time_changed(self):
+        """Emite la señal con el nuevo tiempo de exposición."""
         try:
-            """Emite la señal con el nuevo tiempo de exposición."""
             new_exposure_time = int(self.exposureTimeEdit.text())
             self.exposureTimeChanged.emit(new_exposure_time)
         except ValueError:
             print("Error en valor ingresado para el tiempo de exposición.")
-    
+
     def video_checkbox_changed(self, state):
         if state == QtCore.Qt.Checked:
             self.saveVideoSignal.emit(True)
         else:
             self.saveVideoSignal.emit(False)
-            
+
     @pyqtSlot(bool)
     def toggle_liveview(self, on):
         """Cambia el estado del botón al elegirlo.
@@ -584,10 +577,6 @@ class Frontend(QtGui.QFrame):
         self.shutterLabel = QtGui.QLabel('Shutter open?')
         self.shutterCheckbox = QtGui.QCheckBox('473 nm laser')
 
-        # Button to make custom pattern
-        # es start pattern en linea 500 en xyz_tracking
-        # self.xyPatternButton = QtGui.QPushButton('Start pattern OnlySquare')
-
         # buttons and param layout
         grid.addWidget(self.paramWidget, 0, 1)
         grid.addWidget(imageWidget, 0, 0)
@@ -604,10 +593,7 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.delete_roiButton, 5, 0)
         subgrid.addWidget(self.exportDataButton, 6, 0)
         subgrid.addWidget(self.clearDataButton, 7, 0)
-        # subgrid.addWidget(self.xyPatternButton, 8, 0)
-        # subgrid.addWidget(self.trackAllBox, 1, 1)
         subgrid.addWidget(trackgb, 0, 1, 2, 3)
-        # subgrid.addWidget(self.feedbackLoopBox, 2, 1)
         subgrid.addWidget(feedbackgb, 2, 1, 2, 3)
         subgrid.addWidget(self.exposureTimeLabel, 4, 1)
         subgrid.addWidget(self.exposureTimeEdit, 4, 2)
@@ -632,7 +618,7 @@ class Frontend(QtGui.QFrame):
         ########################################################
 
         grid.addWidget(self.xyzGraph, 1, 0)
-        grid.addWidget(self.xyPoint, 1, 1, 1, 2)  # agrego 1,2 al final
+        grid.addWidget(self.xyPoint, 1, 1, 1, 2)
 
         self.liveviewButton.clicked.connect(
             lambda: self.toggle_liveview(self.liveviewButton.isChecked()))
@@ -671,9 +657,7 @@ class Backend(QtCore.QObject):
     changedImage = pyqtSignal(np.ndarray, np.ndarray, )
     changedXYData = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, )
     changedZData = pyqtSignal(np.ndarray, np.ndarray, )
-    # no se usa en xyz_tracking
     updateGUIcheckboxSignal = pyqtSignal(bool, bool, bool, bool, bool, bool)
-    # changedSetPoint = pyqtSignal(float) #Debería añadir esta señal??? de focus.py
 
     # signal to emit new piezo position after drift correction
     xyIsDone = pyqtSignal(bool, float, float, float)
@@ -744,11 +728,7 @@ class Backend(QtCore.QObject):
         self.focus_filename = os.path.join(self.folder, focus_filename)
 
         # Se llama viewTimer pero es el unico para todo, no sólo para view
-        # Ojo: aquí coloqué viewtimer porque es el que se usa a lo largo del
-        # código, pero en xyz_tracking se usa view_timer
         self.viewtimer = QtCore.QTimer()
-        # TODO: overload de movetothread para que se mueva con sus timers
-        # self.viewtimer.timeout.connect(self.update)
         self.xyz_time = 200  # 200 ms per acquisition + fit + correction
 
         # Si trackear (NO si corregir)
@@ -778,16 +758,15 @@ class Backend(QtCore.QObject):
         # saves displacement when offsetting setpoint for feedbackloop
         # Estos son sólo para hacer un pattern de test
         self.displacement = np.array([0.0, 0.0])  # Solo para test pattern
-        # self.pattern = False
 
         self.previous_image = None  # para chequear que la imagen cambie
         self.currentz = 0.0  # Valor en pixeles dentro del roi del z
         self.zROIcoordinates = np.zeros((4,), dtype=int)
-    
-    @pyqtSlot(int) 
+
+    @pyqtSlot(int)
     def update_exposure_time(self, exposure_time):
         self.camera.set_exposure_time(exposure_time)
-    
+
     @pyqtSlot(int, bool)
     def toggle_tracking_shutter(self, num, val):
         """Toma acciones con los shutters que lo involucran. DESACTIVADO.
@@ -860,12 +839,6 @@ class Backend(QtCore.QObject):
                 self.correct_z()
         self.update_graph_data()
 
-        # if False:   # self.pattern:
-        #     val = (self.counter - self.initcounter)
-        #     reprate = 10  # Antes era 10 para andor
-        #     if (val % reprate == 0):
-        #         self.make_tracking_pattern(val//reprate)
-        # counter to check how many times this function is executed
         self.counter += 1
 
     def update_view(self):
@@ -880,15 +853,12 @@ class Backend(QtCore.QObject):
             _lgr.error('Latest_frame equal to previous frame')
         self.previous_image = self.image
 
-        # send image to gui
-        # self.changedImage.emit(self.image)  # ahora esta en update_graph_data
-        #Forma 1 el Qtimer es quien regula
+        # Forma 1 el Qtimer es quien regula
         if self.saving_video: #and len(self.frames) < self.total_frames: #Forma 2, funciona por conteo de numero de frames
             self.frames.append(self.image)
             if self.csv_writer:  # Verificar que el escritor esté configurado
                 current_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
                 self.csv_writer.writerow([len(self.frames), current_time])  # Escribir fila en CSV
-        
         # if len(self.frames) >= self.total_frames: #Forma 2
         #     self.start_saving_video(False)
         #Forma 3: Toma un frame cada tanto 
@@ -897,7 +867,7 @@ class Backend(QtCore.QObject):
         #     if self.frame_counter >= 2:
         #         self.frames.append(self.image)
         #         self.frame_counter = 0
-            
+
     @pyqtSlot(bool)
     def start_saving_video(self, val):
         if val:
@@ -907,7 +877,7 @@ class Backend(QtCore.QObject):
             self.csv_writer = csv.writer(self.time_log_file)
             self.csv_writer.writerow(["frame", "time"])  # Escribir encabezado
 
-            QtCore.QTimer.singleShot(1000, lambda: self.start_saving_video(False)) # ms
+            QtCore.QTimer.singleShot(1000, lambda: self.start_saving_video(False))  # ms
         else:
             self.saving_video = False
             self.save_video()
@@ -920,12 +890,12 @@ class Backend(QtCore.QObject):
             imwrite('output_video.tiff', stack)
             print("Recording video finished and saved.")
             self.frames.clear()
-            
+
             if self.time_log_file:
                 self.time_log_file.close()
                 self.time_log_file = None
                 self.csv_writer = None
-                
+
             self.updateGUIcheckboxSignal.emit(self.tracking_xy, self.tracking_z,
                                               self.feedback_xy, self.feedback_z,
                                               self.save_data_state, self.saving_video)
@@ -1169,22 +1139,20 @@ class Backend(QtCore.QObject):
         # calculate center of mass
         self.m_center = np.array(ndi.measurements.center_of_mass(zimage))
         # calculate z estimator
-        # TODO: copiar de new_focus
         self.currentz = self.m_center[0]
         # El estimador está en píxeles... fraccionarios
-        
+
     @pyqtSlot(bool)
     def save_focus(self, checked: bool):
         self.center_of_mass()
         xmin, xmax, ymin, ymax = self.zROIcoordinates #Better define something like: self.xmin
         self.CM_abs = [self.m_center[0] + xmin, self.m_center[1] + ymin]
         print(f"Reference in abs coord: ({self.CM_abs[0]}, {self.CM_abs[1]})")
-        
         filename = self.focus_filename
         _lgr.info('Focus data exported to %s', filename)
         tools.saveConfig_focus(xmin, ymin, xmax - xmin, self.CM_abs[0], self.CM_abs[1], 'test_focus', filename)
         print('[xyz_focus_lock] saved configfile', filename)
-        
+
     def set_focus(self):
         focus_info = tools.loadConfig_focus(self.focus_filename + ".txt")
         _lgr.info("Focus information loaded.")
@@ -1391,9 +1359,6 @@ class Backend(QtCore.QObject):
         targetYposition = currentYposition + dy
 
         if mode == 'continous':
-            # Le mando al actuador las posiciones x,y,z
-            # self.actuator_xyz(targetXposition, targetYposition,
-            #                   targetZposition)
             self.actuator_xy(targetXposition, targetYposition)
         return (targetXposition, targetYposition)
 
@@ -1425,9 +1390,6 @@ class Backend(QtCore.QObject):
             targetZposition = currentZposition + dz  # in µm
 
             if mode == 'continous':
-                # Le mando al actuador la posicion z
-                # self.actuator_xyz(targetXposition, targetYposition,
-                #                   targetZposition)
                 self.actuator_z(targetZposition)
             if mode == 'discrete':
                 self.target_z = targetZposition
@@ -1573,24 +1535,6 @@ class Backend(QtCore.QObject):
 
         # Comento porque son cosas viejas (Andi)
         # self.adw.Set_Par(30, 1)
-
-    # def actuator_xyz(self, x_f, y_f, z_f):
-    #     """Setear los parámetros de tracking de la adwin mientras corre.
-
-    #     Estos parámetros son usados por los procesos:
-    #         actuator_z.bas: (Proceso 3)
-    #             FPar_32 es el setpoint z
-    #         actuator_xy.bas: (Proceso 4)
-    #             FPar_40 es el setpoint x
-    #             FPar_41 es el setpoint y
-    #     """
-    #     x_f = tools.convert(x_f, 'XtoU')
-    #     y_f = tools.convert(y_f, 'XtoU')
-    #     z_f = tools.convert(z_f, 'XtoU')
-
-    #     self.adw.Set_FPar(_FPAR_X, x_f)
-    #     self.adw.Set_FPar(_FPAR_Y, y_f)
-    #     self.adw.Set_FPar(_FPAR_Z, z_f)
 
     def actuator_z(self, z_f):
         """Setear los parámetros de tracking de la adwin mientras corre.
@@ -1752,7 +1696,6 @@ class Backend(QtCore.QObject):
         np.savetxt(filename, savedData.T, header='t (s), z (px)')
         _lgr.info('z data exported to %s', filename)
 
-    # Dejo esta funcion como está, se repite en xy y en focus.py
     @pyqtSlot(bool)
     def get_save_data_state(self, val):
         """Setea si tiene o no que grabar datos xy.
@@ -1764,8 +1707,6 @@ class Backend(QtCore.QObject):
         self.save_data_state = val
         _lgr.debug('save_data_state = %s', val)
 
-    # antes se usaba roi_coordinates_array que se convertía a int en
-    # ROIcoordinates
     @pyqtSlot(str, int, list)
     def get_roi_info(self, roi_type: str,
                      N: int,
@@ -1807,91 +1748,8 @@ class Backend(QtCore.QObject):
     @pyqtSlot(np.ndarray)
     def get_move_signal(self, dist):
         """Recibe de módulo Minflux para hacer patterns."""
-
-        # self.toggle_feedback(False)
-        # self.toggle_tracking(True)
-        # self.notify_status()
-        # self.initialx = self.initialx + dist[0]
-        # self.initialy = self.initialy + dist[1]
         self.displacement[:] = dist
         _lgr.info('Moved setpoint to %s', dist)
-    
-    # @pyqtSlot(str)
-    # def start_tracking_pattern(self, patternType: str):
-    #     """Se prepara para hacer un patrón.
-
-    #     Ver módulo Minflux
-    #     Recibe señal de módulo minflux.
-    #     También funciona al apretar el boton "Start pattern"
-    #     """
-    #     print("Estoy en start_tracking_pattern modo: ", patternType)
-    #     if patternType == 'Standard':
-    #         print("Static mode detected, no pattern movement will start.")
-    #         return 
-    #     else:
-    #         self.pattern = True
-    #         self.initcounter = self.counter
-    #         self.save_data_state = True
-    #         self.forma = patternType
-
-    # def make_tracking_pattern(self, step):
-    #     """Poner las posiciones de referencia en un patrón.
-
-    #     TODO: Con este cambio, chequear cómo queda el módulo minflux
-    #     """
-    #     L = 20.0  # nm
-    #     H = L * (3/2)**.5
-    #     if self.forma == 'Row':
-    #         if step < 2:
-    #             return
-    #         elif step == 2:
-    #             dist = np.array([0.0, -L])
-    #         elif step == 3:
-    #             dist = np.array([0.0, 0.0])
-    #         elif step == 4:
-    #             dist = np.array([0.0, L])
-    #         else:
-    #             self.pattern = False
-    #             print("ROW")
-    #             return
-                
-    #     if self.forma == "Square":
-    #         if step < 2:
-    #             return
-    #         elif step == 2:
-    #             dist = np.array([0.0, L])
-    #         elif step == 3:
-    #             dist = np.array([L, 0.0])
-    #         elif step == 4:
-    #             dist = np.array([0.0, -L])
-    #         elif step == 5:
-    #             dist = np.array([-L, 0.0])
-    #         else:
-    #             self.pattern = False
-    #             print("Square")
-    #             return
-            
-    #     elif self.forma == "Triangle":
-    #         if step < 2:
-    #             return
-    #         elif step == 2:
-    #             dist = np.array([0.0, 2/3*H])
-    #         elif step == 3:
-    #             dist = np.array([L/2, -H])
-    #         elif step == 4:
-    #             dist = np.array([-L, 0.0])
-    #         elif step == 5:
-    #             dist = np.array([L/2, H/3])
-    #         else:
-    #             self.pattern = False
-    #             print("Triangle")
-    #             return
-
-    #     self.initialx = self.initialx + dist[0]
-    #     self.initialy = self.initialy + dist[1]
-    #     self.displacement = self.displacement + dist
-
-    #     _lgr.info('Moved setpoint by %s', dist)
 
     @pyqtSlot(str)
     def get_end_measurement_signal(self, fname):
@@ -1912,11 +1770,6 @@ class Backend(QtCore.QObject):
         self.reset_graph()
         self.reset_data_arrays()
         self.displacement[:] = 0.
-        # comparar con la funcion de focus: algo que ver con focusTimer
-        # TODO: ¿Seguro de que queremos apagar?
-        # if self.camON:
-        #     self.viewtimer.stop()
-        #     self.liveviewSignal.emit(False)
 
     @pyqtSlot(float)
     def get_focuslockposition(self, position):
@@ -1958,8 +1811,6 @@ class Backend(QtCore.QObject):
             lambda: self.set_xy_feedback(frontend.feedbackXYBox.isChecked()))
         frontend.feedbackZBox.stateChanged.connect(
             lambda: self.set_z_feedback(frontend.feedbackZBox.isChecked()))
-        # frontend.xyPatternButton.clicked.connect(lambda: self.start_tracking_pattern("Square")) 
-        # TO DO: clean-up checkbox create continous and discrete feedback loop
 
     @pyqtSlot()
     def stop(self):
@@ -1970,11 +1821,7 @@ class Backend(QtCore.QObject):
         self.toggle_tracking_shutter(8, False)
         self.viewtimer.stop()
         time.sleep(1)
-        # Go back to 0 position
-        x_0 = 0
-        y_0 = 0
-        z_0 = 0
-        self.moveTo(x_0, y_0, z_0)
+        self.moveTo(0., 0., 0.)
         self.camera.destroy_all()
         _lgr.info('[xyz_tracking] IDS camera shut down')
 

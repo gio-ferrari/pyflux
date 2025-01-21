@@ -21,6 +21,7 @@ class SignalData:
 
 class SignalTypeEnum(Enum):
     """Enumeration of signal Types."""
+
     NIM = SignalData("NIM", SignalEdgeEnum.FALLEDGE, -.5)
     TTL = SignalData("TTL", SignalEdgeEnum.RISEEDGE, 2.5)
 

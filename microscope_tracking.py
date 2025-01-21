@@ -117,7 +117,7 @@ class Frontend(QtGui.QMainWindow):
         self.tcspcWidget.setMinimumSize(598, 370)
         self.focusWidget.setMinimumSize(1100, 370)
         self.move(1, 1)
-        
+
     def make_connection(self, backend):
         backend.xyzWorker.make_connection(self.focusWidget)
         backend.scanWorker.make_connection(self.scanWidget)
@@ -140,48 +140,33 @@ class Frontend(QtGui.QMainWindow):
         minfluxThread.exit()
         self.tcspcWidget.close()
         super().closeEvent(*args, **kwargs)
-        app.quit()        
-        
+        app.quit()
+
+
 class Backend(QtCore.QObject):
-    
+
     askROIcenterSignal = pyqtSignal()
     # moveToSignal = pyqtSignal(np.ndarray)
     xyzEndSignal = pyqtSignal(str)
     xyMoveAndLockSignal = pyqtSignal(np.ndarray)
-    
+
     def __init__(self, adw, scmos, diodelaser, *args, **kwargs):
-        
+
         super().__init__(*args, **kwargs)
-        
+
         self.scanWorker = scan.Backend(adw, diodelaser)
         self.xyzWorker = focus.Backend(scmos, adw)
         # self.andorWorker = widefield_Andor.Backend(andor, adw) #Por ahora le mando adw para pensar el desplzamiento de la platina
-        # print("success with Andor worker")
-        self.minfluxWorker = minflux.Backend(adw)
+        self.minfluxWorker = minflux.Backend()
         self.psfWorker = psf.Backend()
-            
+
     def setup_minflux_connections(self):
-        
-        self.scanWorker.ROIcenterSignal.connect(self.minfluxWorker.get_ROI_center)
-        
-        # self.minfluxWorker.tcspcPrepareSignal.connect(self.tcspcWorker.prepare_minflux)
-        # El modulo minflux se encarga de todo ahora
-        # self.minfluxWorker.tcspcStartSignal.connect(self.xyzWorker.start_tracking_pattern)
-        # self.minfluxWorker.tcspcStartSignal.connect(self.tcspcWorker.measure_minflux)
-        
-        self.minfluxWorker.xyzStartSignal.connect(self.xyzWorker.get_lock_signal)
-        
-        self.minfluxWorker.moveToSignal.connect(self.xyzWorker.get_move_signal) #esta señal sólo se emite en modo: 'Predefined positions', que arranca el loop
-        
+        self.minfluxWorker.moveToSignal.connect(self.xyzWorker.get_move_signal)
         self.minfluxWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
         self.minfluxWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
-        
-        # self.tcspcWorker.tcspcDoneSignal.connect(self.minfluxWorker.get_tcspc_done_signal)
-       
         self.minfluxWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
         self.minfluxWorker.xyzEndSignal.connect(self.xyzWorker.get_end_measurement_signal)
         # TODO: check before use
-        self.minfluxWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal) #Esta señal jamás se emite desde minflux.py
 
     def setup_psf_connections(self):
         self.psfWorker.scanSignal.connect(self.scanWorker.get_scan_signal) #Esta es la conexion que permite cambiar el punto de inicio del escaneo
@@ -190,32 +175,31 @@ class Backend(QtCore.QObject):
         self.psfWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
         # self.psfWorker.zStopSignal.connect(self.xyzWorker.get_stop_signal)
         self.psfWorker.moveToInitialSignal.connect(self.scanWorker.get_moveTo_initial_signal)
-       
+
         self.psfWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
         self.psfWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
-                
+
         self.psfWorker.endSignal.connect(self.xyzWorker.get_end_measurement_signal)
         self.psfWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
-        
+
         self.scanWorker.frameIsDone.connect(self.psfWorker.get_scan_is_done)
         self.xyzWorker.xyIsDone.connect(self.psfWorker.get_xy_is_done)
-        #self.xyzWorker.zIsDone.connect(self.psfWorker.get_z_is_done)
-         
+        # self.xyzWorker.zIsDone.connect(self.psfWorker.get_z_is_done)
+
     def make_connection(self, frontend):
-        
         frontend.focusWidget.make_connection(self.xyzWorker)
         frontend.scanWidget.make_connection(self.scanWorker)
 
-        #frontend.andorWidget.make_connection(self.andorWorker)
+        # frontend.andorWidget.make_connection(self.andorWorker)
         frontend.minfluxWidget.make_connection(self.minfluxWorker)
         frontend.psfWidget.make_connection(self.psfWorker)
-    
+
         self.setup_minflux_connections()
         self.setup_psf_connections()
-        
+
         frontend.scanWidget.paramSignal.connect(self.psfWorker.get_scan_parameters)
         # TO DO: write this in a cleaner way, i. e. not in this section, not using frontend
-        
+
         self.scanWorker.focuslockpositionSignal.connect(self.xyzWorker.get_focuslockposition) #Signal & Slot connection Checked FC
         self.xyzWorker.focuslockpositionSignal.connect(self.scanWorker.get_focuslockposition) #Signal & Slot connection Checked FC
         #FC NOTE: Both scan & focus emit the same signal focuslockpositionSignal and both have the same function get_focuslockposition (but though they have the same name they do not do the same)
@@ -224,7 +208,7 @@ class Backend(QtCore.QObject):
     def stop(self):
         self.scanWorker.stop()
         self.xyzWorker.stop()
-        #self.andorWorker.stop()
+        # self.andorWorker.stop()
 
 
 if __name__ == '__main__':
@@ -236,47 +220,46 @@ if __name__ == '__main__':
         
     #app.setStyle(QtGui.QStyleFactory.create('fusion'))
     app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
-    
+
     gui = Frontend()
-    
-    #initialize devices
+
+    # initialize devices
     # port = tools.get_MiniLasEvoPort()
     port = 'COM5'  # tools.get_MiniLasEvoPort('ML069719')
     print('MiniLasEvo diode laser port:', port)
     diodelaser = MiniLasEvo(port)
 
-    #if camera wasnt closed properly just keep using it without opening new one
+    # if camera wasnt closed properly just keep using it without opening new one
     try:
         cam = ids_cam.IDS_U3()
     except:
         pass
 
-    #andor = AndorSDK2.AndorSDK2Camera(fan_mode = "full") #Forma antigua
-    #andor = Andor.AndorSDK2Camera(fan_mode = "full") 
-    
+    # andor = AndorSDK2.AndorSDK2Camera(fan_mode = "full") #Forma antigua
+    # andor = Andor.AndorSDK2Camera(fan_mode = "full") 
+
     DEVICENUMBER = 0x1
     adw = ADwin.ADwin(DEVICENUMBER, 1)
     scan.setupDevice(adw)
-    
+
     worker = Backend(adw, cam, diodelaser)
-    
+
     gui.make_connection(worker)
     worker.make_connection(gui)
-    
+
     # initial parameters
     gui.scanWidget.emit_param()
     worker.scanWorker.emit_param()
-    
+
     gui.minfluxWidget.emit_param()
 #    gui.minfluxWidget.emit_param_to_backend()
 #    worker.minfluxWorker.emit_param_to_frontend()
-    
+
     gui.psfWidget.emit_param()
-    
+
 #    # GUI thread
 #    guiThread = QtCore.QThread()
 #    gui.moveToThread(guiThread)
-#    
 #    guiThread.start()
     
     # psf thread
@@ -310,18 +293,18 @@ if __name__ == '__main__':
     # worker.andorWorker.viewtimer.moveToThread(andorThread)
     # worker.andorWorker.viewtimer.timeout.connect(worker.andorWorker.update_view)
     # andorThread.start()
-    
+
     # minflux worker thread
     minfluxThread = QtCore.QThread()
     worker.minfluxWorker.moveToThread(minfluxThread)
     minfluxThread.start()
-    
+
     # psf worker thread
 #    psfThread = QtCore.QThread()
 #    worker.psfWorker.moveToThread(psfThread)
 #    worker.psfWorker.measTimer.moveToThread(psfThread)
 #    worker.psfWorker.measTimer.timeout.connect(worker.psfWorker.measurement_loop)
 #    psfThread.start()
-    
+
     gui.showMaximized()
     app.exec_()
