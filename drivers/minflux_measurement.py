@@ -161,7 +161,7 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
             End timestamp of the of the current data block.
         """
         # TODO: meter todo el pipeline en una sola función
-        errors = np.empty((2,), dtype=np.int64)
+        errors = np.empty((2,), dtype=np.int64)  # Todo: usar structured con nombres
         n_times = MinfluxMeasurement.process_tags(
             incoming_tags,
             self._delays,
@@ -175,7 +175,7 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
         # n_times = max(n_times, 100)  # usar los últimos 100 fotones.
         MinfluxMeasurement.process_delays(self._delays[:n_times],
                                           self.shutter_delays, self._bins)
-        self._cb(self._delays[:n_times].copy(), self._bins.copy(), (0, 0))
+        self._cb(self._delays[:n_times].copy(), end_time-begin_time, self._bins.copy(), (0, 0))
 
 
 if __name__ == '__main__':
