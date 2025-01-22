@@ -224,7 +224,7 @@ class Backend(QtCore.QObject):
         self.update_param()
         time.sleep(0.2)
         self.t0 = time.time()
-        self.measTimer.start(self.acqtime * 1E3)  # resolucion pedorra
+        self.measTimer.start(self.acqtime * 1000)  # resolucion pedorra
         TCSPC_backend.start_measure(self.filename)
 
     def loop(self):
