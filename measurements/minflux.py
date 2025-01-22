@@ -152,6 +152,7 @@ class Frontend(QtGui.QFrame):
 
         self.measType.currentIndexChanged.connect(self.toggle_parameters)
 
+        self.filenameEdit.textChanged.connect(self.emit_param)
         self.folderEdit.textChanged.connect(self.emit_param)
         self.acqtimeEdit.textChanged.connect(self.emit_param)
         self.lengthEdit.textChanged.connect(self.emit_param)
