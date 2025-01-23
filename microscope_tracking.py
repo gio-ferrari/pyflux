@@ -25,7 +25,9 @@ import drivers.ids_cam as ids_cam
 # from pylablib.devices import Andor
 # from pylablib.devices.Andor import AndorSDK2
 
-import xyz_focus_lock as focus
+import takyaq
+import tools.tools as tools
+
 import scan
 
 #import widefield_Andor
@@ -38,7 +40,7 @@ class Frontend(QtGui.QMainWindow):
 
     closeSignal = pyqtSignal()
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, focus_w, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setWindowTitle('PyFLUX')
         self.cwidget = QtGui.QWidget()
@@ -98,7 +100,7 @@ class Frontend(QtGui.QMainWindow):
         # self.addDockWidget(Qt.RightDockWidgetArea, andorDock)
 
         # focus lock dock
-        self.focusWidget = focus.Frontend()
+        self.focusWidget = focus_w
         focusDock = QDockWidget('Focus Lock', self)
         focusDock.setWidget(self.focusWidget)
         focusDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar |
@@ -115,7 +117,7 @@ class Frontend(QtGui.QMainWindow):
         self.move(1, 1)
 
     def make_connection(self, backend):
-        backend.xyzWorker.make_connection(self.focusWidget)
+        # backend.xyzWorker.make_connection(self.focusWidget)
         backend.scanWorker.make_connection(self.scanWidget)
         # backend.andorWorker.make_connection(self.andorWidget)
         backend.minfluxWorker.make_connection(self.minfluxWidget)
@@ -131,7 +133,7 @@ class Frontend(QtGui.QMainWindow):
     def closeEvent(self, *args, **kwargs):
         self.closeSignal.emit()
         time.sleep(1)
-        focusThread.exit()
+        # focusThread.exit()
         scanThread.exit()
         minfluxThread.exit()
         self.tcspcWidget.close()
@@ -146,12 +148,11 @@ class Backend(QtCore.QObject):
     xyzEndSignal = pyqtSignal(str)
     xyMoveAndLockSignal = pyqtSignal(np.ndarray)
 
-    def __init__(self, adw, scmos, diodelaser, *args, **kwargs):
+    def __init__(self, adw, diodelaser, *args, **kwargs):
 
         super().__init__(*args, **kwargs)
 
         self.scanWorker = scan.Backend(adw, diodelaser)
-        self.xyzWorker = focus.Backend(scmos, adw)
         # self.andorWorker = widefield_Andor.Backend(andor, adw) #Por ahora le mando adw para pensar el desplzamiento de la platina
         self.minfluxWorker = minflux.Backend()
         self.psfWorker = psf.Backend()
@@ -167,9 +168,7 @@ class Backend(QtCore.QObject):
     def setup_psf_connections(self):
         self.psfWorker.scanSignal.connect(self.scanWorker.get_scan_signal) #Esta es la conexion que permite cambiar el punto de inicio del escaneo
         self.psfWorker.xySignal.connect(self.xyzWorker.single_xy_correction)
-        # self.psfWorker.zSignal.connect(self.xyzWorker.single_z_correction)
         self.psfWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
-        # self.psfWorker.zStopSignal.connect(self.xyzWorker.get_stop_signal)
         self.psfWorker.moveToInitialSignal.connect(self.scanWorker.get_moveTo_initial_signal)
 
         self.psfWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
@@ -180,10 +179,9 @@ class Backend(QtCore.QObject):
 
         self.scanWorker.frameIsDone.connect(self.psfWorker.get_scan_is_done)
         self.xyzWorker.xyIsDone.connect(self.psfWorker.get_xy_is_done)
-        # self.xyzWorker.zIsDone.connect(self.psfWorker.get_z_is_done)
 
     def make_connection(self, frontend):
-        frontend.focusWidget.make_connection(self.xyzWorker)
+        # frontend.focusWidget.make_connection(self.xyzWorker)
         frontend.scanWidget.make_connection(self.scanWorker)
 
         # frontend.andorWidget.make_connection(self.andorWorker)
@@ -203,8 +201,77 @@ class Backend(QtCore.QObject):
 
     def stop(self):
         self.scanWorker.stop()
-        self.xyzWorker.stop()
+        # self.xyzWorker.stop()
         # self.andorWorker.stop()
+
+
+class IDSWrapper:
+    """Context manager wrapper for IDS cameras."""
+
+    def __enter__(self):
+        self._camera = ids_cam.IDS_U3()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.camera.destroy_all()
+        return False
+
+    def get_image(self):
+        return self.camera.on_acquisition_timer()
+
+
+class PiezoActuatorWrapper:
+
+    _FPAR_X = 40
+    _FPAR_Y = 41
+    _FPAR_Z = 32
+
+    def __init__(self, adw: ADwin.ADwin):
+        self._adw = adw
+
+    def get_position(self) -> tuple[float, float, float]:
+        """Return (x, y, z) position of the piezo in nanometers."""
+        ...
+
+    def set_position(self, x: float, y: float, z: float):
+        """Move to position x, y, z, specified in nanometers."""
+        x_f = tools.convert(x / 1E3, 'XtoU')
+        y_f = tools.convert(y / 1E3, 'XtoU')
+        z_f = tools.convert(z / 1E3, 'XtoU')
+
+        self.adw.Set_FPar(self._FPAR_X, x_f)
+        self.adw.Set_FPar(self._FPAR_Y, y_f)
+        self.adw.Set_FPar(self._FPAR_Z, z_f)
+
+    def init(self):
+        """Perform initialization that must be performed on the running thread."""
+        ...
+
+    _FPAR_X
+    self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))
+
+    # set-up actuator initial param script
+    # MoveTo usa un script que actualiza estos valores, podemos confiar
+    currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
+    z_f = tools.convert(currentZposition, 'XtoU')
+
+    self.set_actuator_param_xy()
+    self.adw.Start_Process(4)
+
+    self.adw.Set_FPar(46, tools.timeToADwin(pixeltime))
+
+    # set-up actuator initial param script
+    # MoveTo usa un script que actualiza estos valores, podemos confiar
+    currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
+    currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
+    x_f = tools.convert(currentXposition, 'XtoU')
+    y_f = tools.convert(currentYposition, 'XtoU')
+
+    # set-up actuator initial params
+    self.adw.Set_FPar(40, x_f)
+    self.adw.Set_FPar(41, y_f)
+    
+
 
 
 if __name__ == '__main__':
@@ -213,11 +280,8 @@ if __name__ == '__main__':
         app = QtGui.QApplication([])
     else:
         app = QtGui.QApplication.instance()
-        
     #app.setStyle(QtGui.QStyleFactory.create('fusion'))
     app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
-
-    gui = Frontend()
 
     # initialize devices
     # port = tools.get_MiniLasEvoPort()
@@ -225,20 +289,33 @@ if __name__ == '__main__':
     print('MiniLasEvo diode laser port:', port)
     diodelaser = MiniLasEvo(port)
 
-    # if camera wasnt closed properly just keep using it without opening new one
-    try:
-        cam = ids_cam.IDS_U3()
-    except:
-        pass
-
     # andor = AndorSDK2.AndorSDK2Camera(fan_mode = "full") #Forma antigua
-    # andor = Andor.AndorSDK2Camera(fan_mode = "full") 
+    # andor = Andor.AndorSDK2Camera(fan_mode = "full")
 
     DEVICENUMBER = 0x1
     adw = ADwin.ADwin(DEVICENUMBER, 1)
     scan.setupDevice(adw)
 
-    worker = Backend(adw, cam, diodelaser)
+    from takyaq.info_types import CameraInfo
+    from takyaq.controllers import PIDController
+    camera_info = CameraInfo()
+    controller = PIDController()
+
+    with IDSWrapper() as camera, Stabilizer(camera, piezo, camera_info, controller) as stb:
+        gui = Frontend(camera, piezo, controller, camera_info, stb)
+
+        gui.setWindowTitle("Takyaq with PyQt frontend")
+        gui.show()
+        gui.raise_()
+        gui.activateWindow()
+
+        app.exec_()
+        app.quit()
+
+    takyaq.frontends.PyQt_Frontend()
+    gui = Frontend()
+
+    worker = Backend(adw, diodelaser)
 
     gui.make_connection(worker)
     worker.make_connection(gui)
@@ -265,11 +342,11 @@ if __name__ == '__main__':
 #    psfGUIThread.start()
     
     # focus thread
-    focusThread = QtCore.QThread()
-    worker.xyzWorker.moveToThread(focusThread)
-    worker.xyzWorker.viewtimer.moveToThread(focusThread)
-    worker.xyzWorker.viewtimer.timeout.connect(worker.xyzWorker.update)
-    focusThread.start()
+    # focusThread = QtCore.QThread()
+    # worker.xyzWorker.moveToThread(focusThread)
+    # worker.xyzWorker.viewtimer.moveToThread(focusThread)
+    # worker.xyzWorker.viewtimer.timeout.connect(worker.xyzWorker.update)
+    # focusThread.start()
     
     # focus GUI thread
 #    focusGUIThread = QtCore.QThread()
@@ -302,5 +379,8 @@ if __name__ == '__main__':
 #    worker.psfWorker.measTimer.timeout.connect(worker.psfWorker.measurement_loop)
 #    psfThread.start()
 
+    gui.show()
+    gui.raise_()
+    gui.activateWindow()
     gui.showMaximized()
     app.exec_()
