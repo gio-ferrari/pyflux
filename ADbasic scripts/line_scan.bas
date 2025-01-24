@@ -16,7 +16,7 @@
 
 ' last update:  
 ' 30.01.2020  JK  time variables as LONG --> changes of ADwin support guy
-
+' 2024-01-24  AZ  Trigger signal on each pixel
 'Parameters from 1 to 19 are used
 
 'function to do a line scan (+ one-step movement in slow axis)
@@ -102,47 +102,38 @@ EVENT:
   
   if (fpar_11 = 2) then fpar_71 = currenty
   if (fpar_11 = 6) then fpar_72 = currenty
-  
+
+  ' signal pixel start  
+  digout(PX_DIGOUT, 1)
   'wait for the given pixel time
-  
   px_time = data_2[i+1] - data_2[i]
-  
   fpar_9 = px_time
-  
   time0 = Read_Timer() 'initial time of the pixel event
-  
   DO 
     time1 = Read_Timer()
-    
   UNTIL (Abs(time1 - time0) > px_time)
+  ' stop signal pixel start. we can split the loop in two to signal a reasonable TTL
+  digout(PX_DIGOUT, 0)
 
-  'read the counter or analog input
-  
+  ' read the counter or analog input
   if (par_3 = 0) then
-    
     co1 = cnt_read(1) 'read counter
     data_1 = co1 - co1old 'calculate counts in the current pixel
     co1old = co1 'update co1old
-    
   endif
 
   if (par_3 = 1) then
-    
     signal = ADC(3) - ai_offset
     data_1 = signal
-
   endif
   
   INC(i) 'update element counter
   
   fpar_6 = Read_Timer() - time0 'measure real pixeltime
     
-  if (i >= par_1) then 
-    
+  if (i >= par_1) then   
     End
- 
   endif
-   
 
 FINISH:
   

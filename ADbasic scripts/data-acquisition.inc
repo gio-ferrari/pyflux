@@ -30,6 +30,9 @@
 #DEFINE ICOEFF 0.1
 #DEFINE DCOEFF 5
 
+
+#DEFINE PX_DIGOUT 25
+
 'counter-related macros
 
 Sub start_counters()
