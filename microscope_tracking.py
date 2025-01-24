@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Jun  1 14:18:19 2018
-
 @author: Florencia D. Choque based on microscope from PyFlux made by Luciano Masullo
-In the widget we have 3 main parts: the module TCSPC, the focus control (xyz_tracking) and the scan module.
-Also 2 modules run in the backend: minflux and psf, these were not modified, they belong to the older minflux control made by Luciano Masullo
+In the widget we have 3 main parts: the module TCSPC, the focus control (xyz_tracking)
+and the scan module.
+Also 2 modules run in the backend: minflux and psf
 """
-
+from tools import customLog  # NOQA Para inicializar el logging
 import numpy as np
 import time
 
