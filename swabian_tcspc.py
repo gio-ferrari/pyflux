@@ -68,9 +68,8 @@ class TCSPCFrontend(QtWidgets.QFrame):
     _pos_vline: pg.InfiniteLine = None
 
     def __init__(self, *args, **kwargs):
-        """No hace nada."""
+        """Conecta señales."""
         super().__init__(*args, **kwargs)
-
         # initial directory
         self.initialDir = r"C:\Data"
         # FIXME: for developing only
@@ -142,10 +141,9 @@ class TCSPCFrontend(QtWidgets.QFrame):
         try:
             root = Tk()
             root.withdraw()
-            psffile = filedialog.askopenfile(parent=root, title="Elegir PSF",
-                                             initialdir=self.initialDir,
-                                             filetypes=(("numpy", "*.npy"),),
-                                             mode="rb")
+            psffile = filedialog.askopenfile(
+                parent=root, title="Elegir PSF", initialdir=self.initialDir,
+                filetypes=(("numpy", "*.npy"),), mode="rb")
             root.destroy()
             if psffile:
                 try:
@@ -187,14 +185,15 @@ class TCSPCFrontend(QtWidgets.QFrame):
         _lgr.info("%s", metadata)
         self._config = metadata
 
-    @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
-    def get_data(self, delta_t: np.ndarray, binned: np.array, new_pos: np.array):
+    @pyqtSlot(np.ndarray, int, np.ndarray, np.ndarray)
+    def get_data(self, delta_t: np.ndarray, period_length: int, binned: np.array,
+                 new_pos: np.array):
         """Receive new data and graph."""
         try:
             counts, bins = np.histogram(delta_t, range=(0, self.period), bins=_N_BINS)
             self._hist_data[0] += counts
             # self.histPlot.setData(bins[0:-1], self._hist_data[0])
-            self._intensities[:, self._last_pos] = binned
+            self._intensities[:, self._last_pos] = binned / period_length * 1E12  # Hz
             # print(self._last_pos)
             must_update = (self._last_pos % 10 == 0)
             if must_update:
@@ -230,7 +229,6 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.histPlot.clear()
         for p in self.intplots:
             p.clear()
-        # self.tracePlot.addItem(self.trace_vline)
 
         self.posPlot.clear()
         self._init_data()
@@ -257,11 +255,6 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.measureButton = QtWidgets.QPushButton("Measure TTTR")
         self.stopButton = QtWidgets.QPushButton("Stop")
         # self.exportDataButton = QtWidgets.QPushButton("Export data")
-
-        # self.exportDataButton.clicked.connect(
-        #     lambda: self.get_data(
-        #         np.random.randint(0, 49999, 100),
-        #         np.random.randint(0, 100, size=4), np.random.random(2)))
 
         self.clearButton = QtWidgets.QPushButton("Clear data")
         # TCSPC parameters labels and edits
@@ -311,7 +304,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         except OSError:
             _lgr.info("Directory %s already exists", folder)
         else:
-            _lgr.info("Directory %s already exists", folder)
+            _lgr.info("Error creating directory %s", folder)
 
         self.folderLabel = QtWidgets.QLabel("Folder:")
         self.folderEdit = QtWidgets.QLineEdit(folder)
