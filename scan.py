@@ -1102,15 +1102,15 @@ class Frontend(QtGui.QFrame):
         scanThread.exit()
         super().closeEvent(*args, **kwargs)
         app.quit()
-        
-        
-      
+
+
+
 class Backend(QtCore.QObject):
-    
+
     paramSignal = pyqtSignal(dict)
     imageSignal = pyqtSignal(np.ndarray)
-    frameIsDone = pyqtSignal(bool, np.ndarray) 
-    frameIsDoneChechu = pyqtSignal(bool, np.ndarray, np.ndarray) 
+    frameIsDone = pyqtSignal(bool, np.ndarray, int, int)
+    frameIsDoneChechu = pyqtSignal(bool, np.ndarray, np.ndarray)
     ROIcenterSignal = pyqtSignal(np.ndarray)
     realPositionSignal = pyqtSignal(np.ndarray)
     auxFitSignal = pyqtSignal()
@@ -1118,7 +1118,7 @@ class Backend(QtCore.QObject):
     shuttermodeSignal = pyqtSignal(int, bool)
     diodelaserEmissionSignal = pyqtSignal(bool)
     focuslockpositionSignal = pyqtSignal(float)
-    
+
     """
     Signals
     
@@ -1767,7 +1767,7 @@ class Backend(QtCore.QObject):
             self.reset_position()
             if self.acquisitionMode == 'frame':
                 self.liveview_stop()
-                self.frameIsDone.emit(True, self.image)
+                self.frameIsDone.emit(True, self.image, self.NofAuxPixels, self.NofPixels)
             if self.acquisitionMode == 'chechu':
                 self.liveview_stop()
                 self.frameIsDoneChechu.emit(True, self.imageF_copy, self.imageB_copy)

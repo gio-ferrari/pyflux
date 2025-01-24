@@ -16,12 +16,14 @@ import pyqtgraph as _pg
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QGroupBox
 from tkinter import Tk, filedialog
+from swabian.backend import TCSPC_backend
+
 
 import tools.tools as tools
 import tools.PSF_tools as psft
 import imageio as iio
 from tools import customLog  # NOQA
-
+import json as _json
 import logging as _lgn
 
 _lgr = _lgn.getLogger(__name__)
@@ -421,25 +423,22 @@ class Backend(QtCore.QObject):
     saveConfigSignal = pyqtSignal(str)
     """
     Signals
-    
+
     xySignal: 
         Se emite en función loop en [psf]
         Va a función single_xy_correction en [xyz_focus_lock]
-        
+
     xyStopSignal:
         Se emite en start en [psf]
         Va a get_stop_signal en [xyz_focus_lock]
-    
-    moveToInitialSignal: 
+
+    moveToInitialSignal:
         Se emite en start en [psf]
-        Va a la función get_moveTo_initial_signal en scan.py. 
+        Va a la función get_moveTo_initial_signal en scan.py.
         Esta función toma coordenadas de posición self.initialPos, los desempaqueta
         y pasa los parámetros a través de la función moveTo a la función set_moveTo_param, que pasa los parámetros a la adwin.
         NOTA: self.initialPos sólo se modifica cuando se usan los botones de movimiento relativo,
         en get_scan_signal, y cuando hay una modificacion desde el teclado.
-    
-
-        
     """
 
     def __init__(self, *args, **kwargs):
@@ -449,6 +448,8 @@ class Backend(QtCore.QObject):
         self.xyIsDone = False
         # self.zIsDone = False
         self.scanIsDone = False
+        self.n_aux_pixels = 0
+        self.n_line_pixels = 0
         self.measTimer = QtCore.QTimer()
         self.measTimer.timeout.connect(self.loop)
 
@@ -482,11 +483,16 @@ class Backend(QtCore.QObject):
             self.xy_flag = True
             self.z_flag = True
             self.scan_flag = True
+            TCSPC_backend.start_measure(self.filename)
         except Exception as e:
             print("Excepcion en start:", e)
         self.measTimer.start(0)
 
     def stop(self):
+        try:
+            TCSPC_backend.stop_measure()
+        except Exception as e:
+            _lgr.error("Error %s stopping measure from PSF: %s", type(e), e)
         self.measTimer.stop()
         self.progressSignal.emit(100, np.array([]), -1)  # changed from 0
         self.shutterSignal.emit(8, False)
@@ -558,6 +564,7 @@ class Backend(QtCore.QObject):
 
     def export_data(self):
         fname = self.filename
+        # FIXME
         filename = tools.getUniqueName(fname)
 
         self.data = np.array(self.data, dtype=np.float32)
@@ -573,7 +580,11 @@ class Backend(QtCore.QObject):
             # o la suma en axis=0 u otro reshape
             to_save = np.mean(self.data.reshape((4, -1, npx, npx)), axis=1)
             _lgr.debug("data shape: %s", to_save.shape)
-            np.save(filename + ".npy", to_save)
+            np.save(filename + '.npy', to_save)
+            _json.dump(
+                {'n_aux_px': self.n_aux_pixels, 'n_line_px': self.n_line_pixels},
+                filename + '_pix_data.json',
+            )
         except Exception as e:
             _lgr.error("Excepción %s (%s) grabando el arreglo", type(e), e)
 
@@ -584,6 +595,7 @@ class Backend(QtCore.QObject):
         self.k = params['nDonuts']
 
         today = str(date.today()).replace('-', '')
+        # FIXME: filename
         self.filename = tools.getUniqueName(params['filename'] + '_' + today)
 
         self.totalFrameNum = self.nFrames * self.k
@@ -609,13 +621,15 @@ class Backend(QtCore.QObject):
     #     self.zIsDone = True
     #     self.target_z = z
 
-    @pyqtSlot(bool, np.ndarray)
-    def get_scan_is_done(self, val, image):
+    @pyqtSlot(bool, np.ndarray, int, int)
+    def get_scan_is_done(self, val, image, n_aux_pixels, n_line_pixels):
         """
         Connection: [scan] scanIsDone
         """
         self.scanIsDone = True
         self.currentFrame = image
+        self.n_aux_pixels = n_aux_pixels
+        self.n_line_pixels = n_line_pixels
 
     @pyqtSlot(dict)
     def get_scan_parameters(self, params):
