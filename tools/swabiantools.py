@@ -180,7 +180,7 @@ def set_channels_delay(
             settings,
         ]
     [tagger.setDelayHardware(c, d) for c, d in settings]
-    print([tagger.getDelayHardware(c) for c, _ in settings])
+    print("SWABIAN HW time delays:", [tagger.getDelayHardware(c) for c, _ in settings])
 
 
 def set_channel_level(
@@ -223,7 +223,7 @@ def time_tags2delays(timestamps: _np.ndarray, channels: _np.ndarray,
         elif chan == APD_channel:
             last_timestamp = ts
         else:
-            print("unknown channel")
+            # print("unknown channel")
             n_errors += 1
     if n_errors:
         print("errores = ", n_errors)

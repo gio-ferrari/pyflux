@@ -28,7 +28,7 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
     _last_time: int = 0
 
     def __init__(self, tagger, APD_channel, laser_channel, period, max_events,
-                 delays, callback):
+                 delays, callback, other_channels: int = None):
         super().__init__(tagger)
         self._APD_channel = APD_channel
         self._laser_channel = laser_channel
@@ -47,6 +47,8 @@ class MinfluxMeasurement(TimeTagger.CustomMeasurement):
         # for the respective channels.
         self.register_channel(channel=APD_channel)
         self.register_channel(channel=laser_channel)
+        if other_channels is not None:
+            self.register_channel(channel=other_channels)
 
         self.clear_impl()
 

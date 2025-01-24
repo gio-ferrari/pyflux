@@ -102,6 +102,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         """Procesa inicio de medida."""
         _lgr.info("Iniciando medida con archivo %s", filename)
         self._current_filename = filename
+        self.filenameEdit.setText(filename)
         self.clear_data()
         self._init_data()
         self.measureButton.setEnabled(False)
@@ -252,10 +253,10 @@ class TCSPCFrontend(QtWidgets.QFrame):
         self.fileWidget.setFixedHeight(180)
         self.fileWidget.setFixedWidth(250)
         # Buttons
-        self.prepareButton = QtWidgets.QPushButton("Prepare TTTR")
+        # self.prepareButton = QtWidgets.QPushButton("Prepare TTTR")
         self.measureButton = QtWidgets.QPushButton("Measure TTTR")
         self.stopButton = QtWidgets.QPushButton("Stop")
-        self.exportDataButton = QtWidgets.QPushButton("Export data")
+        # self.exportDataButton = QtWidgets.QPushButton("Export data")
 
         # self.exportDataButton.clicked.connect(
         #     lambda: self.get_data(
@@ -349,10 +350,10 @@ class TCSPCFrontend(QtWidgets.QFrame):
         # subgrid.addWidget(self.channel1Label, 9, 0)
         # subgrid.addWidget(self.channel1Value, 9, 1)
 
-        subgrid.addWidget(self.exportDataButton, 16, 1)
+        # subgrid.addWidget(self.exportDataButton, 16, 1)
 
         subgrid.addWidget(self.measureButton, 17, 0)
-        subgrid.addWidget(self.prepareButton, 18, 0)
+        # subgrid.addWidget(self.prepareButton, 18, 0)
         subgrid.addWidget(self.stopButton, 17, 1)
         subgrid.addWidget(self.clearButton, 18, 1)
 

@@ -8,11 +8,11 @@ Created on Thu Sep 19 11:01:37 2024
 
 from configparser import ConfigParser as _ConfigParser
 from dataclasses import dataclass as _dataclass, field as _field
-from collections import OrderedDict as _OrderedDict
 from typing import List
 
 
 _CONFIG_FILENAME = "tcspc.ini"
+
 
 @_dataclass
 class APDInfo:
