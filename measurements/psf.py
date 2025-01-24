@@ -557,10 +557,10 @@ class Backend(QtCore.QObject):
                     self.progressSignal.emit(completed, self.data[self.i, :, :], self.i)
                     _lgr.debug('PSF %s of %s', self.i+1, self.totalFrameNum)
 
-                    if self.i < self.totalFrameNum-1:
-                        self.i += 1
-                    else:
+                    if (self.i >= self.totalFrameNum-1) or self.alignMode:
                         self.stop()  # Incluye un progressSignal
+                    else:
+                        self.i += 1
 
     def export_data(self):
         fname = self.filename
