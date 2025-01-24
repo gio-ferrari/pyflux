@@ -1669,11 +1669,8 @@ class Backend(QtCore.QObject):
         wait_time = line_time * 1.05 # TO DO: optimize this, it should work with 1.00, or maybe even less?
                                      # it should even work without the time.sleep()
 
-        time.sleep(wait_time/1000) # in s
-
+        time.sleep(wait_time/1000)  # in s
         line_data = self.adw.GetData_Long(1, 0, self.tot_pixels)
-
-        # line_data[0] = 0  # TO DO: fix the high count error on first element
 
         return line_data
 

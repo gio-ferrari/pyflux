@@ -103,7 +103,7 @@ class __TCSPCBackend(_QObject):
     _measurementGroup = None
     sgnl_measure_init = _pyqtSignal(str)
     sgnl_measure_end = _pyqtSignal()
-    sgnl_new_data = _pyqtSignal(object, object, object)
+    sgnl_new_data = _pyqtSignal(object, int, object, object)
     _NOPLACE = np.full((2,), np.nan)
 
     def __init__(self,
@@ -120,7 +120,7 @@ class __TCSPCBackend(_QObject):
 
     def start_measure(self,
                       filename: str,
-                      acq_time_s: _Union[float, None] = None, 
+                      acq_time_s: _Union[float, None] = None,
                       PSF: _Union[np.ndarray, None] = None,
                       PSF_info: _Union[PSFMetadata, None] = None) -> bool:
         """Start a measurement.
@@ -165,7 +165,7 @@ class __TCSPCBackend(_QObject):
         else:
             self._measurementGroup.start()
 
-    def report(self, delta_t: np.ndarray, bins: np.ndarray, pos: tuple):
+    def report(self, delta_t: np.ndarray, period_length: int, bins: np.ndarray, pos: tuple):
         """Receive data from Swabian driver and report."""
         if self._locator:
             try:
@@ -175,7 +175,7 @@ class __TCSPCBackend(_QObject):
                 self.stop_measure()
         else:
             new_pos = self._NOPLACE
-        self.sgnl_new_data.emit(delta_t, bins, new_pos)
+        self.sgnl_new_data.emit(delta_t, period_length, bins, new_pos)
 
     def stop_measure(self) -> bool:
         """Stop measure.
