@@ -7,8 +7,9 @@ TCSPC con tracking.
 
 import numpy as np
 import atexit as _atexit
-import tools.filenames as fntools
+# import tools.filenames as fntools
 import logging as _lgn
+import pathlib as _plib
 
 from PyQt5.QtCore import pyqtSignal as _pyqtSignal, QObject as _QObject
 import TimeTagger as _TimeTagger
@@ -21,12 +22,42 @@ import configparser
 from dataclasses import dataclass as _dataclass
 
 from drivers.minflux_measurement import MinfluxMeasurement
+from datetime import datetime
 
 _lgr = _lgn.getLogger(__name__)
 _lgn.basicConfig(level=_lgn.DEBUG)
 
 
 _MAX_EVENTS = 131072
+
+
+def change_stem(path: _plib.Path, new_stem: str):
+    """Trucho.
+
+    Parche para python<3.9
+    """
+    return path.parent.joinpath(new_stem + ''.join(path.suffixes))
+
+
+def make_unique_name(filename: str, append_date: bool = False):
+    """Ensure that a filename does not exist."""
+    base_path = _plib.Path(filename)
+    original_stem = base_path.stem
+    if append_date:
+        now = datetime.now()
+        extra = ('_' + now.date().isoformat().replace('-', '') + '-' +
+                 now.time().isoformat().replace(':', '').split('.')[0] + '_')
+        original_stem = base_path.stem + extra
+        # base_path = base_path.with_stem(original_stem)
+        base_path = change_stem(base_path, original_stem)
+    n = 0
+    final_name = _plib.Path(base_path)
+    while final_name.exists():
+        new_stem = original_stem + f"({n})"
+        # final_name = base_path.with_stem(new_stem)
+        final_name = change_stem(base_path, new_stem)
+        n += 1
+    return str(final_name)
 
 
 @_dataclass
@@ -114,7 +145,7 @@ class __TCSPCBackend(_QObject):
             self._locator = None
         # FIXME
         self.fname = filename
-        self.currentfname = fntools.getUniqueName(self.fname)
+        self.currentfname = make_unique_name(self.fname, append_date=True)
         self._measurementGroup = _TimeTagger.SynchronizedMeasurements(self._tagger)
         self._TCSPC_measurement = MinfluxMeasurement(
             self._measurementGroup.getTagger(),

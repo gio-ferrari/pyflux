@@ -26,7 +26,11 @@ class Frontend(QtGui.QFrame):
         super().__init__(*args, **kwargs)
         self.setup_gui()
 
-    def emit_filename(self):  
+    def emit_filename(self):
+        """Emit filename.
+
+        Es llamado por el front al abrir la ventana
+        """
         filename = os.path.join(self.folderEdit.text(),
                                 self.filenameEdit.text())
         today = str(date.today()).replace('-', '')
@@ -204,16 +208,12 @@ class Backend(QtCore.QObject):
         if self.measType == 'Predefined positions':
             if self.patternType == 'Row':
                 self.pattern = np.array([[0, -l], [0, 0], [0, l]])
-                print('ROW')
             if self.patternType == 'Square':
                 self.pattern = np.array([[l/2, l/2], [l/2, -l/2],
                                         [-l/2, -l/2], [-l/2, l/2]])
-                print('SQUARE')
             if self.patternType == 'Triangle':
                 self.pattern = np.array([[0, (2/3)*h], [l/2, -(1/3)*h],
                                         [-l/2, -(1/3)*h]])
-                print('TRIANGLE')
-            # self.r = self.pattern  # + self.r0
             self.n = np.shape(self.pattern)[0]
         else:
             self.pattern = np.array((0, 0,))
