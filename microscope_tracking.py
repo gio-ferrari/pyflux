@@ -11,12 +11,11 @@ import numpy as np
 import time
 
 from pyqtgraph.Qt import QtCore, QtGui
-from pyqtgraph.dockarea import Dock, DockArea
 import qdarkstyle
 
 from drivers.minilasevo import MiniLasEvo
 
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QDockWidget
 # from tkinter import Tk, filedialog
 
@@ -73,7 +72,7 @@ class Frontend(QtGui.QMainWindow):
         self.scanWidget = scan.Frontend()
         scanDock = QDockWidget('Confocal scan', self)
         scanDock.setWidget(self.scanWidget)
-        scanDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar | 
+        scanDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar |
                              QDockWidget.DockWidgetFloatable |
                              QDockWidget.DockWidgetClosable)
         scanDock.setAllowedAreas(Qt.LeftDockWidgetArea)
@@ -93,7 +92,7 @@ class Frontend(QtGui.QMainWindow):
         # self.andorWidget = widefield_Andor.Frontend()
         # andorDock = QDockWidget('Widefield Andor', self)
         # andorDock.setWidget(self.andorWidget)
-        # andorDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar | 
+        # andorDock.setFeatures(QDockWidget.DockWidgetVerticalTitleBar |
         #                          QDockWidget.DockWidgetFloatable |
         #                          QDockWidget.DockWidgetClosable)
         # andorDock.setAllowedAreas(Qt.RightDockWidgetArea)
@@ -117,7 +116,6 @@ class Frontend(QtGui.QMainWindow):
         self.move(1, 1)
 
     def make_connection(self, backend):
-        # backend.xyzWorker.make_connection(self.focusWidget)
         backend.scanWorker.make_connection(self.scanWidget)
         # backend.andorWorker.make_connection(self.andorWidget)
         backend.minfluxWorker.make_connection(self.minfluxWidget)
@@ -133,7 +131,6 @@ class Frontend(QtGui.QMainWindow):
     def closeEvent(self, *args, **kwargs):
         self.closeSignal.emit()
         time.sleep(1)
-        # focusThread.exit()
         scanThread.exit()
         minfluxThread.exit()
         self.tcspcWidget.close()
@@ -178,10 +175,10 @@ class Backend(QtCore.QObject):
         self.psfWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
 
         self.scanWorker.frameIsDone.connect(self.psfWorker.get_scan_is_done)
-        self.xyzWorker.xyIsDone.connect(self.psfWorker.get_xy_is_done)
+        # FIXME: REPLACE THIS SIGNAL
+        # self.xyzWorker.xyIsDone.connect(self.psfWorker.get_xy_is_done)
 
     def make_connection(self, frontend):
-        # frontend.focusWidget.make_connection(self.xyzWorker)
         frontend.scanWidget.make_connection(self.scanWorker)
 
         # frontend.andorWidget.make_connection(self.andorWorker)
@@ -194,14 +191,14 @@ class Backend(QtCore.QObject):
         frontend.scanWidget.paramSignal.connect(self.psfWorker.get_scan_parameters)
         # TO DO: write this in a cleaner way, i. e. not in this section, not using frontend
 
-        self.scanWorker.focuslockpositionSignal.connect(self.xyzWorker.get_focuslockposition) #Signal & Slot connection Checked FC
-        self.xyzWorker.focuslockpositionSignal.connect(self.scanWorker.get_focuslockposition) #Signal & Slot connection Checked FC
-        #FC NOTE: Both scan & focus emit the same signal focuslockpositionSignal and both have the same function get_focuslockposition (but though they have the same name they do not do the same)
+        # FIXME: REPLACE THIS SIGNAL
+        self.scanWorker.focuslockpositionSignal.connect(self.xyzWorker.get_focuslockposition)
+        self.xyzWorker.focuslockpositionSignal.connect(self.scanWorker.get_focuslockposition)
+
         frontend.closeSignal.connect(self.stop)
 
     def stop(self):
         self.scanWorker.stop()
-        # self.xyzWorker.stop()
         # self.andorWorker.stop()
 
 
@@ -225,62 +222,60 @@ class PiezoActuatorWrapper:
     _FPAR_X = 40
     _FPAR_Y = 41
     _FPAR_Z = 32
+    _PROCESS_Z = 3
+    _PROCESS_XY = 4
 
     def __init__(self, adw: ADwin.ADwin):
         self._adw = adw
 
     def get_position(self) -> tuple[float, float, float]:
         """Return (x, y, z) position of the piezo in nanometers."""
-        ...
+        return [tools.convert(self.adw.Get_FPar(p), 'UtoX')*1E3 for
+                p in (70, 71, 72)]
 
-    def set_position(self, x: float, y: float, z: float):
-        """Move to position x, y, z, specified in nanometers."""
+    def set_position_xy(self, x: float, y: float):
+        """Move to position xy specified in nanometers."""
         x_f = tools.convert(x / 1E3, 'XtoU')
         y_f = tools.convert(y / 1E3, 'XtoU')
-        z_f = tools.convert(z / 1E3, 'XtoU')
-
         self.adw.Set_FPar(self._FPAR_X, x_f)
         self.adw.Set_FPar(self._FPAR_Y, y_f)
+
+    def set_position_z(self, z: float):
+        """Move to position z specified in nanometers."""
+        z_f = tools.convert(z / 1E3, 'XtoU')
         self.adw.Set_FPar(self._FPAR_Z, z_f)
 
-    def init(self):
-        """Perform initialization that must be performed on the running thread."""
-        ...
+    def init_cb(self, tipo: takyaq.info_types.StabilizationType):
+        pixeltime = 1000
+        if tipo == 0:
+            cur_x, cur_y, _ = self.get_position()
+            x_f = tools.convert(cur_x, 'XtoU')
+            y_f = tools.convert(cur_y, 'XtoU')
+            # set-up actuator initial params
+            self.adw.Set_FPar(40, x_f)
+            self.adw.Set_FPar(41, y_f)
+            self.adw.Set_FPar(46, tools.timeToADwin(pixeltime))
+            self.adw.Start_Process(self._PROCESS_XY)
+        elif tipo == 1:
+            self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))
+            z_f = tools.convert(self.get_position()[2], 'XtoU')
+            self.adw.Set_FPar(self._FPAR_Z, z_f)
+            self.adw.Start_Process(self._PROCESS_Z)
+        return True
 
-    _FPAR_X
-    self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))
-
-    # set-up actuator initial param script
-    # MoveTo usa un script que actualiza estos valores, podemos confiar
-    currentZposition = tools.convert(self.adw.Get_FPar(72), 'UtoX')
-    z_f = tools.convert(currentZposition, 'XtoU')
-
-    self.set_actuator_param_xy()
-    self.adw.Start_Process(4)
-
-    self.adw.Set_FPar(46, tools.timeToADwin(pixeltime))
-
-    # set-up actuator initial param script
-    # MoveTo usa un script que actualiza estos valores, podemos confiar
-    currentXposition = tools.convert(self.adw.Get_FPar(70), 'UtoX')
-    currentYposition = tools.convert(self.adw.Get_FPar(71), 'UtoX')
-    x_f = tools.convert(currentXposition, 'XtoU')
-    y_f = tools.convert(currentYposition, 'XtoU')
-
-    # set-up actuator initial params
-    self.adw.Set_FPar(40, x_f)
-    self.adw.Set_FPar(41, y_f)
-    
-
+    def end_cb(self, tipo: takyaq.info_types.StabilizationType):
+        if tipo == 0:
+            self.adw.Stop_Process(self._PROCESS_XY)
+        elif tipo == 1:
+            self.adw.Stop_Process(self._PROCESS_Z)
+        return True
 
 
 if __name__ == '__main__':
-
     if not QtGui.QApplication.instance():
         app = QtGui.QApplication([])
     else:
         app = QtGui.QApplication.instance()
-    #app.setStyle(QtGui.QStyleFactory.create('fusion'))
     app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
 
     # initialize devices
@@ -296,91 +291,53 @@ if __name__ == '__main__':
     adw = ADwin.ADwin(DEVICENUMBER, 1)
     scan.setupDevice(adw)
 
-    from takyaq.info_types import CameraInfo
-    from takyaq.controllers import PIDController
-    camera_info = CameraInfo()
-    controller = PIDController()
+    camera_info = takyaq.info_types.CameraInfo()
+    controller = takyaq.PIDController()
+    piezo = PiezoActuatorWrapper(adw)
 
-    with IDSWrapper() as camera, Stabilizer(camera, piezo, camera_info, controller) as stb:
-        gui = Frontend(camera, piezo, controller, camera_info, stb)
+    with IDSWrapper() as camera, takyaq.Stabilizer(camera, piezo, camera_info, controller) as stb:
+        stabilization_gui = takyaq.frontends.PyQt_Frontend(camera, piezo, controller, camera_info, stb)
+        stabilization_gui.setWindowTitle("Takyaq with PyQt frontend")
+        # stabilization_gui.show()
+        # stabilization_gui.raise_()
+        # stabilization_gui.activateWindow()
 
-        gui.setWindowTitle("Takyaq with PyQt frontend")
+        gui = Frontend(stabilization_gui)
+        worker = Backend(adw, diodelaser)
+        gui.make_connection(worker)
+        worker.make_connection(gui)
+
+        # initial parameters
+        gui.scanWidget.emit_param()
+        worker.scanWorker.emit_param()
+
+        gui.minfluxWidget.emit_param()
+        # gui.minfluxWidget.emit_param_to_backend()
+        # worker.minfluxWorker.emit_param_to_frontend()
+
+        gui.psfWidget.emit_param()
+
+        # scan thread
+        scanThread = QtCore.QThread()
+        worker.scanWorker.moveToThread(scanThread)
+        worker.scanWorker.viewtimer.moveToThread(scanThread)
+        worker.scanWorker.viewtimer.timeout.connect(worker.scanWorker.update_view)
+        scanThread.start()
+
+        # Andor widefield thread
+        # andorThread = QtCore.QThread()
+        # worker.andorWorker.moveToThread(andorThread)
+        # worker.andorWorker.viewtimer.moveToThread(andorThread)
+        # worker.andorWorker.viewtimer.timeout.connect(worker.andorWorker.update_view)
+        # andorThread.start()
+
+        # minflux worker thread
+        minfluxThread = QtCore.QThread()
+        worker.minfluxWorker.moveToThread(minfluxThread)
+        minfluxThread.start()
+
         gui.show()
         gui.raise_()
         gui.activateWindow()
-
+        gui.showMaximized()
         app.exec_()
-        app.quit()
-
-    takyaq.frontends.PyQt_Frontend()
-    gui = Frontend()
-
-    worker = Backend(adw, diodelaser)
-
-    gui.make_connection(worker)
-    worker.make_connection(gui)
-
-    # initial parameters
-    gui.scanWidget.emit_param()
-    worker.scanWorker.emit_param()
-
-    gui.minfluxWidget.emit_param()
-#    gui.minfluxWidget.emit_param_to_backend()
-#    worker.minfluxWorker.emit_param_to_frontend()
-
-    gui.psfWidget.emit_param()
-
-#    # GUI thread
-#    guiThread = QtCore.QThread()
-#    gui.moveToThread(guiThread)
-#    guiThread.start()
-    
-    # psf thread
-#    psfGUIThread = QtCore.QThread()
-#    gui.psfWidget.moveToThread(psfGUIThread)
-#    
-#    psfGUIThread.start()
-    
-    # focus thread
-    # focusThread = QtCore.QThread()
-    # worker.xyzWorker.moveToThread(focusThread)
-    # worker.xyzWorker.viewtimer.moveToThread(focusThread)
-    # worker.xyzWorker.viewtimer.timeout.connect(worker.xyzWorker.update)
-    # focusThread.start()
-    
-    # focus GUI thread
-#    focusGUIThread = QtCore.QThread()
-#    gui.focusWidget.moveToThread(focusGUIThread)
-#    focusGUIThread.start()
-
-    # scan thread
-    scanThread = QtCore.QThread()
-    worker.scanWorker.moveToThread(scanThread)
-    worker.scanWorker.viewtimer.moveToThread(scanThread)
-    worker.scanWorker.viewtimer.timeout.connect(worker.scanWorker.update_view)
-    scanThread.start()
-    
-    # Andor widefield thread
-    # andorThread = QtCore.QThread()
-    # worker.andorWorker.moveToThread(andorThread)
-    # worker.andorWorker.viewtimer.moveToThread(andorThread)
-    # worker.andorWorker.viewtimer.timeout.connect(worker.andorWorker.update_view)
-    # andorThread.start()
-
-    # minflux worker thread
-    minfluxThread = QtCore.QThread()
-    worker.minfluxWorker.moveToThread(minfluxThread)
-    minfluxThread.start()
-
-    # psf worker thread
-#    psfThread = QtCore.QThread()
-#    worker.psfWorker.moveToThread(psfThread)
-#    worker.psfWorker.measTimer.moveToThread(psfThread)
-#    worker.psfWorker.measTimer.timeout.connect(worker.psfWorker.measurement_loop)
-#    psfThread.start()
-
-    gui.show()
-    gui.raise_()
-    gui.activateWindow()
-    gui.showMaximized()
-    app.exec_()
