@@ -168,7 +168,7 @@ class Backend(QtCore.QObject):
     tcspcStartSignal = pyqtSignal(str)
 
     xyzEndSignal = pyqtSignal(str)
-    moveToSignal = pyqtSignal(np.ndarray)
+    # moveToSignal = pyqtSignal(np.ndarray)
 
     # paramSignal = pyqtSignal(np.ndarray, np.ndarray, int)
     shutterSignal = pyqtSignal(int, bool)
@@ -235,7 +235,8 @@ class Backend(QtCore.QObject):
             print(datetime.now(), '[minflux] measurement ended')
         else:
             print("Moviendo para ", self.pattern[self.i])
-            self.moveToSignal.emit(self.pattern[self.i])
+            # self.moveToSignal.emit(self.pattern[self.i])
+            self._estabilizador.shift_reference(*self.pattern[self.i], 0.)
             self.i += 1
 
     def stop(self):
@@ -243,7 +244,8 @@ class Backend(QtCore.QObject):
         self.i = 1E8  # Flag para que el loop no ejecute si quedo una señal en cola
         TCSPC_backend.stop_measure()
         self.shutterSignal.emit(8, False)
-        self.moveToSignal.emit(np.zeros((2,)))
+        # self.moveToSignal.emit(np.zeros((2,)))
+        self._estabilizador.shift_reference(0., 0., 0.)
 
     @pyqtSlot()
     def get_tcspc_done_signal(self):

@@ -1117,8 +1117,8 @@ class Backend(QtCore.QObject):
     auxMoveSignal = pyqtSignal()
     shuttermodeSignal = pyqtSignal(int, bool)
     diodelaserEmissionSignal = pyqtSignal(bool)
-    focuslockpositionSignal = pyqtSignal(float)
-    
+    # focuslockpositionSignal = pyqtSignal(float)
+
     """
     Signals
     
@@ -1140,7 +1140,7 @@ class Backend(QtCore.QObject):
         
     """
     
-    def __init__(self, adwin, diodelaser, *args, **kwargs):
+    def __init__(self, adwin, diodelaser, estabilizador, *args, **kwargs):
         
         super().__init__(*args, **kwargs)
         
@@ -1149,7 +1149,8 @@ class Backend(QtCore.QObject):
         self.saveScanData = False
         self.feedback_active = False
         self.flipper_state = False
-        self.laserstate = False        
+        self.laserstate = False
+        self.estabilizador = estabilizador
 
         # full_scan: True --> full scan including aux parts
         # full_scan: False --> forward part of the scan
@@ -1595,35 +1596,34 @@ class Backend(QtCore.QObject):
         self.update_device_param()
         self.emit_param()
 
-    @pyqtSlot(float)
-    def get_focuslockposition(self, position):
-        self.focuslockpos = position
-        
+    # @pyqtSlot(float)
+    # def get_focuslockposition(self, position):
+    #     self.focuslockpos = position
+
     @pyqtSlot(str)
     def saveConfigfile(self, fname):
-        
-        self.focuslockpositionSignal.emit(-9999)
-        self.focuslockpos = -0.0
-        time.sleep(0.5)
+        # self.focuslockpositionSignal.emit(-9999)
+        # self.focuslockpos = -0.0
+        # time.sleep(0.5)
+        self.focuslockpos = self.estabilizador.get_z_lock()
         now = time.strftime("%c")
         tools.saveConfig(self, now, 'test', filename=fname)
         print('[scan] saved configfile', fname)
 
-        
     def save_current_frame(self):
-      
         self.save_FB = False
-        
         # experiment parameters
 
         # get z-position of focus lock
-        # in standalone mode it justs saves -0.0 as focus lock position 
-        # sleeps 0.5s to catch return signal from focus.py 
+        # in standalone mode it justs saves -0.0 as focus lock position
+        # sleeps 0.5s to catch return signal from focus.py
         #TODO: find better solution than sleeping
-        self.focuslockpos = -0.0
-        self.focuslockpositionSignal.emit(0)
-        time.sleep(0.5)
-        
+        # self.focuslockpos = -0.0
+        # self.focuslockpositionSignal.emit(0)
+        # time.sleep(0.5)
+        # PATCH HORRIBLE
+        self.focuslockpos = self.estabilizador.get_z_lock()
+        self.focuslockpos[0:2] = self.estabilizador.get_z_position()
         name = tools.getUniqueName(self.filename)
         now = time.strftime("%c")
         tools.saveConfig(self, now, name)

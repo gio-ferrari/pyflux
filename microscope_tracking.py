@@ -145,37 +145,45 @@ class Backend(QtCore.QObject):
     xyzEndSignal = pyqtSignal(str)
     xyMoveAndLockSignal = pyqtSignal(np.ndarray)
 
-    def __init__(self, adw, diodelaser, *args, **kwargs):
+    def __init__(self, adw, diodelaser, estabilizador, *args, **kwargs):
 
         super().__init__(*args, **kwargs)
 
-        self.scanWorker = scan.Backend(adw, diodelaser)
+        self.scanWorker = scan.Backend(adw, diodelaser, estabilizador)
         # self.andorWorker = widefield_Andor.Backend(andor, adw) #Por ahora le mando adw para pensar el desplzamiento de la platina
         self.minfluxWorker = minflux.Backend()
         self.psfWorker = psf.Backend()
 
     def setup_minflux_connections(self):
-        self.minfluxWorker.moveToSignal.connect(self.xyzWorker.get_move_signal)
+        # FIXME: chequear esta senal   **** DONE!
+        # self.minfluxWorker.moveToSignal.connect(self.xyzWorker.get_move_signal)
         self.minfluxWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
-        self.minfluxWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
+        # FIXME: chequear esta senal ***DONE!
+        # Esperamos que lo maneje SCAN!
+        # self.minfluxWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
         self.minfluxWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
+        # FIXME: chequear esta senal -> deber'ia hacer un save
         self.minfluxWorker.xyzEndSignal.connect(self.xyzWorker.get_end_measurement_signal)
-        # TODO: check before use
 
     def setup_psf_connections(self):
         self.psfWorker.scanSignal.connect(self.scanWorker.get_scan_signal) #Esta es la conexion que permite cambiar el punto de inicio del escaneo
-        self.psfWorker.xySignal.connect(self.xyzWorker.single_xy_correction)
-        self.psfWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
+        # FIXME: chequear esta senal
+        # self.psfWorker.xySignal.connect(self.xyzWorker.single_xy_correction)
+        # FIXME: chequear esta senal ***DONE!
+        # self.psfWorker.xyStopSignal.connect(self.xyzWorker.get_stop_signal)
         self.psfWorker.moveToInitialSignal.connect(self.scanWorker.get_moveTo_initial_signal)
 
         self.psfWorker.shutterSignal.connect(self.scanWorker.shutter_handler)
-        self.psfWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
-
-        self.psfWorker.endSignal.connect(self.xyzWorker.get_end_measurement_signal)
+        # FIXME: chequear esta senal ***DONE!
+        # Espero que el scan maneje los shutters
+        # self.psfWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
+        # FIXME: chequear esta senal
+        # TODO: deberia meter un save
+        # self.psfWorker.endSignal.connect(self.xyzWorker.get_end_measurement_signal)
         self.psfWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
 
         self.scanWorker.frameIsDone.connect(self.psfWorker.get_scan_is_done)
-        # FIXME: REPLACE THIS SIGNAL
+        # FIXME: REPLACE THIS SIGNAL ***DONE!
         # self.xyzWorker.xyIsDone.connect(self.psfWorker.get_xy_is_done)
 
     def make_connection(self, frontend):
@@ -191,9 +199,9 @@ class Backend(QtCore.QObject):
         frontend.scanWidget.paramSignal.connect(self.psfWorker.get_scan_parameters)
         # TO DO: write this in a cleaner way, i. e. not in this section, not using frontend
 
-        # FIXME: REPLACE THIS SIGNAL
-        self.scanWorker.focuslockpositionSignal.connect(self.xyzWorker.get_focuslockposition)
-        self.xyzWorker.focuslockpositionSignal.connect(self.scanWorker.get_focuslockposition)
+        # FIXME: REPLACE THIS SIGNAL **** DONE!
+        # self.scanWorker.focuslockpositionSignal.connect(self.xyzWorker.get_focuslockposition)
+        # self.xyzWorker.focuslockpositionSignal.connect(self.scanWorker.get_focuslockposition)
 
         frontend.closeSignal.connect(self.stop)
 
@@ -218,6 +226,7 @@ class IDSWrapper:
 
 
 class PiezoActuatorWrapper:
+    """Wrapper para piezo adwin/takyaq."""
 
     _FPAR_X = 40
     _FPAR_Y = 41
@@ -230,7 +239,7 @@ class PiezoActuatorWrapper:
 
     def get_position(self) -> tuple[float, float, float]:
         """Return (x, y, z) position of the piezo in nanometers."""
-        return [tools.convert(self.adw.Get_FPar(p), 'UtoX')*1E3 for
+        return [tools.convert(self.adw.Get_FPar(p), 'UtoX') * 1E3 for
                 p in (70, 71, 72)]
 
     def set_position_xy(self, x: float, y: float):
@@ -303,7 +312,7 @@ if __name__ == '__main__':
         # stabilization_gui.activateWindow()
 
         gui = Frontend(stabilization_gui)
-        worker = Backend(adw, diodelaser)
+        worker = Backend(adw, diodelaser, stb)
         gui.make_connection(worker)
         worker.make_connection(gui)
 
