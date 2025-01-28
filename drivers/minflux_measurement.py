@@ -17,6 +17,7 @@ _PERIOD = int(50E3)
 
 _lgr = _lgn.getLogger(__name__)
 _lgn.basicConfig(level=_lgn.DEBUG)
+_lgn.getLogger('numba').setLevel(_lgn.WARNING)
 
 
 class MinfluxMeasurement(TimeTagger.CustomMeasurement):
