@@ -87,10 +87,9 @@ def _config_channels(tagger: _TimeTagger.TimeTagger, IInfo: _TCSPInstrumentInfo)
         _st.set_channel_level(tagger, APDi.channel, _st.SignalTypeEnum[APDi.signal_type])
     _st.set_channels_delay(tagger, settings)
     _st.set_channel_level(tagger, IInfo.laser_channel, _st.SignalTypeEnum[IInfo.laser_signal])
-    # FIXME: harcoded para time_gated
-    _st.set_channel_level(tagger, 2, _st.SignalTypeEnum.TTL)
-    tagger.setConditionalFilter(
-        trigger=[APDi.channel for APDi in IInfo.APD_info],
+    _st.set_channel_level(tagger, IInfo.tick_channel, _st.SignalTypeEnum.TTL)
+    tagger.setConditionalFilter(   # TODO: chequear si en necesario poner el tick_channel
+        trigger=[APDi.channel for APDi in IInfo.APD_info] + [IInfo.tick_channel],
         filtered=[IInfo.laser_channel]
     )
 
@@ -157,12 +156,14 @@ class __TCSPCBackend(_QObject):
             _MAX_EVENTS,
             self._shutter_delays,
             self.report,
-            # FIXME: harcoded para probar time_gated_EBP
-            other_channels=2,
+            other_channels=self.iinfo.tick_channel,
         )
         self._file_measurement = _TimeTagger.FileWriter(
             self._measurementGroup.getTagger(), self.currentfname + '.ttbin',
-            [self.iinfo.laser_channel] + [APDi.channel for APDi in self.iinfo.APD_info])
+            [self.iinfo.laser_channel] +
+            [APDi.channel for APDi in self.iinfo.APD_info] +
+            [self.iinfo.tick_channel]
+            )
         self.sgnl_measure_init.emit(self.currentfname)
         if acq_time_s:
             self._measurementGroup.startFor(int(acq_time_s * 1E12))

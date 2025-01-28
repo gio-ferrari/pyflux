@@ -29,6 +29,7 @@ class TCSPInstrumentInfo:
     laser_channel: int = 0
     laser_signal: str = 'NIM'
     period: int = 0  # in ps
+    tick_channel: int = 2
     shutter_delays: List[int] = _field(default_factory=list)
     APD_info: List[APDInfo] = _field(default_factory=list)
 
@@ -40,6 +41,7 @@ class TCSPInstrumentInfo:
             "laser_channel": self.laser_channel,
             "laser_signal": self.laser_signal,
             "period": self.period,
+            "tick_channel": self.tick_channel,
             "shutter_delays": ", ".join(str(_) for _ in self.shutter_delays),
         }
         for APDi in self.APD_info:
@@ -73,13 +75,14 @@ class TCSPInstrumentInfo:
             config.getint('General', 'laser_channel'),
             config.get('General', 'laser_signal'),
             config.getint('General', 'period'),
+            config.getint('General', 'tick_channel'),
             sh_delays,
             APD_info,
             )
 
 
 if __name__ == '__main__':
-    a = TCSPInstrumentInfo("dsfasdf", 1, 'TTL', 1266666, [123, 567, 234, 56],
+    a = TCSPInstrumentInfo("dsfasdf", 1, 'TTL', 1266666, 2, [123, 567, 234, 56],
                            [APDInfo(2, 300, 'NIM'), APDInfo(5, 12300, 'TTL')],)
     a.save("XXXXXXXXX.ini")
     b = TCSPInstrumentInfo.load("XXXXXXXXX.ini")
