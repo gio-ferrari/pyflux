@@ -578,13 +578,14 @@ class Backend(QtCore.QObject):
             npx = self.data.shape[-1]  # shady
             # esto suma de a 4 juntos, si cambiamos el escaneo hay que hacer
             # o la suma en axis=0 u otro reshape
-            to_save = np.mean(self.data.reshape((4, -1, npx, npx)), axis=1)
+            to_save = np.mean(self.data.reshape((self.k, -1, npx, npx)), axis=1)
             _lgr.debug("data shape: %s", to_save.shape)
             np.save(filename + '.npy', to_save)
-            _json.dump(
-                {'n_aux_px': self.n_aux_pixels, 'n_line_px': self.n_line_pixels},
-                filename + '_pix_data.json',
-            )
+            with open(filename + '_pix_data.json', 'wt') as fd:
+                _json.dump(
+                    {'n_aux_px': self.n_aux_pixels, 'n_line_px': self.n_line_pixels},
+                    fd, 
+                )
         except Exception as e:
             _lgr.error("Excepción %s (%s) grabando el arreglo", type(e), e)
 
