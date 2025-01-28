@@ -56,7 +56,8 @@ dim DATA_3[8192] as long
 dim DATA_4[8192] as long 
 
 INIT:
-
+  Rem Configure DIO00.DIO15 as inputs and DIO16.DIO31 as outputs
+  Conf_DIO(1100b)
   par_2 = 0 'flag meaning process started
   
   fifo_clear(1)
@@ -131,7 +132,7 @@ EVENT:
   
   fpar_6 = Read_Timer() - time0 'measure real pixeltime
     
-  if (i >= par_1) then   
+  if (i > par_1) then   
     End
   endif
 
