@@ -130,7 +130,9 @@ def saveConfig(main, dateandtime, name, filename=None):
         'Pixel size (µm)': main.pxSize,
         'Frame time (s)': main.frameTime,
         'Scan type': main.scantype,
-        'Power at BFP (µW)': main.powerBFP}
+        'Power at BFP (µW)': main.powerBFP,
+        'Number of auxiliary pixels': main.NofAuxPixels,
+        }
 
     with open(filename + '.txt', 'w') as configfile:
         config.write(configfile)

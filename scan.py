@@ -1110,7 +1110,6 @@ class Backend(QtCore.QObject):
     paramSignal = pyqtSignal(dict)
     imageSignal = pyqtSignal(np.ndarray)
     frameIsDone = pyqtSignal(bool, np.ndarray, int, int)
-    frameIsDoneChechu = pyqtSignal(bool, np.ndarray, np.ndarray)
     ROIcenterSignal = pyqtSignal(np.ndarray)
     realPositionSignal = pyqtSignal(np.ndarray)
     auxFitSignal = pyqtSignal()
@@ -1153,10 +1152,11 @@ class Backend(QtCore.QObject):
 
         # full_scan: True --> full scan including aux parts
         # full_scan: False --> forward part of the scan
-        
+
         self.full_scan = False
         self.FBaverage_scan = False
-        
+        self.time_gated_EBP = False
+
         # 5MHz is max count rate of the P. Elmer APD
         
         self.APDmaxCounts = 5*10**6   
@@ -1702,11 +1702,20 @@ class Backend(QtCore.QObject):
     def liveview_start(self):
         # self.plot_scan()
         self.reset_position()
+        if self.time_gated_EBP:
+            ...  # GIOVANNI
+            ...  # abrir todos los shutters
+            ...  # Iniciar captura swabian
         self.viewtimer.start(self.viewtimer_time)
 
     def liveview_stop(self):
         """Finish liveview scan."""
         self.viewtimer.stop()
+        if self.time_gated_EBP:
+            ...  # GIOVANNI
+            ...  # cerrar todos los shutters
+            ...  # terminar captura swabian
+            self.time_gated_EBP = False
         self.reset_position()
 
     def update_view(self):
@@ -1750,10 +1759,15 @@ class Backend(QtCore.QObject):
             self.image_to_save = self.image
             self.imageF_copy = self.imageF     # TO DO: clean up with fit signal to avoid the copy image
             self.imageB_copy = self.imageB
-    #        self.image_copy = self.image
+            # self.image_copy = self.image
+
+            # Podríamos siempre hacer que siempre tomemos la imagen completa y mandar
+            # al frontend sólo la parte que importa. De mientras...
+            if self.time_gated_EBP:
+                ...  # GIOVANNI
 
             self.imageSignal.emit(self.image)
-    #        print(datetime.now(), '[scan] Image emitted to frontend')
+            # print(datetime.now(), '[scan] Image emitted to frontend')
 
             self.i = self.i + 1
         else:
@@ -1765,14 +1779,11 @@ class Backend(QtCore.QObject):
             if self.acquisitionMode == 'frame':
                 self.liveview_stop()
                 self.frameIsDone.emit(True, self.image, self.NofAuxPixels, self.NofPixels)
-            if self.acquisitionMode == 'chechu':
-                self.liveview_stop()
-                self.frameIsDoneChechu.emit(True, self.imageF_copy, self.imageB_copy)
             self.update_device_param()
 
     @pyqtSlot(int, bool)
     def control_shutters(self, num, val):
-        
+
         if val is True:
                         
             tools.toggle_shutter(self.adw, num, True)
