@@ -37,6 +37,7 @@ import drivers.ADwin as ADwin
 import tools.viewbox_tools as viewbox_tools
 import tools.colormaps as cmaps
 from tools.lineprofile import linePlotWidget
+from swabian import backend as swabian
 
 from drivers.minilasevo import MiniLasEvo
 
@@ -295,6 +296,25 @@ class Frontend(QtGui.QFrame):
                 pass
         else:
             self.frameacqSignal.emit(False)
+
+    def toggle_tg_ebp_meas(self):
+        
+        if self.measure_tg_EBP.isChecked():
+            self.liveviewSignal.emit(True, 'timegated EBP meas')
+            if self.roi is not None:
+                self.vb.removeItem(self.roi)
+                self.roi.hide()
+                self.ROIButton.setChecked(False)
+            if self.lineROI is not None:
+                self.vb.removeItem(self.lineROI)
+                self.lplotWidget.hide()
+                self.lineProfButton.setChecked(False)
+                self.lineROI = None
+            else:
+                pass
+        else:
+            self.liveviewSignal.emit(True, 'timegated EBP meas')
+            self.emit_param()
 
     def line_profile(self):
         if self.lineROI is None:
@@ -690,6 +710,14 @@ class Frontend(QtGui.QFrame):
         self.liveviewButton.setStyleSheet("font-size: 12px; background-color:rgb(180, 180, 180)")
         self.liveviewButton.clicked.connect(self.toggle_liveview)
         
+        # Time gated EBP measurement button
+        
+        self.measure_tg_EBP = QtGui.QPushButton('Measure time-gated EBP')
+        self.measure_tg_EBP.setFont(QtGui.QFont('Helvetica', weight=QtGui.QFont.Bold))
+        self.measure_tg_EBP.setCheckable(True)
+        self.measure_tg_EBP.setStyleSheet("font-size: 12px; background-color:rgb(180, 180, 180)")
+        self.measure_tg_EBP.clicked.connect(self.toggle_tg_ebp_meas)
+        
         # ROI buttons
 
         self.ROIButton = QtGui.QPushButton('ROI')
@@ -968,6 +996,7 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.detectorType, 4, 2)
         subgrid.addWidget(self.liveviewButton, 5, 2)
         subgrid.addWidget(self.currentFrameButton, 5, 3)
+        subgrid.addWidget(self.measure_tg_EBP, 6, 2)
         
         subgrid.addWidget(self.flipperButton, 7, 2)
         #TODO check whether we keep this button
@@ -1702,20 +1731,34 @@ class Backend(QtCore.QObject):
     def liveview_start(self):
         # self.plot_scan()
         self.reset_position()
-        if self.time_gated_EBP:
+        if self.acquisitionMode == "timegated EBP meas":
             ...  # GIOVANNI
-            ...  # abrir todos los shutters
-            ...  # Iniciar captura swabian
+            # open all shutters
+            self.control_shutters(1, True)
+            self.control_shutters(2, True)
+            self.control_shutters(3, True)
+            self.control_shutters(4, True)
+            # start tcspc measurement
+            swabian.TCSPC_backend.start_measure(
+                "EBP_timegated_",
+                None,
+                None,
+                None
+            )
         self.viewtimer.start(self.viewtimer_time)
 
     def liveview_stop(self):
         """Finish liveview scan."""
         self.viewtimer.stop()
-        if self.time_gated_EBP:
+        if self.acquisitionMode == "timegated EBP meas":
             ...  # GIOVANNI
-            ...  # cerrar todos los shutters
-            ...  # terminar captura swabian
-            self.time_gated_EBP = False
+            # close all shutters
+            self.control_shutters(1, False)
+            self.control_shutters(2, False)
+            self.control_shutters(3, False)
+            self.control_shutters(4, False)
+            # stop tcspc measurement
+            swabian.TCSPC_backend.stop_measure()
         self.reset_position()
 
     def update_view(self):
@@ -1779,6 +1822,8 @@ class Backend(QtCore.QObject):
             if self.acquisitionMode == 'frame':
                 self.liveview_stop()
                 self.frameIsDone.emit(True, self.image, self.NofAuxPixels, self.NofPixels)
+            if self.acquisitionMode ==  'timegated EBP meas':
+                self.liveview_stop()                
             self.update_device_param()
 
     @pyqtSlot(int, bool)
