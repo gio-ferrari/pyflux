@@ -162,7 +162,8 @@ class Backend(QtCore.QObject):
         # self.minfluxWorker.shutterSignal.connect(self.xyzWorker.shutter_handler)
         self.minfluxWorker.saveConfigSignal.connect(self.scanWorker.saveConfigfile)
         # FIXME: chequear esta senal -> deber'ia hacer un save
-        self.minfluxWorker.xyzEndSignal.connect(self.xyzWorker.get_end_measurement_signal)
+        
+        # self.minfluxWorker.xyzEndSignal.connect(self.xyzWorker.get_end_measurement_signal)
 
     def setup_psf_connections(self):
         self.psfWorker.scanSignal.connect(self.scanWorker.get_scan_signal) #Esta es la conexion que permite cambiar el punto de inicio del escaneo
@@ -299,11 +300,11 @@ if __name__ == '__main__':
     adw = ADwin.ADwin(DEVICENUMBER, 1)
     scan.setupDevice(adw)
 
-    camera_info = takyaq.info_types.CameraInfo()
+    camera_info = takyaq.info_types.CameraInfo(29.4, 40, 3.14)
     controller = takyaq.PIDController()
     piezo = PiezoActuatorWrapper(adw)
 
-    with IDSWrapper() as camera, takyaq.Stabilizer(camera, piezo, camera_info, controller) as stb:
+    with IDSWrapper() as camera, takyaq.stabilizer.Stabilizer(camera, piezo, camera_info, controller) as stb:
         stabilization_gui = takyaq.frontends.PyQt_Frontend(camera, piezo, controller, camera_info, stb)
         stabilization_gui.setWindowTitle("Takyaq with PyQt frontend")
         # stabilization_gui.show()
