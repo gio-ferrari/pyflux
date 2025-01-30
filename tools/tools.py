@@ -82,36 +82,31 @@ def convert(x, key):
 
 
 def timeToADwin(t):
-    
     "time in µs to ADwin time units of 3.33 ns"
-    
     time_unit = 3.33 * 10**-3  # 3.33 ns
-    
     units = np.array(t/(time_unit), dtype='int')
-    
     return units
-    
+
+
 def velToADwin(v):
-    
     v_adwin = v * (convert(1000, 'ΔXtoU')/timeToADwin(1))
-    
     return v_adwin
-    
+
+
 def accToADwin(a):
-    
     a_adwin = a * (convert(1000, 'ΔXtoU')/timeToADwin(1)**2)
-    
     return a_adwin
-    
+
+
 def insertSuffix(filename, suffix, newExt=None):
     names = os.path.splitext(filename)
     if newExt is None:
         return names[0] + suffix + names[1]
     else:
         return names[0] + suffix + newExt
-    
-def saveConfig(main, dateandtime, name, filename=None):
 
+
+def saveConfig(main, dateandtime, name, filename=None):
     if filename is None:
         filename = os.path.join(os.getcwd(), name)
 
@@ -121,7 +116,9 @@ def saveConfig(main, dateandtime, name, filename=None):
 
         'Date and time': dateandtime,
         'Initial Position [x0, y0, z0] (µm)': main.initialPos,
-        'Focus lock position (px)': str(main.focuslockpos),
+        'Focus lock position X (px)': str(main.focuslockpos[0]),
+        'Focus lock position Y (px)': str(main.focuslockpos[1]),
+        'Focus lock ROI (px)': str(main.focuslockpos[2]),
         'Scan range (µm)': main.scanRange,
         'Pixel time (µs)': main.pxTime,
         'Number of pixels': main.NofPixels,

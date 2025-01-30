@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Apr 16 15:38:16 2019
-
-@author: Luciano A. Masullo
+Modulo de medida de PSFs
 """
 
 import numpy as np
@@ -23,11 +21,11 @@ import imageio as iio
 from tools import customLog  # NOQA
 
 import logging as _lgn
+import takyaq
 
 _lgr = _lgn.getLogger(__name__)
 _lgr.setLevel(_lgn.DEBUG)
 
-π = np.pi
 
 DEBUG = True
 
@@ -42,7 +40,7 @@ class Frontend(QtGui.QFrame):
     """
     Signals
     """
-    _plots: list = [] #  [_pg.PlotItem] = []  # plots de las donas
+    _plots: list = []  # [_pg.PlotItem] = []  # plots de las donas
     _imitems: list = []  # [_pg.ImageItem] = []  # plots de las donas
     _images: list = [None, ] * FIX_K  #list[np.ndarray] = [None, ] * FIX_K  # data
     _centerplots: list = [None, ] * FIX_K  # Plots de los centros reales
@@ -409,10 +407,7 @@ class Frontend(QtGui.QFrame):
 
 class Backend(QtCore.QObject):
     # bool 1: whether you feedback ON or OFF, bool 2: initial position
-    xySignal = pyqtSignal(bool, bool)
-    xyStopSignal = pyqtSignal(bool)
-    # zSignal = pyqtSignal(bool, bool)
-    # zStopSignal = pyqtSignal(bool)  # Removed since now there is a single worker
+    # xySignal = pyqtSignal(bool, bool)
     endSignal = pyqtSignal(str)
     scanSignal = pyqtSignal(bool, str, np.ndarray)
     moveToInitialSignal = pyqtSignal()
@@ -421,33 +416,26 @@ class Backend(QtCore.QObject):
     saveConfigSignal = pyqtSignal(str)
     """
     Signals
-    
-    xySignal: 
+
+    xySignal:
         Se emite en función loop en [psf]
         Va a función single_xy_correction en [xyz_focus_lock]
-        
-    xyStopSignal:
-        Se emite en start en [psf]
-        Va a get_stop_signal en [xyz_focus_lock]
-    
-    moveToInitialSignal: 
+
+    moveToInitialSignal:
         Se emite en start en [psf]
         Va a la función get_moveTo_initial_signal en scan.py. 
         Esta función toma coordenadas de posición self.initialPos, los desempaqueta
         y pasa los parámetros a través de la función moveTo a la función set_moveTo_param, que pasa los parámetros a la adwin.
         NOTA: self.initialPos sólo se modifica cuando se usan los botones de movimiento relativo,
         en get_scan_signal, y cuando hay una modificacion desde el teclado.
-    
-
-        
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, estabilizador: takyaq.stabilizer.Stabilizer,
+                 *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        self.estabilizador = estabilizador
         self.i = 0
-        self.xyIsDone = False
-        # self.zIsDone = False
+        # self.xyIsDone = False
         self.scanIsDone = False
         self.measTimer = QtCore.QTimer()
         self.measTimer.timeout.connect(self.loop)
@@ -459,28 +447,26 @@ class Backend(QtCore.QObject):
 
     def start(self):
         self.i = 0
-        self.xyIsDone = False
+        # self.xyIsDone = False
         # self.zIsDone = False
         self.scanIsDone = False
         try:
             self.progressSignal.emit(0, np.array([]), -1)
             self.shutterSignal.emit(7, False)
             self.shutterSignal.emit(11, False)
-    
+
             _lgr.info('PSF measurement started')
-    
-            self.xyStopSignal.emit(True)
+
+            # FIXME: check
+            self.estabilizador.disable_xy_stabilization()
             # self.zStopSignal.emit(True)
-    
-            # open IR and tracking shutter
-            self.shutterSignal.emit(5, True)
-            self.shutterSignal.emit(6, True)
-            self.moveToInitialSignal.emit() # Esta señal es la que modifica las posiciones de inicio
+
+            self.moveToInitialSignal.emit()  # Esta señal es la que modifica las posiciones de inicio
             time.sleep(.3)  # Dar tiempo a la señal para ir a scan y a la platina para moverse
             self.data = np.zeros((self.totalFrameNum, self.nPixels, self.nPixels))
             _lgr.debug('Data shape is %s', np.shape(self.data))
             self.xy_flag = True
-            self.z_flag = True
+            # self.z_flag = True
             self.scan_flag = True
         except Exception as e:
             print("Excepcion en start:", e)
@@ -495,8 +481,8 @@ class Backend(QtCore.QObject):
         # rerunning would only cause errors in files being saved by focus and xy_tracking
         attention_filename = '!' + self.filename
         self.endSignal.emit(attention_filename)
-
-        self.xyStopSignal.emit(False)
+        if not self.estabilizador.enable_xy_stabilization():
+            _lgr.error("No pude rehabilitar la estabilizacion XY")
         # self.zStopSignal.emit(False)
 
         self.export_data()
@@ -514,16 +500,11 @@ class Backend(QtCore.QObject):
             initial = False
 
         if self.xy_flag:
-            self.xySignal.emit(True, initial)
+            # self.xySignal.emit(True, initial)
+            self.estabilizador.get_xy_shift()
             self.xy_flag = False
-            _lgr.debug(' xy signal emitted (%s)', self.i)
-        if self.xyIsDone:
-            # if self.z_flag:
-            #     self.zSignal.emit(True, initial)
-            #     self.z_flag = False
-            #     _lgr.debug('z signal emitted (%s)', self.i)
-
-            # if self.zIsDone:
+            # _lgr.debug(' xy signal emitted (%s)', self.i)
+        if True: # Ahora XY lo sacamos directo
             if True:  # ahora la estabilización en Z es continua
                 shutternum = self.i // self.nFrames + 1  # self.i % 4 + 1
                 if self.scan_flag:
@@ -543,8 +524,7 @@ class Backend(QtCore.QObject):
                     self.xy_flag = True
                     self.z_flag = True
                     self.scan_flag = True
-                    self.xyIsDone = False
-                    # self.zIsDone = False
+                    # self.xyIsDone = False
                     self.scanIsDone = False
 
                     self.data[self.i, :, :] = self.currentFrame
@@ -589,25 +569,6 @@ class Backend(QtCore.QObject):
         self.totalFrameNum = self.nFrames * self.k
 
         self.alignMode = params['alignMode']
-
-    @pyqtSlot(bool, float, float, float)
-    def get_xy_is_done(self, val, x, y, z):
-        """
-        Connection: [xy_tracking] xyIsDone
-        """
-        self.xyIsDone = True
-        self.target_x = x
-        self.target_y = y
-        self.target_z = z
-        print(f"[psf] FUNCION get_xy_is_done: Nuevas coords inicio de escaneo: ({self.target_x},{self.target_y},{self.target_z})")
-
-    # @pyqtSlot(bool, float)
-    # def get_z_is_done(self, val, z):
-    #     """
-    #     Connection: [focus] zIsDone
-    #     """
-    #     self.zIsDone = True
-    #     self.target_z = z
 
     @pyqtSlot(bool, np.ndarray)
     def get_scan_is_done(self, val, image):
