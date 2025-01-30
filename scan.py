@@ -313,7 +313,7 @@ class Frontend(QtGui.QFrame):
             else:
                 pass
         else:
-            self.liveviewSignal.emit(True, 'timegated EBP meas')
+            self.liveviewSignal.emit(False, 'timegated EBP meas')
             self.emit_param()
 
     def line_profile(self):
@@ -1735,15 +1735,15 @@ class Backend(QtCore.QObject):
             ...  # GIOVANNI
             # open all shutters
             self.control_shutters(1, True)
+            time.sleep(0.05)
             self.control_shutters(2, True)
+            time.sleep(0.05)
             self.control_shutters(3, True)
+            time.sleep(0.05)
             self.control_shutters(4, True)
             # start tcspc measurement
             swabian.TCSPC_backend.start_measure(
-                "EBP_timegated_",
-                None,
-                None,
-                None
+                "EBP_timegated_"
             )
         self.viewtimer.start(self.viewtimer_time)
 
@@ -1754,8 +1754,11 @@ class Backend(QtCore.QObject):
             ...  # GIOVANNI
             # close all shutters
             self.control_shutters(1, False)
+            time.sleep(0.05)
             self.control_shutters(2, False)
+            time.sleep(0.05)
             self.control_shutters(3, False)
+            time.sleep(0.05)
             self.control_shutters(4, False)
             # stop tcspc measurement
             swabian.TCSPC_backend.stop_measure()
@@ -1823,7 +1826,7 @@ class Backend(QtCore.QObject):
                 self.liveview_stop()
                 self.frameIsDone.emit(True, self.image, self.NofAuxPixels, self.NofPixels)
             if self.acquisitionMode ==  'timegated EBP meas':
-                self.liveview_stop()                
+                self.liveview_stop()    
             self.update_device_param()
 
     @pyqtSlot(int, bool)
