@@ -298,8 +298,11 @@ class Frontend(QtGui.QFrame):
             self.frameacqSignal.emit(False)
 
     def toggle_tg_ebp_meas(self):
-        
-        if self.measure_tg_EBP.isChecked():
+        '''
+        This function gets called when the button to measure the time-gated EBP is clicked.
+        It emits the signal to start the measurement or, if the measurement is ongoing, to stop it.
+        '''
+        if self.measure_tg_EBP_button.isChecked():
             self.liveviewSignal.emit(True, 'timegated EBP meas')
             if self.roi is not None:
                 self.vb.removeItem(self.roi)
@@ -712,11 +715,11 @@ class Frontend(QtGui.QFrame):
         
         # Time gated EBP measurement button
         
-        self.measure_tg_EBP = QtGui.QPushButton('Measure time-gated EBP')
-        self.measure_tg_EBP.setFont(QtGui.QFont('Helvetica', weight=QtGui.QFont.Bold))
-        self.measure_tg_EBP.setCheckable(True)
-        self.measure_tg_EBP.setStyleSheet("font-size: 12px; background-color:rgb(180, 180, 180)")
-        self.measure_tg_EBP.clicked.connect(self.toggle_tg_ebp_meas)
+        self.measure_tg_EBP_button = QtGui.QPushButton('Measure time-gated EBP')
+        self.measure_tg_EBP_button.setFont(QtGui.QFont('Helvetica', weight=QtGui.QFont.Bold))
+        self.measure_tg_EBP_button.setCheckable(True)
+        self.measure_tg_EBP_button.setStyleSheet("font-size: 12px; background-color:rgb(180, 180, 180)")
+        self.measure_tg_EBP_button.clicked.connect(self.toggle_tg_ebp_meas)
         
         # ROI buttons
 
@@ -996,7 +999,7 @@ class Frontend(QtGui.QFrame):
         subgrid.addWidget(self.detectorType, 4, 2)
         subgrid.addWidget(self.liveviewButton, 5, 2)
         subgrid.addWidget(self.currentFrameButton, 5, 3)
-        subgrid.addWidget(self.measure_tg_EBP, 6, 2)
+        subgrid.addWidget(self.measure_tg_EBP_button, 6, 2)
         
         subgrid.addWidget(self.flipperButton, 7, 2)
         #TODO check whether we keep this button
@@ -1122,6 +1125,7 @@ class Frontend(QtGui.QFrame):
         backend.realPositionSignal.connect(self.get_real_position)
         backend.shuttermodeSignal.connect(self.update_shutters)
         backend.diodelaserEmissionSignal.connect(self.update_led)
+        backend.ebp_measurement_done.connect(lambda: self.measure_tg_EBP_button.setChecked(False))
         
     def closeEvent(self, *args, **kwargs):
 
@@ -1139,6 +1143,7 @@ class Backend(QtCore.QObject):
     paramSignal = pyqtSignal(dict)
     imageSignal = pyqtSignal(np.ndarray)
     frameIsDone = pyqtSignal(bool, np.ndarray, int, int)
+    ebp_measurement_done = pyqtSignal()
     ROIcenterSignal = pyqtSignal(np.ndarray)
     realPositionSignal = pyqtSignal(np.ndarray)
     auxFitSignal = pyqtSignal()
