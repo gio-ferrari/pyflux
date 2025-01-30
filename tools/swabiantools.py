@@ -196,14 +196,14 @@ def set_channel_level(
 @njit
 def time_tags2delays(timestamps: _np.ndarray, channels: _np.ndarray,
                      overflow_types: _np.ndarray, APD_channel: int,
-                     laser_channel: int, period: int,
+                     laser_channel: int, pixel_channel: int, period: int,
                      last_timestamp: int,
                      ):
     """calculate ."""
     # last_timestamp = 0  # Puede ser que perdamos info, ponerlo en errors[1]
     n_errors = 0
     last_pos = 0
-    rv = _np.empty((len(timestamps), 2,), dtype=_np.int64)
+    rv = _np.empty((len(timestamps), 3,), dtype=_np.int64)
     for ts, chan, type_ in zip(timestamps, channels, overflow_types):
         # tag.type can be: 0 - TimeTag, 1- Error, 2 - OverflowBegin, 3 -
         # OverflowEnd, 4 - MissedEvents (you can use the TimeTagger.TagType IntEnum)
@@ -213,16 +213,22 @@ def time_tags2delays(timestamps: _np.ndarray, channels: _np.ndarray,
             n_errors += 1
         elif (chan == laser_channel) and (last_timestamp != 0):
             # valid event
-            rv[last_pos, 0] = period + last_timestamp
-            rv[last_pos, 0] -= ts
-            if rv[last_pos, 0] < 0:
-                rv[last_pos, 0] += period
-            if rv[last_pos, 0] < 0:
+            rv[last_pos, 0] = APD_channel
+            rv[last_pos, 2] = period + last_timestamp
+            rv[last_pos, 2] -= ts
+            if rv[last_pos, 2] < 0:
+                rv[last_pos, 2] += period
+            if rv[last_pos, 2] < 0:
                 print("Tiempo negativo", rv[last_pos]/period, ts, last_timestamp)
             rv[last_pos, 1] = ts
             last_pos += 1
         elif chan == APD_channel:
             last_timestamp = ts
+        elif chan == pixel_channel:
+            rv[last_pos, 0] = pixel_channel
+            rv[last_pos, 1] = ts
+            rv[last_pos, 2] = 0
+            last_pos += 1
         else:
             # print("unknown channel")
             n_errors += 1
@@ -231,7 +237,7 @@ def time_tags2delays(timestamps: _np.ndarray, channels: _np.ndarray,
     return rv[:last_pos], last_timestamp
 
 
-def swabian2numpy(filename: str, period: int, APD_channel: int, laser_channel: int):
+def swabian2numpy(filename: str, period: int, APD_channel: int, laser_channel: int, pixel_channel: int):
     """Extrae info de un archivo de swabian y lo graba en uno numpy."""
     # base_dir = _pathlib.Path.home() / "pMinflux_data"
     # base_dir.mkdir(parents=True, exist_ok=True)
@@ -242,7 +248,9 @@ def swabian2numpy(filename: str, period: int, APD_channel: int, laser_channel: i
     out_file_name = original_filename.with_suffix('.npy')
     filereader = _TimeTagger.FileReader(filename)
     n_events = int(5E6)
-    batch = []
+    channels = []
+    abs_times = []
+    rel_times = []
     lts = 0  # last timestamp
     while filereader.hasData():
         data = filereader.getData(n_events=n_events)
@@ -252,16 +260,25 @@ def swabian2numpy(filename: str, period: int, APD_channel: int, laser_channel: i
         missed_events = data.getMissedEvents()  # The numbers of missed events in case of overflow
         # Output to table
         rv, lts = time_tags2delays(timestamps, channel, overflow_types,
-                                      APD_channel, laser_channel, period, lts)
-        batch.append(rv)
+                                      APD_channel, laser_channel, pixel_channel, period, lts)
+        channels.append(rv[:,0])
+        abs_times.append(rv[:,1])
+        rel_times.append(rv[:,2])
     with open(out_file_name, "wb") as fd:
-        _np.save(fd, _np.concatenate(batch))
+        _np.save(
+            fd,
+            _np.array(
+                (_np.concatenate(channels),
+                _np.concatenate(abs_times),
+                _np.concatenate(rel_times),)
+            )
+        )
 
 
 if __name__ == "__main__":
     input_file = r"C:\Users\Minflux\Documents\PythonScripts\reading_swabian\filename.ttbin"
     input_file = r"C:\Users\Minflux\Documents\Andi\pyflux\lefilename.ttbin"
-    swabian2numpy(input_file, 50000, 4, 1)
+    swabian2numpy(input_file, 50000, 4, 1, 2)
     a = _np.load(r"C:\Users\Minflux\Documents\Andi\pyflux\lefilename.npy")
     import matplotlib.pyplot as plt
     plt.hist(a[:, 0], 250, range=(-13, 50000))

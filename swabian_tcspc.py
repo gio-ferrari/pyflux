@@ -122,6 +122,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         _st.swabian2numpy(self._current_filename, TCSPC_backend.period,
                           TCSPC_backend.iinfo.APD_info[0].channel,
                           TCSPC_backend.iinfo.laser_channel,
+                          TCSPC_backend.iinfo.tick_channel
                           )
 
     def load_folder(self):
