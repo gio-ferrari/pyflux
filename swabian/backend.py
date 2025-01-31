@@ -6,7 +6,6 @@ TCSPC con tracking.
 """
 
 import numpy as np
-import atexit as _atexit
 # import tools.filenames as fntools
 import logging as _lgn
 import pathlib as _plib
@@ -18,6 +17,7 @@ from tools.config_handler import TCSPInstrumentInfo as _TCSPInstrumentInfo
 from typing import Union as _Union
 
 from tools import analysis as _analysis
+from tools.metaclasses import _Singleton
 import configparser
 from dataclasses import dataclass as _dataclass
 
@@ -25,7 +25,7 @@ from drivers.minflux_measurement import MinfluxMeasurement
 from datetime import datetime
 
 _lgr = _lgn.getLogger(__name__)
-_lgn.basicConfig(level=_lgn.DEBUG)
+_lgr.setLevel(_lgn.DEBUG)
 
 
 _MAX_EVENTS = 131072
@@ -93,10 +93,34 @@ def _config_channels(tagger: _TimeTagger.TimeTagger, IInfo: _TCSPInstrumentInfo)
     )
 
 
-class __TCSPCBackend(_QObject):
+def _get_instrument_info() -> _TCSPInstrumentInfo:
+    tt_data = _st.get_tt_info()
+    if not tt_data:
+        _lgr.error("   ******* Enchufá el equipo *******")
+        raise ValueError("POR FAVOR ENCHUFA EL EQUIPO")
+    IInfo = None
+    try:
+        IInfo = _TCSPInstrumentInfo.load()
+    except FileNotFoundError:
+        _lgr.error("No configuration file found")
+        raise
+    if not (IInfo.serial in list(tt_data.keys())):
+        _lgr.warning(
+            "The configuration file is for a time tagger with a "
+            "different serial number: will use the first one instead."
+        )
+        IInfo.serial = list(tt_data.keys())[0]
+    _lgr.info(
+        "%s TimeTaggers found. Using the one with with S#%s",
+        len(tt_data),
+        IInfo.serial,
+    )
+
+
+class TCSPCBackend(_QObject, metaclass=_Singleton):
     """Backend class for TCSPC.
 
-    Not to be instantiated by the user.
+    To be used as a context manager
     """
 
     _TCSPC_measurement = None
@@ -111,9 +135,20 @@ class __TCSPCBackend(_QObject):
                  *args, **kwargs):
         """Receive device info."""
         super().__init__(*args, **kwargs)
-        self._tagger = _TimeTagger.createTimeTagger(IInfo.serial)
+        IInfo = _get_instrument_info()
         self.iinfo = IInfo
-        self.period = IInfo.period
+
+    def __enter__(self):
+        self.open()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
+    def open(self):
+        self._tagger = _TimeTagger.createTimeTagger(self.iinfo.serial)
+        self.period = self.iinfo.period
         _config_channels(self._tagger, self.iinfo)
         # TODO: Adjust latency
         self._tagger.setStreamBlockSize(max_events=_MAX_EVENTS, max_latency=5)
@@ -198,42 +233,8 @@ class __TCSPCBackend(_QObject):
     def close(self):
         if self._tagger:
             _TimeTagger.freeTimeTagger(self._tagger)
-            print("Cerrando tagger")
+            _lgr.info("Cerrando tagger")
         self._tagger = None
 
     def __del__(self):
         self.close()
-
-
-def __create_backend() -> __TCSPCBackend:
-    tt_data = _st.get_tt_info()
-    if not tt_data:
-        _lgr.error("   ******* Enchufá el equipo *******")
-        raise ValueError("POR FAVOR ENCHUFA EL EQUIPO")
-    IInfo = None
-    try:
-        IInfo = _TCSPInstrumentInfo.load()
-    except FileNotFoundError:
-        _lgr.error("No configuration file found")
-        raise
-    if not (IInfo.serial in list(tt_data.keys())):
-        _lgr.warning(
-            "The configuration file is for a time tagger with a "
-            "different serial number: will use the first one instead."
-        )
-        IInfo.serial = list(tt_data.keys())[0]
-    _lgr.info(
-        "%s TimeTaggers found. Using the one with with S#%s",
-        len(tt_data),
-        IInfo.serial,
-    )
-    return __TCSPCBackend(IInfo)
-
-
-# exported object
-TCSPC_backend = __create_backend()
-__tagger = TCSPC_backend._tagger
-
-
-# polémico
-_atexit.register(TCSPC_backend.close)
