@@ -319,6 +319,30 @@ class Frontend(QtGui.QFrame):
             self.liveviewSignal.emit(False, 'timegated EBP meas')
             self.emit_param()
 
+    def toggle_psfscan_fitandmove(self):
+        '''
+        This function gets called when the button to scan and fit a PSF and move to its center is clicked.
+        It emits the signal to start the scan or, if the measurement is ongoing, to stop it.
+        Once the scan is done, the forward and back images will be fitted with a parabola and the piezo will move
+        to the average of the centers of the two fits.
+        '''
+        if self.psfFitButton.isChecked():
+            self.liveviewSignal.emit(True, 'psf scan fit and move')
+            if self.roi is not None:
+                self.vb.removeItem(self.roi)
+                self.roi.hide()
+                self.ROIButton.setChecked(False)
+            if self.lineROI is not None:
+                self.vb.removeItem(self.lineROI)
+                self.lplotWidget.hide()
+                self.lineProfButton.setChecked(False)
+                self.lineROI = None
+            else:
+                pass
+        else:
+            self.liveviewSignal.emit(False, 'psf scan fit and move')
+            self.emit_param()
+
     def line_profile(self):
         if self.lineROI is None:
             if self.roi is None:
@@ -718,7 +742,7 @@ class Frontend(QtGui.QFrame):
         self.measure_tg_EBP_button = QtGui.QPushButton('Measure time-gated EBP')
         self.measure_tg_EBP_button.setFont(QtGui.QFont('Helvetica', weight=QtGui.QFont.Bold))
         self.measure_tg_EBP_button.setCheckable(True)
-        self.measure_tg_EBP_button.setStyleSheet("font-size: 12px; background-color:rgb(180, 180, 180)")
+        #self.measure_tg_EBP_button.setStyleSheet("font-size: 12px; background-color:rgb(180, 180, 180)")
         self.measure_tg_EBP_button.clicked.connect(self.toggle_tg_ebp_meas)
         
         # ROI buttons
@@ -774,7 +798,7 @@ class Frontend(QtGui.QFrame):
         # dougnhut fit
         
         self.psfFitButton = QtGui.QPushButton('PSF fit and move')
-        self.psfFitButton.clicked.connect(lambda: self.emit_fit_ROI('fit'))
+        self.psfFitButton.clicked.connect(self.toggle_psfscan_fitandmove)
         
         # measure trace
         
@@ -1126,6 +1150,7 @@ class Frontend(QtGui.QFrame):
         backend.shuttermodeSignal.connect(self.update_shutters)
         backend.diodelaserEmissionSignal.connect(self.update_led)
         backend.ebp_measurement_done.connect(lambda: self.measure_tg_EBP_button.setChecked(False))
+        backend.psf_scanandfit_done.connect(lambda: self.psfFitButton.setChecked(False))
         
     def closeEvent(self, *args, **kwargs):
 
@@ -1144,6 +1169,7 @@ class Backend(QtCore.QObject):
     imageSignal = pyqtSignal(np.ndarray)
     frameIsDone = pyqtSignal(bool, np.ndarray, int, int)
     ebp_measurement_done = pyqtSignal()
+    psf_scanandfit_done = pyqtSignal()
     ROIcenterSignal = pyqtSignal(np.ndarray)
     realPositionSignal = pyqtSignal(np.ndarray)
     auxFitSignal = pyqtSignal()
@@ -1737,7 +1763,6 @@ class Backend(QtCore.QObject):
         # self.plot_scan()
         self.reset_position()
         if self.acquisitionMode == "timegated EBP meas":
-            ...  # GIOVANNI
             # open all shutters
             self.control_shutters(1, True)
             time.sleep(0.05)
@@ -1756,7 +1781,6 @@ class Backend(QtCore.QObject):
         """Finish liveview scan."""
         self.viewtimer.stop()
         if self.acquisitionMode == "timegated EBP meas":
-            ...  # GIOVANNI
             # close all shutters
             self.control_shutters(1, False)
             time.sleep(0.05)
@@ -1767,6 +1791,9 @@ class Backend(QtCore.QObject):
             self.control_shutters(4, False)
             # stop tcspc measurement
             swabian.TCSPC_backend.stop_measure()
+            self.ebp_measurement_done.emit()
+        if self.acquisitionMode == "psf scan fit and move":
+            self.psf_scanandfit_done.emit()
         self.reset_position()
 
     def update_view(self):
@@ -1814,9 +1841,6 @@ class Backend(QtCore.QObject):
 
             # Podríamos siempre hacer que siempre tomemos la imagen completa y mandar
             # al frontend sólo la parte que importa. De mientras...
-            if self.time_gated_EBP:
-                ...  # GIOVANNI
-
             self.imageSignal.emit(self.image)
             # print(datetime.now(), '[scan] Image emitted to frontend')
 
@@ -1831,7 +1855,9 @@ class Backend(QtCore.QObject):
                 self.liveview_stop()
                 self.frameIsDone.emit(True, self.image, self.NofAuxPixels, self.NofPixels)
             if self.acquisitionMode ==  'timegated EBP meas':
-                self.liveview_stop()    
+                self.liveview_stop()   
+            if self.acquisitionMode ==  'psf scan fit and move':
+                self.liveview_stop()
             self.update_device_param()
 
     @pyqtSlot(int, bool)
