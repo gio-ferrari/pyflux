@@ -80,6 +80,26 @@ def centers_minflux(L: float, k: int = 4):
     ebp[1:][::-1, 1] = _np.cos(angles) * L / 2
     return ebp
 
+def custom_parab(coord1, coord2, coeff00, coeff10, coeff01, coeff11, coeff20, coeff02):
+    return coeff00 + coeff10 * coord1 + coeff01 * coord2 + coeff11 * coord1 * coord2 + coeff20 * coord1**2 + coeff02 * coord2**2
+
+def parab_func(grid, c00, c10, c01, c11, c20, c02):
+    """    
+    Polynomial of deg 2 (parabola) function to fit PSFs.
+    
+    Inputs
+    ----------
+    grid : x,y array
+    cij : coefficients of the polynomial function
+    
+    Returns
+    -------
+    q : polynomial evaluated in grid.
+    
+    """
+        
+    x, y = grid
+    return custom_parab(x, y, c00, c10, c01, c11, c20, c02).ravel()
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
