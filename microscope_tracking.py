@@ -8,6 +8,7 @@ Also 2 modules run in the backend: minflux and psf
 from tools import customLog  # NOQA Para inicializar el logging
 import numpy as np
 import time
+from typing import Tuple as _Tuple
 
 from pyqtgraph.Qt import QtCore, QtGui
 import qdarkstyle
@@ -24,6 +25,9 @@ import drivers.ids_cam as ids_cam
 # from pylablib.devices.Andor import AndorSDK2
 
 import takyaq
+from takyaq import stabilizer
+from takyaq import controllers
+from takyaq.frontends import PyQt_frontend
 import tools.tools as tools
 
 import scan
@@ -133,6 +137,7 @@ class Frontend(QtGui.QMainWindow):
         scanThread.exit()
         minfluxThread.exit()
         self.tcspcWidget.close()
+        self.focusWidget.close()
         super().closeEvent(*args, **kwargs)
         app.quit()
 
@@ -151,7 +156,7 @@ class Backend(QtCore.QObject):
         self.scanWorker = scan.Backend(adw, diodelaser, estabilizador)
         # self.andorWorker = widefield_Andor.Backend(andor, adw) #Por ahora le mando adw para pensar el desplzamiento de la platina
         self.minfluxWorker = minflux.Backend()
-        self.psfWorker = psf.Backend()
+        self.psfWorker = psf.Backend(estabilizador)
 
     def setup_minflux_connections(self):
         # FIXME: chequear esta senal   **** DONE!
@@ -215,14 +220,16 @@ class IDSWrapper:
 
     def __enter__(self):
         self._camera = ids_cam.IDS_U3()
+        self._camera.open_device()
+        self._camera.start_acquisition()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.camera.destroy_all()
+        self._camera.destroy_all()
         return False
 
     def get_image(self):
-        return self.camera.on_acquisition_timer()
+        return self._camera.on_acquisition_timer()
 
 
 class PiezoActuatorWrapper:
@@ -236,47 +243,90 @@ class PiezoActuatorWrapper:
 
     def __init__(self, adw: ADwin.ADwin):
         self._adw = adw
+        self._xy_running = False
+        self._z_running = False
+        pos_zero = tools.convert(0, 'XtoU')
+        
+        self._adw.Set_FPar(70, pos_zero)
+        self._adw.Set_FPar(71, pos_zero)
+        self._adw.Set_FPar(72, pos_zero)
+        
+        # move to z = 10 µm
+        self.set_position_xy(5, 5)
+        self.set_position_z(10)
 
-    def get_position(self) -> tuple[float, float, float]:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._adw.Stop_Process(self._PROCESS_XY)
+        self._adw.Stop_Process(self._PROCESS_Z)
+        return False
+
+    def get_position(self) -> _Tuple[float, float, float]:
         """Return (x, y, z) position of the piezo in nanometers."""
-        return [tools.convert(self.adw.Get_FPar(p), 'UtoX') * 1E3 for
+        rv = [tools.convert(self._adw.Get_FPar(p), 'UtoX') * 1E3 for
                 p in (70, 71, 72)]
+        print("current position =", rv)
+        return rv
 
     def set_position_xy(self, x: float, y: float):
         """Move to position xy specified in nanometers."""
         x_f = tools.convert(x / 1E3, 'XtoU')
         y_f = tools.convert(y / 1E3, 'XtoU')
-        self.adw.Set_FPar(self._FPAR_X, x_f)
-        self.adw.Set_FPar(self._FPAR_Y, y_f)
+        if self._xy_running:    
+            self._adw.Set_FPar(self._FPAR_X, x_f)
+            self._adw.Set_FPar(self._FPAR_Y, y_f)
+        else:
+            self._adw.Set_Par(21, 128)
+            self._adw.Set_Par(22, 128)
+            self._adw.Set_Par(23, 128)
+            self._adw.Set_FPar(23, x_f)
+            self._adw.Set_FPar(24, y_f)
+            self._adw.Set_FPar(25, self._adw.Get_FPar(72))
+            self._adw.Set_FPar(26, tools.timeToADwin(2000))
+            self._adw.Start_Process(2)
 
     def set_position_z(self, z: float):
         """Move to position z specified in nanometers."""
         z_f = tools.convert(z / 1E3, 'XtoU')
-        self.adw.Set_FPar(self._FPAR_Z, z_f)
+        if self._z_running:
+            self._adw.Set_FPar(self._FPAR_Z, z_f)
+        else:
+            self._adw.Set_Par(21, 128)
+            self._adw.Set_Par(22, 128)
+            self._adw.Set_Par(23, 128)
+            self._adw.Set_FPar(23, self._adw.Get_FPar(70))
+            self._adw.Set_FPar(24, self._adw.Get_FPar(71))
+            self._adw.Set_FPar(25, z_f)
+            self._adw.Set_FPar(26, tools.timeToADwin(2000))
+            self._adw.Start_Process(2)
 
     def init_cb(self, tipo: takyaq.info_types.StabilizationType):
         pixeltime = 1000
-        if tipo == 0:
-            cur_x, cur_y, _ = self.get_position()
-            x_f = tools.convert(cur_x, 'XtoU')
-            y_f = tools.convert(cur_y, 'XtoU')
+        if tipo == takyaq.info_types.StabilizationType.XY_stabilization:
             # set-up actuator initial params
-            self.adw.Set_FPar(40, x_f)
-            self.adw.Set_FPar(41, y_f)
-            self.adw.Set_FPar(46, tools.timeToADwin(pixeltime))
-            self.adw.Start_Process(self._PROCESS_XY)
-        elif tipo == 1:
-            self.adw.Set_FPar(36, tools.timeToADwin(pixeltime))
-            z_f = tools.convert(self.get_position()[2], 'XtoU')
-            self.adw.Set_FPar(self._FPAR_Z, z_f)
-            self.adw.Start_Process(self._PROCESS_Z)
+            self._adw.Set_FPar(self._FPAR_X, self._adw.Get_FPar(70))
+            self._adw.Set_FPar(self._FPAR_Y, self._adw.Get_FPar(71))
+            self._adw.Set_FPar(46, tools.timeToADwin(pixeltime))
+            self._adw.Start_Process(self._PROCESS_XY)
+            print("Arrancamos XY")
+            self._xy_running = True
+        elif tipo == takyaq.info_types.StabilizationType.Z_stabilization:
+            self._adw.Set_FPar(36, tools.timeToADwin(pixeltime))
+            self._adw.Set_FPar(self._FPAR_Z, self._adw.Get_FPar(72))
+            self._adw.Start_Process(self._PROCESS_Z)
+            self._z_running = True
         return True
 
     def end_cb(self, tipo: takyaq.info_types.StabilizationType):
-        if tipo == 0:
-            self.adw.Stop_Process(self._PROCESS_XY)
-        elif tipo == 1:
-            self.adw.Stop_Process(self._PROCESS_Z)
+        if tipo == takyaq.info_types.StabilizationType.XY_stabilization:
+            self._adw.Stop_Process(self._PROCESS_XY)
+            self._xy_running = False
+            print("Frenamos XY")
+        elif tipo == takyaq.info_types.StabilizationType.Z_stabilization:
+            self._adw.Stop_Process(self._PROCESS_Z)
+            self._z_running = False
         return True
 
 
@@ -299,20 +349,16 @@ if __name__ == '__main__':
     DEVICENUMBER = 0x1
     adw = ADwin.ADwin(DEVICENUMBER, 1)
     scan.setupDevice(adw)
-
-    camera_info = takyaq.info_types.CameraInfo(29.4, 40, 3.14)
-    controller = takyaq.PIDController()
-    piezo = PiezoActuatorWrapper(adw)
-
-    with IDSWrapper() as camera, takyaq.stabilizer.Stabilizer(camera, piezo, camera_info, controller) as stb:
-        stabilization_gui = takyaq.frontends.PyQt_Frontend(camera, piezo, controller, camera_info, stb)
+    camera_info = takyaq.info_types.CameraInfo(29.4, 52, 3.00)
+    controller = controllers.PIController()
+    with IDSWrapper() as camera, PiezoActuatorWrapper(adw) as piezo, stabilizer.Stabilizer(camera, piezo, camera_info, controller) as stb:
+        stabilization_gui = PyQt_frontend.Frontend(camera, piezo, controller, camera_info, stb)
         stabilization_gui.setWindowTitle("Takyaq with PyQt frontend")
-        # stabilization_gui.show()
-        # stabilization_gui.raise_()
-        # stabilization_gui.activateWindow()
+        stb.add_callbacks(None, piezo.init_cb, piezo.end_cb)
 
         gui = Frontend(stabilization_gui)
         worker = Backend(adw, diodelaser, stb)
+        
         gui.make_connection(worker)
         worker.make_connection(gui)
 
@@ -332,7 +378,7 @@ if __name__ == '__main__':
         worker.scanWorker.viewtimer.moveToThread(scanThread)
         worker.scanWorker.viewtimer.timeout.connect(worker.scanWorker.update_view)
         scanThread.start()
-
+        
         # Andor widefield thread
         # andorThread = QtCore.QThread()
         # worker.andorWorker.moveToThread(andorThread)
