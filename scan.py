@@ -10,17 +10,11 @@ import time
 from datetime import date, datetime
 import os
 import matplotlib.pyplot as plt
-from matplotlib import cm
 import tools.tools as tools
-import ctypes as ct
 from PIL import Image
 from tkinter import Tk, filedialog
-import tifffile as tiff
 import scipy.optimize as opt
 from scipy.signal import find_peaks
-
-
-from threading import Thread
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
@@ -28,7 +22,6 @@ import qdarkstyle
 
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QTabWidget, QGroupBox
-from PyQt5 import QtTest
 
 
 import tools.PSF as PSF
@@ -52,7 +45,7 @@ def setupDevice(adw):
     PROCESS_5 = "flipper.TB5"
     PROCESS_6 = "trace.TB6"
     PROCESS_7 = "shutters.TB7"
-    
+
     btl = adw.ADwindir + BTL
     adw.Boot(btl)
 
@@ -66,7 +59,7 @@ def setupDevice(adw):
     process_5 = os.path.join(process_folder, PROCESS_5)
     process_6 = os.path.join(process_folder, PROCESS_6)
     process_7 = os.path.join(process_folder, PROCESS_7)
-    
+
     adw.Load_Process(process_1)
     adw.Load_Process(process_2)
     adw.Load_Process(process_3)
@@ -74,10 +67,10 @@ def setupDevice(adw):
     adw.Load_Process(process_5)
     adw.Load_Process(process_6)
     adw.Load_Process(process_7)
-    
-    
+
+
 class Frontend(QtGui.QFrame):
-    
+
     paramSignal = pyqtSignal(dict)
     closeSignal = pyqtSignal()
     liveviewSignal = pyqtSignal(bool, str)
@@ -100,19 +93,18 @@ class Frontend(QtGui.QFrame):
         self.EBPshown = True
         self.fitting = False
         self.image = np.zeros((128, 128))
-        
-        self.initialDir = r'C:\Data'
-        
-        # Define status icons dir
-        self.ICON_RED_LED = 'icons\led-red-on.png'
-        self.ICON_GREEN_LED = 'icons\green-led-on.png'
-        
-        # set up GUI
 
+        self.initialDir = r'C:\Data'
+
+        # Define status icons dir
+        self.ICON_RED_LED = r'icons\led-red-on.png'
+        self.ICON_GREEN_LED = r'icons\green-led-on.png'
+
+        # set up GUI
         self.setup_gui()
-                
+
         # connections between changes in parameters and emit_param function
-        
+
         self.NofPixelsEdit.textChanged.connect(self.emit_param)
         self.scanRangeEdit.textChanged.connect(self.emit_param)
         self.pxTimeEdit.textChanged.connect(self.emit_param)

@@ -72,13 +72,15 @@ class TCSPCFrontend(QtWidgets.QFrame):
         super().__init__(*args, **kwargs)
         # initial directory
         self.initialDir = r"C:\Data"
+        self._backend = TCSPC_backend()
         # FIXME: for developing only
-        self.period = TCSPC_backend.iinfo.period
+        
+        self.period = self._backend.iinfo.period
         self._init_data()
         self.setup_gui()
-        TCSPC_backend.sgnl_new_data.connect(self.get_data)
-        TCSPC_backend.sgnl_measure_init.connect(self.process_measurement_start)
-        TCSPC_backend.sgnl_measure_end.connect(self.process_measurement_stop)
+        self._backend.sgnl_new_data.connect(self.get_data)
+        self._backend.sgnl_measure_init.connect(self.process_measurement_start)
+        self._backend.sgnl_measure_end.connect(self.process_measurement_stop)
 
     def _init_data(self):
         self._hist_data = list(np.histogram([], range=(0, self.period), bins=_N_BINS))
@@ -94,7 +96,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
             filename = self.filenameEdit.text()
         except Exception:
             filename = "lefilename"
-        TCSPC_backend.start_measure(filename, self._PSF, self._config)
+        self._backend.start_measure(filename, self._PSF, self._config)
 
     @pyqtSlot(str)
     def process_measurement_start(self, filename: str):
@@ -110,7 +112,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
         Sin error checking por hora
         """
-        TCSPC_backend.stop_measure()
+        self._backend.stop_measure()
 
     def process_measurement_stop(self):
         """Procesa fin de medida.
@@ -118,9 +120,9 @@ class TCSPCFrontend(QtWidgets.QFrame):
         Sin error checking por hora
         """
         self.measureButton.setEnabled(True)
-        _st.swabian2numpy(self._current_filename, TCSPC_backend.period,
-                          TCSPC_backend.iinfo.APD_info[0].channel,
-                          TCSPC_backend.iinfo.laser_channel,
+        _st.swabian2numpy(self._current_filename, self._backend.period,
+                          self._backend.iinfo.APD_info[0].channel,
+                          self._backend.iinfo.laser_channel,
                           )
 
     def load_folder(self):
@@ -362,7 +364,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
     def closeEvent(self, *args, **kwargs):
         """Handle close event."""
         print("************** cerrando swabian")
-        TCSPC_backend.close()
+        self._backend.close()
         super().closeEvent(*args, **kwargs)
 
 
