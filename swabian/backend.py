@@ -115,31 +115,38 @@ def _get_instrument_info() -> _TCSPInstrumentInfo:
         len(tt_data),
         IInfo.serial,
     )
+    return IInfo
 
 
-class TCSPCBackend(_QObject, metaclass=_Singleton):
+class TCSPCBackend(metaclass=_Singleton):
     """Backend class for TCSPC.
 
     To be used as a context manager
     """
 
+    class _Reporter(_QObject):
+        sgnl_measure_init = _pyqtSignal(str)
+        sgnl_measure_end = _pyqtSignal()
+        sgnl_new_data = _pyqtSignal(object, int, object, object)
+
     _TCSPC_measurement = None
     _measurementGroup = None
-    sgnl_measure_init = _pyqtSignal(str)
-    sgnl_measure_end = _pyqtSignal()
-    sgnl_new_data = _pyqtSignal(object, int, object, object)
     _NOPLACE = np.full((2,), np.nan)
+    _reporter = _Reporter()
+    sgnl_measure_init = _reporter.sgnl_measure_init
+    sgnl_measure_end = _reporter.sgnl_measure_end
+    sgnl_new_data = _reporter.sgnl_new_data
 
-    def __init__(self,
-                 IInfo: _TCSPInstrumentInfo,
-                 *args, **kwargs):
-        """Receive device info."""
+    def __init__(self, *args, **kwargs):
+        """Prepare device info."""
         super().__init__(*args, **kwargs)
+        self._tagger: _TimeTagger.TimeTagger = None
         IInfo = _get_instrument_info()
         self.iinfo = IInfo
+        self.open()
 
     def __enter__(self):
-        self.open()
+        # self.open()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -147,6 +154,9 @@ class TCSPCBackend(_QObject, metaclass=_Singleton):
         return False
 
     def open(self):
+        if self._tagger:
+            _lgr.warning("Doble apertura de Swabian")
+            return
         self._tagger = _TimeTagger.createTimeTagger(self.iinfo.serial)
         self.period = self.iinfo.period
         _config_channels(self._tagger, self.iinfo)
@@ -194,7 +204,7 @@ class TCSPCBackend(_QObject, metaclass=_Singleton):
         self._file_measurement = _TimeTagger.FileWriter(
             self._measurementGroup.getTagger(), self.currentfname + '.ttbin',
             [self.iinfo.laser_channel] + [APDi.channel for APDi in self.iinfo.APD_info])
-        self.sgnl_measure_init.emit(self.currentfname)
+        self._reporter.sgnl_measure_init.emit(self.currentfname)
         if acq_time_s:
             self._measurementGroup.startFor(int(acq_time_s * 1E12))
         else:
@@ -210,7 +220,7 @@ class TCSPCBackend(_QObject, metaclass=_Singleton):
                 self.stop_measure()
         else:
             new_pos = self._NOPLACE
-        self.sgnl_new_data.emit(delta_t, period_length, bins, new_pos)
+        self._reporter.sgnl_new_data.emit(delta_t, period_length, bins, new_pos)
 
     def stop_measure(self) -> bool:
         """Stop measure.
@@ -225,7 +235,7 @@ class TCSPCBackend(_QObject, metaclass=_Singleton):
             self._measurementGroup = None
             self._TCSPC_measurement = None
             self._file_measurement = None
-            self.sgnl_measure_end.emit()
+            self._reporter.sgnl_measure_end.emit()
             return True
         _lgr.warning("Trying to stop while no measurement is active")
         return False

@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import QGroupBox
 from tkinter import Tk, filedialog
 
 import tools.tools as tools
-from swabian.backend import TCSPC_backend
+from swabian.backend import TCSPCBackend
 
 
 class Frontend(QtGui.QFrame):
@@ -178,16 +178,17 @@ class Backend(QtCore.QObject):
     shutterSignal = pyqtSignal(int, bool)
 
     saveConfigSignal = pyqtSignal(str)
-    def __init__(self, *args, **kwargs):
+    def __init__(self, estabilizador, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        self._estabilizador = estabilizador
         self.i = 0  # counter
         self.n = 1  # numero de posiciones en la figura
         self.pattern = np.array([0, 0])
 
         self.measTimer = QtCore.QTimer()
         self.measTimer.timeout.connect(self.loop)
-        TCSPC_backend.sgnl_measure_end.connect(self.get_tcspc_done_signal)
+        self._TCSPC_backend = TCSPCBackend()
+        self._TCSPC_backend.sgnl_measure_end.connect(self.get_tcspc_done_signal)
 
     @pyqtSlot(dict)
     def get_frontend_param(self, params):
@@ -226,7 +227,7 @@ class Backend(QtCore.QObject):
         time.sleep(0.2)
         self.t0 = time.time()
         self.measTimer.start(self.acqtime * 1000)  # resolucion pedorra
-        TCSPC_backend.start_measure(self.filename)
+        self._TCSPC_backend.start_measure(self.filename)
 
     def loop(self):
         print(datetime.now(), '[minflux] fin loop', self.i)
@@ -242,7 +243,7 @@ class Backend(QtCore.QObject):
     def stop(self):
         self.measTimer.stop()
         self.i = 1E8  # Flag para que el loop no ejecute si quedo una señal en cola
-        TCSPC_backend.stop_measure()
+        self._TCSPC_backend.stop_measure()
         self.shutterSignal.emit(8, False)
         # self.moveToSignal.emit(np.zeros((2,)))
         self._estabilizador.shift_reference(0., 0., 0.)

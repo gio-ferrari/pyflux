@@ -155,7 +155,7 @@ class Backend(QtCore.QObject):
 
         self.scanWorker = scan.Backend(adw, diodelaser, estabilizador)
         # self.andorWorker = widefield_Andor.Backend(andor, adw) #Por ahora le mando adw para pensar el desplzamiento de la platina
-        self.minfluxWorker = minflux.Backend()
+        self.minfluxWorker = minflux.Backend(estabilizador)
         self.psfWorker = psf.Backend(estabilizador)
 
     def setup_minflux_connections(self):
@@ -350,7 +350,7 @@ if __name__ == '__main__':
     adw = ADwin.ADwin(DEVICENUMBER, 1)
     scan.setupDevice(adw)
     camera_info = takyaq.info_types.CameraInfo(29.4, 52, 3.00)
-    controller = controllers.PIController()
+    controller = controllers.PIController2()
     with IDSWrapper() as camera, PiezoActuatorWrapper(adw) as piezo, stabilizer.Stabilizer(camera, piezo, camera_info, controller) as stb:
         stabilization_gui = PyQt_frontend.Frontend(camera, piezo, controller, camera_info, stb)
         stabilization_gui.setWindowTitle("Takyaq with PyQt frontend")
