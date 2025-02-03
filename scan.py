@@ -39,7 +39,7 @@ import tools.viewbox_tools as viewbox_tools
 import tools.colormaps as cmaps
 from tools.lineprofile import linePlotWidget
 from swabian import backend as swabian
-from tools.PSF_tools import parab_func
+from tools.PSF_tools import preprare_grid_forfit, parab_func, parag_param_guess, parab_analytical_min
 
 from drivers.minilasevo import MiniLasEvo
 
@@ -1504,46 +1504,26 @@ class Backend(QtCore.QObject):
         self.psfF_hole_matrix_smooth = gaussian_filter(self.psfF_hole_matrix, sigma=2)
         self.psfB_hole_matrix_smooth = gaussian_filter(self.psfB_hole_matrix, sigma=2)
         # Initial guesses for fit
-        c00_0_F = self.psfF_hole_matrix_smooth[0,0]
-        c20_0_F = (self.psfF_hole_matrix[0, self.min_pos_psfF_hole[1]] + self.psfF_hole_matrix[-1, self.min_pos_psfF_hole[1]])/(2*(self.psfF_hole_matrix.shape[0]/2)**2)
-        c02_0_F = (self.psfF_hole_matrix[self.min_pos_psfF_hole[0], 1] + self.psfF_hole_matrix[self.min_pos_psfF_hole[0], -1])/(2*(self.psfF_hole_matrix.shape[1]/2)**2)
-        c10_0_F = -2 * self.min_pos_psfF_hole[0] * c20_0_F
-        c01_0_F = -2 * self.min_pos_psfF_hole[1] * c20_0_F
-        p0_F = [c00_0_F, c10_0_F, c01_0_F, 0, c20_0_F, c02_0_F]
-        c00_0_B = self.psfB_hole_matrix_smooth[0,0]
-        c20_0_B = (self.psfB_hole_matrix[0, self.min_pos_psfB_hole[1]] + self.psfB_hole_matrix[-1, self.min_pos_psfB_hole[1]])/(2*(self.psfB_hole_matrix.shape[0]/2)**2)
-        c02_0_B = (self.psfB_hole_matrix[self.min_pos_psfB_hole[0], 1] + self.psfB_hole_matrix[self.min_pos_psfB_hole[0], -1])/(2*(self.psfB_hole_matrix.shape[1]/2)**2)
-        c10_0_B = -2 * self.min_pos_psfB_hole[0] * c20_0_B
-        c01_0_B = -2 * self.min_pos_psfB_hole[1] * c20_0_B
-        p0_F = [c00_0_B, c10_0_B, c01_0_B, 0, c20_0_B, c02_0_B]
+        p0_F = parag_param_guess(self.psfF_hole_matrix_smooth, self.min_pos_psfF_hole)
+        p0_B = parag_param_guess(self.psfB_hole_matrix_smooth, self.min_pos_psfB_hole)
         # preparing grids for fits
-        x_red_axis_F = np.arange(0, self.psfF_hole_xlims[1] - self.psfF_hole_xlims[0], 1)
-        y_red_axis_F = np.arange(0, self.psfF_hole_ylims[1] - self.psfF_hole_ylims[0], 1)
-        x_grid_red_F, y_grid_red_F = np.meshgrid(x_red_axis_F, y_red_axis_F)
-        grid_red_F = np.vstack((x_grid_red_F.ravel(), y_grid_red_F.ravel()))
-        x_red_axis_B = np.arange(0, self.psfB_hole_xlims[1] - self.psfB_hole_xlims[0], 1)
-        y_red_axis_B = np.arange(0, self.psfB_hole_ylims[1] - self.psfB_hole_ylims[0], 1)
-        x_grid_red_B, y_grid_red_B = np.meshgrid(x_red_axis_B, y_red_axis_B)
-        grid_red_B = np.vstack((x_grid_red_B.ravel(), y_grid_red_B.ravel()))  
-        # fitting
+        grid_red_F = preprare_grid_forfit(
+            self.psfF_hole_xlims[1] - self.psfF_hole_xlims[0],
+            self.psfF_hole_ylims[1] - self.psfF_hole_ylims[0]
+        )
+        grid_red_B = preprare_grid_forfit(
+            self.psfB_hole_xlims[1] - self.psfB_hole_xlims[0],
+            self.psfB_hole_ylims[1] - self.psfB_hole_ylims[0]
+        )
         # Fitting and calculating the fitted PSFs
         self.fitted_coeff_psfF, cov = opt.curve_fit(parab_func, grid_red_F, self.psfF_hole_matrix.ravel(), p0_F,
                                        bounds=([-np.inf, -np.inf, -np.inf, -np.inf, 0, 0], [np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]))
-        self.fitted_coeff_psfB, cov = opt.curve_fit(parab_func, grid_red_B, self.psfB_hole_matrix.ravel(), p0_F,
+        self.fitted_coeff_psfB, cov = opt.curve_fit(parab_func, grid_red_B, self.psfB_hole_matrix.ravel(), p0_B,
                                        bounds=([-np.inf, -np.inf, -np.inf, -np.inf, 0, 0], [np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]))
         # finding minima of the fit analytically
         # Finding analytical minimum of the fitted parabolas
-        self.determinant_F = 4 * self.fitted_coeff_psfF[4] * self.fitted_coeff_psfF[5] - self.fitted_coeff_psfF[3]**2
-        self.min_coords_fit_psfF_um = (
-            ((-2 * self.fitted_coeff_psfF[1] * self.fitted_coeff_psfF[5] + self.fitted_coeff_psfF[2] * self.fitted_coeff_psfF[3])/self.determinant_F + self.psfF_hole_xlims[0]) * self.pxSize,
-            ((-2 * self.fitted_coeff_psfF[2] * self.fitted_coeff_psfF[4] + self.fitted_coeff_psfF[1] * self.fitted_coeff_psfF[3])/self.determinant_F + self.psfF_hole_ylims[0]) * self.pxSize
-            )
-        self.determinant_B = 4 * self.fitted_coeff_psfB[4] * self.fitted_coeff_psfB[5] - self.fitted_coeff_psfB[3]**2
-        self.min_coords_fit_psfB_um = (
-            ((-2 * self.fitted_coeff_psfB[1] * self.fitted_coeff_psfB[5] + self.fitted_coeff_psfB[2] * self.fitted_coeff_psfB[3])/self.determinant_B + self.psfB_hole_xlims[0]) * self.pxSize,
-            ((-2 * self.fitted_coeff_psfB[2] * self.fitted_coeff_psfB[4] + self.fitted_coeff_psfB[1] * self.fitted_coeff_psfB[3])/self.determinant_B + self.psfB_hole_ylims[0]) * self.pxSize
-            )
-
+        self.min_coords_fit_psfF_um = parab_analytical_min(*self.fitted_coeff_psfF, self.psfF_hole_xlims[0],self.psfF_hole_ylims[0], self.pxSize)
+        self.min_coords_fit_psfB_um = parab_analytical_min(*self.fitted_coeff_psfB, self.psfB_hole_xlims[0],self.psfB_hole_ylims[0], self.pxSize)
         # now we take the aritmetic average
         self.target_coords_inroi_um = (
             (self.min_coords_fit_psfF_um[0] + self.min_coords_fit_psfB_um[1]) / 2,

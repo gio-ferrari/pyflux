@@ -13,6 +13,7 @@ import imageio as _iio
 import logging as _lgn
 import configparser as _cp
 import numba as _nb
+from typing import Tuple
 
 _lgn.basicConfig(level=_lgn.DEBUG)
 _lgr = _lgn.getLogger(__name__)
@@ -80,6 +81,13 @@ def centers_minflux(L: float, k: int = 4):
     ebp[1:][::-1, 1] = _np.cos(angles) * L / 2
     return ebp
 
+def preprare_grid_forfit(side_x, side_y):
+    x_axis = _np.arange(0, side_x, 1)
+    y_axis = _np.arange(0, side_y, 1)
+    x_grid, y_grid = _np.meshgrid(x_axis, y_axis)
+    grid = _np.vstack((x_grid.ravel(), y_grid.ravel()))
+    return grid
+
 def custom_parab(coord1, coord2, coeff00, coeff10, coeff01, coeff11, coeff20, coeff02):
     return coeff00 + coeff10 * coord1 + coeff01 * coord2 + coeff11 * coord1 * coord2 + coeff20 * coord1**2 + coeff02 * coord2**2
 
@@ -100,6 +108,40 @@ def parab_func(grid, c00, c10, c01, c11, c20, c02):
         
     x, y = grid
     return custom_parab(x, y, c00, c10, c01, c11, c20, c02).ravel()
+
+def parag_param_guess(psf_matrix, min_pos_psf):
+    c00_0 = psf_matrix[0,0]
+    c20_0 = (psf_matrix[0, min_pos_psf[1]] + psf_matrix[-1, min_pos_psf[1]])/(2*(psf_matrix.shape[0]/2)**2)
+    c02_0 = (psf_matrix[min_pos_psf[0], 1] + psf_matrix[min_pos_psf[0], -1])/(2*(psf_matrix.shape[1]/2)**2)
+    c10_0 = -2 * min_pos_psf[0] * c20_0
+    c01_0 = -2 * min_pos_psf[1] * c20_0
+    return [c00_0, c10_0, c01_0, 0, c20_0, c02_0]
+
+def parab_determinant(
+    c11: float,
+    c20: float,
+    c02: float
+):
+    return 4 * c20 * c02 - c11**2
+
+def parab_analytical_min(
+    c00: float,
+    c10: float,
+    c01: float,
+    c11: float,
+    c20: float,
+    c02: float,
+    offset_x: float,
+    offset_y: float,
+    pixel_size: float
+):
+    determinant = parab_determinant(c11, c20, c02)
+    min_coords_fit = (
+        ((-2 * c10 * c02 + c01 * c11) / determinant + offset_x) * pixel_size,
+        ((-2 * c01 * c20 + c10 * c11)/determinant + offset_y) * pixel_size
+        )
+    
+    return 
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
