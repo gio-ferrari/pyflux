@@ -121,10 +121,10 @@ class TCSPCFrontend(QtWidgets.QFrame):
         Sin error checking por hora
         """
         self.measureButton.setEnabled(True)
-        _st.swabian2numpy(self._current_filename, TCSPC_backend.period,
-                          TCSPC_backend.iinfo.APD_info[0].channel,
-                          TCSPC_backend.iinfo.laser_channel,
-                          TCSPC_backend.iinfo.tick_channel
+        _st.swabian2numpy(self._current_filename, self._backend.period,
+                          self._backend.iinfo.APD_info[0].channel,
+                          self._backend.iinfo.laser_channel,
+                          self._backend.iinfo.tick_channel
                           )
 
     def load_folder(self):

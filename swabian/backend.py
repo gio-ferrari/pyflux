@@ -209,7 +209,7 @@ class TCSPCBackend(metaclass=_Singleton):
             [APDi.channel for APDi in self.iinfo.APD_info] +
             [self.iinfo.tick_channel]
             )
-        self.sgnl_measure_init.emit(self.currentfname)
+        self._reporter.sgnl_measure_init.emit(self.currentfname)
         if acq_time_s:
             self._measurementGroup.startFor(int(acq_time_s * 1E12))
         else:
