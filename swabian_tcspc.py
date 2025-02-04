@@ -17,7 +17,7 @@ from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QGroupBox
 from PyQt5 import QtWidgets
 import tools.swabiantools as _st
-from swabian.backend import TCSPCBackend
+from swabian.backend import TCSPC_Backend
 
 import configparser
 from dataclasses import dataclass as _dataclass
@@ -72,7 +72,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
         super().__init__(*args, **kwargs)
         # initial directory
         self.initialDir = r"C:\Data"
-        self._backend = TCSPCBackend()
+        self._backend = TCSPC_Backend()
         # FIXME: for developing only   
         self.period = self._backend.iinfo.period
 

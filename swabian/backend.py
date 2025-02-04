@@ -119,7 +119,7 @@ def _get_instrument_info() -> _TCSPInstrumentInfo:
     return IInfo
 
 
-class TCSPCBackend(metaclass=_Singleton):
+class TCSPC_Backend(metaclass=_Singleton):
     """Backend class for TCSPC.
 
     To be used as a context manager

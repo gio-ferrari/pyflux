@@ -14,7 +14,7 @@ import pyqtgraph as _pg
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QGroupBox
 from tkinter import Tk, filedialog
-from swabian.backend import TCSPC_backend
+from swabian.backend import TCSPC_Backend
 
 
 import tools.tools as tools

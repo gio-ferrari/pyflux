@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import QGroupBox
 from tkinter import Tk, filedialog
 
 import tools.tools as tools
-from swabian.backend import TCSPCBackend
+from swabian.backend import TCSPC_Backend
 
 
 class Frontend(QtGui.QFrame):
@@ -187,7 +187,7 @@ class Backend(QtCore.QObject):
 
         self.measTimer = QtCore.QTimer()
         self.measTimer.timeout.connect(self.loop)
-        self._TCSPC_backend = TCSPCBackend()
+        self._TCSPC_backend = TCSPC_Backend()
         self._TCSPC_backend.sgnl_measure_end.connect(self.get_tcspc_done_signal)
 
     @pyqtSlot(dict)

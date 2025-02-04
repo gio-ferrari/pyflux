@@ -33,7 +33,7 @@ import tools.colormaps as cmaps
 from tools.lineprofile import linePlotWidget
 from swabian import backend as swabian
 from tools.PSF_tools import custom_parab, preprare_grid_forfit, parab_func, parag_param_guess, parab_analytical_min
-
+from swabian.backend import TCSPC_Backend
 from drivers.minilasevo import MiniLasEvo
 
 π = np.pi
@@ -1205,6 +1205,8 @@ class Backend(QtCore.QObject):
         self.flipper_state = False
         self.laserstate = False
         self.estabilizador = estabilizador
+        
+        self._TCSPC_backend = TCSPC_Backend()
 
         # full_scan: True --> full scan including aux parts
         # full_scan: False --> forward part of the scan
@@ -1871,7 +1873,7 @@ class Backend(QtCore.QObject):
             time.sleep(0.05)
             self.control_shutters(4, True)
             # start tcspc measurement
-            swabian.TCSPC_backend.start_measure(
+            self._TCSPC_backend.start_measure(
                 "EBP_timegated_"
             )
         self.viewtimer.start(self.viewtimer_time)
@@ -1889,7 +1891,7 @@ class Backend(QtCore.QObject):
             time.sleep(0.05)
             self.control_shutters(4, False)
             # stop tcspc measurement
-            swabian.TCSPC_backend.stop_measure()
+            self._TCSPC_backend.stop_measure()
             self.ebp_measurement_done.emit()
             name = swabian.make_unique_name("EBP_timegated_", True)
             now = time.strftime("%c")
