@@ -138,10 +138,10 @@ def parab_analytical_min(
     determinant = parab_determinant(c11, c20, c02)
     min_coords_fit = (
         ((-2 * c10 * c02 + c01 * c11) / determinant + offset_x) * pixel_size,
-        ((-2 * c01 * c20 + c10 * c11)/determinant + offset_y) * pixel_size
+        ((-2 * c01 * c20 + c10 * c11) / determinant + offset_y) * pixel_size
         )
     
-    return 
+    return min_coords_fit
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt

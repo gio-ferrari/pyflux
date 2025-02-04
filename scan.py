@@ -39,7 +39,7 @@ import tools.viewbox_tools as viewbox_tools
 import tools.colormaps as cmaps
 from tools.lineprofile import linePlotWidget
 from swabian import backend as swabian
-from tools.PSF_tools import preprare_grid_forfit, parab_func, parag_param_guess, parab_analytical_min
+from tools.PSF_tools import custom_parab, preprare_grid_forfit, parab_func, parag_param_guess, parab_analytical_min
 
 from drivers.minilasevo import MiniLasEvo
 
@@ -800,6 +800,7 @@ class Frontend(QtGui.QFrame):
         # dougnhut fit
         
         self.psfFitButton = QtGui.QPushButton('PSF fit and move')
+        self.psfFitButton.setCheckable(True)
         self.psfFitButton.clicked.connect(self.toggle_psfscan_fitandmove)
         
         # measure trace
@@ -1466,18 +1467,23 @@ class Backend(QtCore.QObject):
         The smoothed image is used only to find the guess for the center, while the fit is performed on the raw one.
         it also checks that the final target position falls inside the ROI to avoid that a wrong fit sends the piezo far away. 
         """
+        print("entering fit function")
         # size of the domain where to perform the fit
         self.radius_forfit_nm = 100
         # smoothing images to find minimum numerically
-        self.imageF_smooth = gaussian_filter(self.imageF, sigma=3)
-        self.imageB_smooth = gaussian_filter(self.imageB, sigma=3)
+        self.imageF_smooth = gaussian_filter(self.imageF[5:-5,5:-5], sigma=3)
+        self.imageB_smooth = gaussian_filter(self.imageB[5:-5,5:-5], sigma=3)
         # finding numerical minimum
         self.min_pos_psfF = np.unravel_index(np.argmin(self.imageF_smooth, axis=None), self.imageF_smooth.shape)
-        self.min_pos_psfF = (self.min_pos_psfF[1], self.min_pos_psfF[0])
+        self.min_pos_psfF = (self.min_pos_psfF[0] + 5, self.min_pos_psfF[1] + 5)
         self.min_pos_psfB = np.unravel_index(np.argmin(self.imageB_smooth, axis=None), self.imageB_smooth.shape)
-        self.min_pos_psfB = (self.min_pos_psfB[1], self.min_pos_psfB[0])
+        self.min_pos_psfB = (self.min_pos_psfB[0] + 5, self.min_pos_psfB[1] + 5)
+        print("self.min_pos_psfF: ", self.min_pos_psfF)
+        print("self.min_pos_psfB: ", self.min_pos_psfB)
+        print("self.min_pos_psfF in nm: ", (self.min_pos_psfF[0] * self.pxSize, self.min_pos_psfF[1] * self.pxSize))
+        print("self.min_pos_psfB in nm: ", (self.min_pos_psfB[0] * self.pxSize, self.min_pos_psfB[1] * self.pxSize))
         # computing the side of the square to cut the image for fit, in px
-        self.half_side_square_forfit_px = int(self.radius_forfit_nm / self.pxSize)
+        self.half_side_square_forfit_px = int(self.radius_forfit_nm / (self.pxSize * 1e3))
         # getting the boundaries for cutting the images
         self.psfF_hole_xlims = [
             np.max((0, self.min_pos_psfF[0] - self.half_side_square_forfit_px)),
@@ -1495,17 +1501,27 @@ class Backend(QtCore.QObject):
             np.max((0, self.min_pos_psfB[1] - self.half_side_square_forfit_px)),
             np.min((self.min_pos_psfB[1] + self.half_side_square_forfit_px, self.NofPixels))
         ]
+        print("psfF_hole_xlims in nm: ", (self.psfF_hole_xlims[0] * self.pxSize, self.psfF_hole_xlims[1] * self.pxSize))
+        print("psfF_hole_ylims in nm: ", (self.psfF_hole_ylims[0] * self.pxSize, self.psfF_hole_ylims[1] * self.pxSize))
+        print("psfB_hole_xlims in nm: ", (self.psfB_hole_xlims[0] * self.pxSize, self.psfB_hole_xlims[1] * self.pxSize))
+        print("psfB_hole_ylims in nm: ", (self.psfB_hole_ylims[0] * self.pxSize, self.psfB_hole_ylims[1] * self.pxSize))
         # recalculate position of the minima after cutting
         self.min_pos_psfF_hole = (self.min_pos_psfF[0] - self.psfF_hole_xlims[0], self.min_pos_psfF[1] - self.psfF_hole_ylims[0])
         self.min_pos_psfB_hole = (self.min_pos_psfB[0] - self.psfB_hole_xlims[0], self.min_pos_psfB[1] - self.psfB_hole_ylims[0])
+        print("numerical min fwd img hole in px: ", self.min_pos_psfF_hole)
+        print("numerical min bck img hole in px: ", self.min_pos_psfB_hole)
+        print("numerical min fwd img hole in nm: ", (self.min_pos_psfF_hole[0] * self.pxSize, self.min_pos_psfF_hole[1] * self.pxSize))
+        print("numerical min bck img hole in nm: ", (self.min_pos_psfB_hole[0] * self.pxSize, self.min_pos_psfB_hole[1] * self.pxSize))
         # getting the cut images
-        self.psfF_hole_matrix = self.imageF[self.psfF_hole_ylims[0]:self.psfF_hole_ylims[1], self.psfF_hole_xlims[0]:self.psfF_hole_xlims[1]]
-        self.psfB_hole_matrix = self.imageB[self.psfB_hole_ylims[0]:self.psfB_hole_ylims[1], self.psfB_hole_xlims[0]:self.psfB_hole_xlims[1]]
+        self.psfF_hole_matrix = self.imageF[self.psfF_hole_xlims[0]:self.psfF_hole_xlims[1], self.psfF_hole_ylims[0]:self.psfF_hole_ylims[1]]
+        self.psfB_hole_matrix = self.imageB[self.psfB_hole_xlims[0]:self.psfB_hole_xlims[1], self.psfB_hole_ylims[0]:self.psfB_hole_ylims[1]]
         self.psfF_hole_matrix_smooth = gaussian_filter(self.psfF_hole_matrix, sigma=2)
         self.psfB_hole_matrix_smooth = gaussian_filter(self.psfB_hole_matrix, sigma=2)
         # Initial guesses for fit
         p0_F = parag_param_guess(self.psfF_hole_matrix_smooth, self.min_pos_psfF_hole)
         p0_B = parag_param_guess(self.psfB_hole_matrix_smooth, self.min_pos_psfB_hole)
+        print("initial guesses fwd dona: ", p0_F)
+        print("initial guesses bck dona: ", p0_B)
         # preparing grids for fits
         grid_red_F = preprare_grid_forfit(
             self.psfF_hole_xlims[1] - self.psfF_hole_xlims[0],
@@ -1522,18 +1538,25 @@ class Backend(QtCore.QObject):
                                        bounds=([-np.inf, -np.inf, -np.inf, -np.inf, 0, 0], [np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]))
         # finding minima of the fit analytically
         # Finding analytical minimum of the fitted parabolas
-        self.min_coords_fit_psfF_um = parab_analytical_min(*self.fitted_coeff_psfF, self.psfF_hole_xlims[0],self.psfF_hole_ylims[0], self.pxSize)
-        self.min_coords_fit_psfB_um = parab_analytical_min(*self.fitted_coeff_psfB, self.psfB_hole_xlims[0],self.psfB_hole_ylims[0], self.pxSize)
+        print("params fwd dona fit: ", self.fitted_coeff_psfF)
+        print("params bck dona fit: ", self.fitted_coeff_psfB)
+        self.min_coords_fit_psfF_um = parab_analytical_min(*self.fitted_coeff_psfF, self.psfF_hole_xlims[0], self.psfF_hole_ylims[0], self.pxSize)
+        self.min_coords_fit_psfB_um = parab_analytical_min(*self.fitted_coeff_psfB, self.psfB_hole_xlims[0], self.psfB_hole_ylims[0], self.pxSize)
+        print("fwd parab analyt min: ", self.min_coords_fit_psfF_um)
+        print("bck parab analyt min: ", self.min_coords_fit_psfB_um)
+
         # now we take the aritmetic average
         self.target_coords_inroi_um = (
-            (self.min_coords_fit_psfF_um[0] + self.min_coords_fit_psfB_um[1]) / 2,
-            (self.min_coords_fit_psfF_um[0] + self.min_coords_fit_psfB_um[1]) / 2,
+            (self.min_coords_fit_psfF_um[0] + self.min_coords_fit_psfB_um[0]) / 2,
+            (self.min_coords_fit_psfF_um[1] + self.min_coords_fit_psfB_um[1]) / 2,
         )
+        print("target coords in roi:", self.target_coords_inroi_um)
         self.target_coords_abs_um = (
             self.initialPos[0] + self.target_coords_inroi_um[0],
             self.initialPos[1] + self.target_coords_inroi_um[1],
             self.initialPos[2]
         )
+        print("target coords abs", self.target_coords_abs_um)
         # moving to target point
         self.moveTo(*self.target_coords_abs_um)
 
@@ -1876,9 +1899,13 @@ class Backend(QtCore.QObject):
             # stop tcspc measurement
             swabian.TCSPC_backend.stop_measure()
             self.ebp_measurement_done.emit()
+            name = swabian.make_unique_name("EBP_timegated_", True)
+            now = time.strftime("%c")
+            tools.saveConfig(self, now, name)
         if self.acquisitionMode == "psf scan fit and move":
             self.psf_scanandfit_done.emit()
-        self.reset_position()
+        if self.acquisitionMode != "psf scan fit and move":    
+            self.reset_position()
 
     def update_view(self):
         """Procesa click del timer."""
