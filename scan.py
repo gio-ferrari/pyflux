@@ -10,18 +10,12 @@ import time
 from datetime import date, datetime
 import os
 import matplotlib.pyplot as plt
-from matplotlib import cm
 import tools.tools as tools
-import ctypes as ct
 from PIL import Image
 from tkinter import Tk, filedialog
-import tifffile as tiff
 import scipy.optimize as opt
 from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter
-
-
-from threading import Thread
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
@@ -29,7 +23,6 @@ import qdarkstyle
 
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QTabWidget, QGroupBox
-from PyQt5 import QtTest
 
 
 import tools.PSF as PSF
@@ -55,7 +48,7 @@ def setupDevice(adw):
     PROCESS_5 = "flipper.TB5"
     PROCESS_6 = "trace.TB6"
     PROCESS_7 = "shutters.TB7"
-    
+
     btl = adw.ADwindir + BTL
     adw.Boot(btl)
 
@@ -69,7 +62,7 @@ def setupDevice(adw):
     process_5 = os.path.join(process_folder, PROCESS_5)
     process_6 = os.path.join(process_folder, PROCESS_6)
     process_7 = os.path.join(process_folder, PROCESS_7)
-    
+
     adw.Load_Process(process_1)
     adw.Load_Process(process_2)
     adw.Load_Process(process_3)
@@ -77,10 +70,10 @@ def setupDevice(adw):
     adw.Load_Process(process_5)
     adw.Load_Process(process_6)
     adw.Load_Process(process_7)
-    
-    
+
+
 class Frontend(QtGui.QFrame):
-    
+
     paramSignal = pyqtSignal(dict)
     closeSignal = pyqtSignal()
     liveviewSignal = pyqtSignal(bool, str)
@@ -103,19 +96,18 @@ class Frontend(QtGui.QFrame):
         self.EBPshown = True
         self.fitting = False
         self.image = np.zeros((128, 128))
-        
-        self.initialDir = r'C:\Data'
-        
-        # Define status icons dir
-        self.ICON_RED_LED = 'icons\led-red-on.png'
-        self.ICON_GREEN_LED = 'icons\green-led-on.png'
-        
-        # set up GUI
 
+        self.initialDir = r'C:\Data'
+
+        # Define status icons dir
+        self.ICON_RED_LED = r'icons\led-red-on.png'
+        self.ICON_GREEN_LED = r'icons\green-led-on.png'
+
+        # set up GUI
         self.setup_gui()
-                
+
         # connections between changes in parameters and emit_param function
-        
+
         self.NofPixelsEdit.textChanged.connect(self.emit_param)
         self.scanRangeEdit.textChanged.connect(self.emit_param)
         self.pxTimeEdit.textChanged.connect(self.emit_param)
@@ -1179,7 +1171,7 @@ class Backend(QtCore.QObject):
     auxMoveSignal = pyqtSignal()
     shuttermodeSignal = pyqtSignal(int, bool)
     diodelaserEmissionSignal = pyqtSignal(bool)
-    focuslockpositionSignal = pyqtSignal(float)
+    # focuslockpositionSignal = pyqtSignal(float)
 
     """
     Signals
@@ -1202,7 +1194,7 @@ class Backend(QtCore.QObject):
         
     """
     
-    def __init__(self, adwin, diodelaser, *args, **kwargs):
+    def __init__(self, adwin, diodelaser, estabilizador, *args, **kwargs):
         
         super().__init__(*args, **kwargs)
         
@@ -1211,7 +1203,8 @@ class Backend(QtCore.QObject):
         self.saveScanData = False
         self.feedback_active = False
         self.flipper_state = False
-        self.laserstate = False        
+        self.laserstate = False
+        self.estabilizador = estabilizador
 
         # full_scan: True --> full scan including aux parts
         # full_scan: False --> forward part of the scan
@@ -1762,35 +1755,34 @@ class Backend(QtCore.QObject):
         self.update_device_param()
         self.emit_param()
 
-    @pyqtSlot(float)
-    def get_focuslockposition(self, position):
-        self.focuslockpos = position
-        
+    # @pyqtSlot(float)
+    # def get_focuslockposition(self, position):
+    #     self.focuslockpos = position
+
     @pyqtSlot(str)
     def saveConfigfile(self, fname):
-        
-        self.focuslockpositionSignal.emit(-9999)
-        self.focuslockpos = -0.0
-        time.sleep(0.5)
+        # self.focuslockpositionSignal.emit(-9999)
+        # self.focuslockpos = -0.0
+        # time.sleep(0.5)
+        self.focuslockpos = self.estabilizador.get_z_lock()
         now = time.strftime("%c")
         tools.saveConfig(self, now, 'test', filename=fname)
         print('[scan] saved configfile', fname)
 
-        
     def save_current_frame(self):
-      
         self.save_FB = False
-        
         # experiment parameters
 
         # get z-position of focus lock
-        # in standalone mode it justs saves -0.0 as focus lock position 
-        # sleeps 0.5s to catch return signal from focus.py 
+        # in standalone mode it justs saves -0.0 as focus lock position
+        # sleeps 0.5s to catch return signal from focus.py
         #TODO: find better solution than sleeping
-        self.focuslockpos = -0.0
-        self.focuslockpositionSignal.emit(0)
-        time.sleep(0.5)
-        
+        # self.focuslockpos = -0.0
+        # self.focuslockpositionSignal.emit(0)
+        # time.sleep(0.5)
+        # PATCH HORRIBLE
+        self.focuslockpos = self.estabilizador.get_z_lock()
+        self.focuslockpos[0:2] = self.estabilizador.get_z_position()
         name = tools.getUniqueName(self.filename)
         now = time.strftime("%c")
         tools.saveConfig(self, now, name)

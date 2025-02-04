@@ -17,7 +17,7 @@ from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QGroupBox
 from PyQt5 import QtWidgets
 import tools.swabiantools as _st
-from swabian.backend import TCSPC_backend
+from swabian.backend import TCSPCBackend
 
 import configparser
 from dataclasses import dataclass as _dataclass
@@ -72,13 +72,15 @@ class TCSPCFrontend(QtWidgets.QFrame):
         super().__init__(*args, **kwargs)
         # initial directory
         self.initialDir = r"C:\Data"
-        # FIXME: for developing only
-        self.period = TCSPC_backend.iinfo.period
+        self._backend = TCSPCBackend()
+        # FIXME: for developing only   
+        self.period = self._backend.iinfo.period
+
         self._init_data()
         self.setup_gui()
-        TCSPC_backend.sgnl_new_data.connect(self.get_data)
-        TCSPC_backend.sgnl_measure_init.connect(self.process_measurement_start)
-        TCSPC_backend.sgnl_measure_end.connect(self.process_measurement_stop)
+        self._backend.sgnl_new_data.connect(self.get_data)
+        self._backend.sgnl_measure_init.connect(self.process_measurement_start)
+        self._backend.sgnl_measure_end.connect(self.process_measurement_stop)
 
     def _init_data(self):
         self._hist_data = list(np.histogram([], range=(0, self.period), bins=_N_BINS))
@@ -94,7 +96,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
             filename = self.filenameEdit.text()
         except Exception:
             filename = "lefilename"
-        TCSPC_backend.start_measure(filename, self._PSF, self._config)
+        self._backend.start_measure(filename, self._PSF, self._config)
 
     @pyqtSlot(str)
     def process_measurement_start(self, filename: str):
@@ -111,7 +113,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
 
         Sin error checking por hora
         """
-        TCSPC_backend.stop_measure()
+        self._backend.stop_measure()
 
     def process_measurement_stop(self):
         """Procesa fin de medida.
@@ -364,7 +366,7 @@ class TCSPCFrontend(QtWidgets.QFrame):
     def closeEvent(self, *args, **kwargs):
         """Handle close event."""
         print("************** cerrando swabian")
-        TCSPC_backend.close()
+        self._backend.close()
         super().closeEvent(*args, **kwargs)
 
 

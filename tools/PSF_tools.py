@@ -15,7 +15,7 @@ import configparser as _cp
 import numba as _nb
 from typing import Tuple
 
-_lgn.basicConfig(level=_lgn.DEBUG)
+# _lgn.basicConfig(level=_lgn.DEBUG)
 _lgr = _lgn.getLogger(__name__)
 
 
