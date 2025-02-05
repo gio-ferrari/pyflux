@@ -1955,7 +1955,8 @@ class Backend(QtCore.QObject):
             self.i = 0
             self.y_offset = 0
             self.z_offset = 0
-            self.reset_position()
+            if self.acquisitionMode !=  'psf scan fit and move': 
+                self.reset_position()
             if self.acquisitionMode == 'frame':
                 self.liveview_stop()
                 self.frameIsDone.emit(True, self.image, self.NofAuxPixels, self.NofPixels)
