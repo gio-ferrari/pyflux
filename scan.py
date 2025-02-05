@@ -321,6 +321,7 @@ class Frontend(QtGui.QFrame):
         to the average of the centers of the two fits.
         '''
         if self.psfFitButton.isChecked():
+            self.emit_param()
             self.liveviewSignal.emit(True, 'psf scan fit and move')
             if self.roi is not None:
                 self.vb.removeItem(self.roi)
